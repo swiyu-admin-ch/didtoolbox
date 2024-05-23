@@ -7,6 +7,14 @@ edition = "2021"
 
 [dependencies]
 uniffi = { version = "0.26.1", features = ["cli"] }
+serde = {version = "1.0.202", features = ["derive"]}
+serde_json = "1.0.117"
+serde_jcs = "0.1.0"
+chrono = "0.4.38"
+ed25519-dalek = { version = "2.1.1", features = ["rand_core"] }
+rand = "0.8.5"
+base64 = "0.22.1"
+rstest = "0.19.0"
 
 [build-dependencies]
 uniffi = { version = "0.26.1", features = ["build"] }
