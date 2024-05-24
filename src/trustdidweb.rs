@@ -149,6 +149,25 @@ impl DidDocumentState {
     }   
 }
 
+impl std::fmt::Display for DidDocumentState {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let mut log = String::new();
+        for entry in &self.did_log_entries {
+            let serialized = json!([
+                entry.entry_hash,
+                entry.version_id,
+                entry.version_time.to_owned().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+                entry.parameters,
+                {
+                    "value": entry.did_doc
+                },
+            ]);
+            log.push_str(serde_json::to_string(&serialized).unwrap().as_str());
+            log.push_str("\n");
+        }
+        write!(f, "{}", log)
+    }
+}
 
 /// Basic user facing did method operations to handle a did
 pub trait DidMethodOperation {
@@ -348,7 +367,7 @@ impl DidMethodOperation for TrustDidWebProcessor {
         // Initialize did log with genesis did doc
         let mut did_log: DidDocumentState = DidDocumentState::new();
         did_log.update(log_entry);
-        serde_json::to_string(&did_log).unwrap()
+        did_log.to_string()
     }
 
     fn read(&self, did_tdw: String) -> String {
