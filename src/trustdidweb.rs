@@ -2,19 +2,18 @@ use core::panic;
 
 use chrono::{DateTime, Utc};
 use chrono::serde::ts_seconds;
-use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
-use ed25519_dalek::{SigningKey, Signature, Signer, Verifier, VerifyingKey, SECRET_KEY_LENGTH, PUBLIC_KEY_LENGTH};
 use base64::{engine::general_purpose::STANDARD, engine::general_purpose::URL_SAFE , Engine as _};
 use base32::{decode as base32_decode, encode as base32_encode, Alphabet};
 use serde_jcs::{to_vec as jcs_from_str, to_string as jcs_to_string};
 use serde_json::json;
-use crate::utils;
 use sha2::{Sha256, Digest};
 use hex;
 use hex::ToHex;
 use regex;
-
+use crate::utils;
+use crate::ed25519::*;
+use crate::vc_data_integrity::*;
 /// Entry in an did log file as shown here
 /// https://bcgov.github.io/trustdidweb/#term:did-log-entry
 #[derive(Serialize, Deserialize, Debug)]
@@ -26,28 +25,31 @@ pub struct DidLogEntry {
     pub version_time: DateTime<Utc>,
     pub parameters: DidMethodParameters,
     pub did_doc: serde_json::Value,
+    pub proof: serde_json::Value,
 }
 
 impl DidLogEntry {
     /// Import of existing log entry
-    pub fn new(entry_hash: String, version_id: usize, version_time: DateTime<Utc>, parameters: DidMethodParameters, did_doc: serde_json::Value) -> Self {
+    pub fn new(entry_hash: String, version_id: usize, version_time: DateTime<Utc>, parameters: DidMethodParameters, did_doc: serde_json::Value, proof: serde_json::Value) -> Self {
         DidLogEntry {
             entry_hash,
             version_id: Some(version_id),
             version_time,
             parameters,
             did_doc,
+            proof,
         }
     }
 
     /// Creation of new log entry (without known version_id)
-    pub fn of(entry_hash: String, parameters: DidMethodParameters, did_doc: serde_json::Value) -> Self {
+    pub fn of(entry_hash: String, parameters: DidMethodParameters, did_doc: serde_json::Value, proof: serde_json::Value) -> Self {
         DidLogEntry {
             entry_hash,
             version_id: Option::None,
             version_time: Utc::now(),
             parameters,
             did_doc,
+            proof
         }
     }
 
@@ -130,6 +132,7 @@ impl DidDocumentState {
                     DateTime::parse_from_str(entry[2].as_str(), "%Y-%m-%dT%H:%M:%S%.3fZ").unwrap().to_utc(),
                     serde_json::from_str(&entry[3]).unwrap(),
                     serde_json::from_str(&entry[4]).unwrap(),
+                    serde_json::from_str(&entry[5]).unwrap()
                 )
             }).collect::<Vec<DidLogEntry>>()
         }
@@ -161,6 +164,7 @@ impl std::fmt::Display for DidDocumentState {
                 {
                     "value": entry.did_doc
                 },
+                entry.proof
             ]);
             log.push_str(serde_json::to_string(&serialized).unwrap().as_str());
             log.push_str("\n");
@@ -171,7 +175,7 @@ impl std::fmt::Display for DidDocumentState {
 
 /// Basic user facing did method operations to handle a did
 pub trait DidMethodOperation {
-    fn create(&self, domain: String, key_pair: Ed25519KeyPair) -> String;
+    fn create(&self, domain: String, key_pair: &Ed25519KeyPair) -> String;
     fn read(&self, did_tdw: String) -> String;
     fn update(&self, did_tdw: String, did_doc: String) -> String;
     fn deactivate(&self, did_tdw: String) -> String;
@@ -236,105 +240,72 @@ pub struct DidDoc {
     pub assertion_method: Vec<VerificationMethod>,
 }
 
-pub trait Base64MultiBaseConverter {
-    fn to_multibase(&self) -> String;
-    fn from_multibase(multibase: &str) -> Self;
+pub struct EddsaCryptosuite {
+    pub key_pair: Ed25519KeyPair,
 }
 
-pub struct Ed25519SigningKey {
-    signing_key: SigningKey,
-}
-
-impl Base64MultiBaseConverter for Ed25519SigningKey {
-    fn to_multibase(&self) -> String {
-        let public_key_bytes = self.signing_key.to_bytes();
-        utils::convert_to_multibase_base64(&public_key_bytes)
-    }
-
-    fn from_multibase(multibase: &str) -> Self {
-        let mut public_key_bytes: [u8; SECRET_KEY_LENGTH] = [0; SECRET_KEY_LENGTH];
-        utils::convert_from_multibase_base64(multibase, &mut public_key_bytes);
-        Ed25519SigningKey {
-            signing_key: SigningKey::from_bytes(&mut public_key_bytes),
+impl VCDataIntegrity for EddsaCryptosuite {
+    fn add_proof(&self, unsecured_document: &serde_json::Value, options: &CryptoSuiteOptions) -> serde_json::Value {
+        if !matches!(options.crypto_suite, CryptoSuiteType::EddsaJcs2022) {
+            panic!("Invalid crypto suite. Only eddsa-jcs-2022 is supported");
         }
-    }
-}
-impl Ed25519SigningKey {
-    pub fn new (signing_key: SigningKey) -> Self {
-        Ed25519SigningKey {
-            signing_key,
+        if options.proof_type != "DataIntegrityProof" {
+            panic!("Invalid proof type. Only DataIntegrityProof is supported");
         }
-    }
-}
 
-pub struct Ed25519VerifyingKey {
-    verifying_key: VerifyingKey,
-}
-impl Base64MultiBaseConverter for Ed25519VerifyingKey {
-    fn to_multibase(&self) -> String {
-        let public_key_bytes = self.verifying_key.to_bytes();
-        utils::convert_to_multibase_base64(&public_key_bytes)
-    }
+        // 3.1.3 Transformation of doc and options
+        let json_doc = unsecured_document.to_string();
+        let jcs_doc = jcs_from_str(&json_doc).unwrap();
+        let utf8_doc: String = String::from_utf8(jcs_doc).unwrap();
 
-    fn from_multibase(multibase: &str) -> Self {
-        let mut public_key_bytes: [u8; PUBLIC_KEY_LENGTH] = [0; PUBLIC_KEY_LENGTH];
-        utils::convert_from_multibase_base64(multibase, &mut public_key_bytes);
-        match VerifyingKey::from_bytes(&mut public_key_bytes) {
-            Ok(verifying_key) => Ed25519VerifyingKey {
-                verifying_key: verifying_key,
+        let mut proof = json!({
+            "type": options.proof_type,
+            "cryptoSuite": options.crypto_suite.to_string(),
+            "created": Utc::now().to_string(),
+            "verificationMethod": options.verification_method,
+            "proofPurpose": options.proof_purpose,
+            "challenge": options.challenge.as_ref().unwrap(),
+        });
+        let json_proof = proof.to_string();
+        let jcs_proof = jcs_from_str(&json_proof).unwrap();
+        let utf8_proof: String = String::from_utf8(jcs_proof).unwrap();
+
+        // 3.1.4 Hashing
+        let mut doc_hasher = Sha256::new();
+        doc_hasher.update(utf8_doc);
+        let doc_hash: String = doc_hasher.finalize().encode_hex();
+        let mut proof_hasher = Sha256::new();
+        proof_hasher.update(utf8_proof);
+        let proof_hash: String = proof_hasher.finalize().encode_hex();
+        let hash_data = proof_hash + &doc_hash;
+
+        // 3.1.6 Proof serialization
+        let proof_signature = self.key_pair.sign(hash_data);
+        let proof_signature_multibase = proof_signature.to_multibase();
+        proof["proofValue"] = json!(proof_signature_multibase);
+        todo!("Proof value is null when converting to string!!");
+
+        // Create secured document
+        match serde_json::from_str::<serde_json::Value>(&json_doc) {
+            Ok(mut secured_document) => {
+                secured_document["proofValue"] = proof;
+                return secured_document;
             },
-            Err(_) => panic!("Invalid ed25519 public key"),
+            Err(_) => panic!("Invalid json document"),
         }
-    }
-}
-impl Ed25519VerifyingKey {
-    pub fn new(verifying_key: VerifyingKey) -> Self {
-        Ed25519VerifyingKey {
-            verifying_key,
-        }
-    }
-}
 
-pub struct Ed25519KeyPair {
-    pub verifying_key: Ed25519VerifyingKey,
-    pub signing_key: Ed25519SigningKey,
-}
-
-impl Ed25519KeyPair {
-    pub fn generate() -> Self {
-        let mut csprng = OsRng;
-        let signing_key: SigningKey = SigningKey::generate(&mut csprng);
-        Ed25519KeyPair {
-            verifying_key: Ed25519VerifyingKey::new(signing_key.verifying_key()),
-            signing_key: Ed25519SigningKey::new(signing_key),
-        }
     }
 
-    pub fn from(signing_key_multibase: &str) -> Self {
-        let mut signing_key_bytes: [u8; SECRET_KEY_LENGTH] = [0; SECRET_KEY_LENGTH];
-        utils::convert_from_multibase_base64(signing_key_multibase, &mut signing_key_bytes);
-        let signing_key = SigningKey::from_bytes(&mut signing_key_bytes);
-        Ed25519KeyPair {
-            verifying_key: Ed25519VerifyingKey::new(signing_key.verifying_key()),
-            signing_key: Ed25519SigningKey::new(signing_key)
-        }
+    fn verify_proof(&self, secured_document: &serde_json::Value, presentation_header: String, public_key: &Ed25519VerifyingKey) -> CryptoSuiteVerificationResult {
+        todo!()
     }
-
-    pub fn get_signing_key(&self) -> &Ed25519SigningKey {
-        &self.signing_key
-    }
-
-    pub fn get_verifying_key(&self) -> &Ed25519VerifyingKey {
-        &self.verifying_key
-    }
-}
-
+}   
 pub struct TrustDidWebProcessor {
 }
 
 impl DidMethodOperation for TrustDidWebProcessor {
 
-    fn create(&self, domain: String, key_pair: Ed25519KeyPair) -> String {
+    fn create(&self, domain: String, key_pair: &Ed25519KeyPair) -> String {
         // Create verification method for subject with placeholder
         let did_tdw = format!("did:tdw:{}:{}", domain, utils::SCID_PLACEHOLDER);
         let verification_method = self.create_verification_method_from_verifying_key(&did_tdw, &key_pair.verifying_key);
@@ -353,15 +324,27 @@ impl DidMethodOperation for TrustDidWebProcessor {
         // Generate SCID and replace placeholder in did doc
         let scid = self.generate_scid(&did_doc);
         let did_doc_serialize = serde_json::to_string(&did_doc).unwrap();
-        let escaped_placeholder = regex::escape(utils::SCID_PLACEHOLDER);
-        // let re = regex::Regex::new(&escaped_placeholder).unwrap();
         let did_doc_with_scid = str::replace(&did_doc_serialize, utils::SCID_PLACEHOLDER, &scid);
         // let did_doc_with_scid = re.replace_all(&did_doc_serialize, &scid).to_string();
         let genesis_did_doc = serde_json::from_str(&did_doc_with_scid).unwrap();
+
+        // Generate data integrity proof for new entry
+        let suite_options = CryptoSuiteOptions::new(
+            CryptoSuiteType::EddsaJcs2022,
+            did_doc.id.clone(),
+            scid.clone()
+        );
+        let eddsa_suite = EddsaCryptosuite {
+            key_pair: Ed25519KeyPair::from(key_pair.get_signing_key().to_multibase().as_str()),
+        };
+        let unsecured_document = serde_json::from_str(&did_doc_serialize.as_str()).unwrap();
+        let secured_document = eddsa_suite.add_proof(&unsecured_document, &suite_options);
+
         let log_entry = DidLogEntry::of(
             scid.to_owned(),
-            DidMethodParameters::for_genesis_did_doc(scid),
-            genesis_did_doc
+            DidMethodParameters::for_genesis_did_doc(scid.to_owned()),
+            genesis_did_doc,
+            secured_document["proof"].to_owned()
         );
 
         // Initialize did log with genesis did doc

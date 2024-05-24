@@ -1,11 +1,14 @@
 pub mod trustdidweb;
 pub mod utils;
+pub mod vc_data_integrity;
+pub mod ed25519;
 
 uniffi::include_scaffolding!("trustdidweb");
 
 #[cfg(test)]
 mod test {
     use super::trustdidweb::*;
+    use super::ed25519::*;
     use rstest::rstest;
 
     #[rstest]
@@ -25,7 +28,7 @@ mod test {
     fn test_create_did() {
         let processor = TrustDidWebProcessor::new();
         let key_pair = Ed25519KeyPair::generate();
-        let did = processor.create("example.com".to_string(), key_pair);
+        let did = processor.create("example.com".to_string(), &key_pair);
         print!("{}", did);
         assert!(did.len() > 0)
     }
