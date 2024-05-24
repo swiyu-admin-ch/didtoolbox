@@ -5,9 +5,7 @@ uniffi::include_scaffolding!("trustdidweb");
 
 #[cfg(test)]
 mod test {
-    use crate::trustdidweb::Base64MultiBaseConverter;
-
-    use super::trustdidweb::{Ed25519KeyPair, Ed25519SigningKey, Ed25519VerifyingKey};
+    use super::trustdidweb::*;
     use rstest::rstest;
 
     #[rstest]
@@ -22,4 +20,14 @@ mod test {
         assert_eq!(original_private.to_multibase(), new_private.to_multibase());
         assert_eq!(original_public.to_multibase(), new_public.to_multibase());
     }
+
+    #[rstest]
+    fn test_create_did() {
+        let processor = TrustDidWebProcessor::new();
+        let key_pair = Ed25519KeyPair::generate();
+        let did = processor.create("example.com".to_string(), key_pair);
+        print!("{}", did);
+        assert!(did.len() > 0)
+    }
+
 }
