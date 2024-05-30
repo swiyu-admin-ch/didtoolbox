@@ -14,6 +14,8 @@ use hex::ToHex;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use regex;
+use ureq;
+use url_escape;
 use crate::utils;
 use crate::ed25519::*;
 use crate::vc_data_integrity::*;
@@ -151,6 +153,9 @@ pub struct DidDocumentState {
     pub did_log_entries: Vec<DidLogEntry>,
 }
 
+#[derive(Deserialize, Debug)]
+pub struct Entry(String, usize, DateTime<Utc>, DidMethodParameters, serde_json::Value, Option<serde_json::Value>);
+
 impl DidDocumentState {
     pub fn new() -> Self {
         DidDocumentState {
@@ -160,16 +165,21 @@ impl DidDocumentState {
     pub fn from(did_log: String) -> Self {
         DidDocumentState {
             did_log_entries: did_log.split("\n").map(|line| {
-                let entry: Vec<String> = serde_json::from_str(line).unwrap();
+                println!("{}", line);
+                let entry: serde_json::Value = match serde_json::from_str(line) {
+                    Ok(entry) => entry,
+                    Err(e) => panic!("{}", e),
+                };
                 // TODO replace this with toString call of log entry
                 DidLogEntry::new(
                     entry[0].to_string(),
                     entry[1].to_string().parse::<usize>().unwrap(),
-                    DateTime::parse_from_str(entry[2].as_str(), "%Y-%m-%dT%H:%M:%S%.3fZ").unwrap().to_utc(),
-                    serde_json::from_str(&entry[3]).unwrap(),
-                    serde_json::from_str(&entry[4]).unwrap(),
-                    serde_json::from_str(&entry[5]).unwrap()
+                    DateTime::parse_from_str(entry[2].as_str().unwrap(), "%Y-%m-%dT%H:%M:%S%.3fZ").unwrap().to_utc(),
+                    serde_json::from_str(&entry[3].to_string()).unwrap(),
+                    entry[4].clone(),
+                    entry[5].clone()
                 )
+                // TODO continue here with fixing the parsing process
             }).collect::<Vec<DidLogEntry>>()
         }
     }
@@ -292,16 +302,7 @@ impl std::fmt::Display for DidDocumentState {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut log = String::new();
         for entry in &self.did_log_entries {
-            let serialized = json!([
-                entry.entry_hash,
-                entry.version_id,
-                entry.version_time.to_owned().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
-                entry.parameters,
-                {
-                    "value": entry.did_doc
-                },
-                entry.proof
-            ]);
+            let serialized = entry.to_log_entry_line();
             log.push_str(serde_json::to_string(&serialized).unwrap().as_str());
             log.push_str("\n");
         }
@@ -311,7 +312,7 @@ impl std::fmt::Display for DidDocumentState {
 
 /// Basic user facing did method operations to handle a did
 pub trait DidMethodOperation {
-    fn create(&self, domain: String, key_pair: &Ed25519KeyPair) -> String;
+    fn create(&self, url: String, key_pair: &Ed25519KeyPair) -> String;
     fn read(&self, did_tdw: String) -> String;
     fn update(&self, did_tdw: String, did_doc: String) -> String;
     fn deactivate(&self, did_tdw: String) -> String;
@@ -438,12 +439,115 @@ impl VCDataIntegrity for EddsaCryptosuite {
         todo!()
     }
 }   
+
+pub trait UrlResolver {
+    fn read(&self, url: String) -> String;
+    fn write(&self, url: String, content: String);
+}
+pub struct HttpClientResolver {
+    pub api_key: Option<String>
+}
+impl UrlResolver for HttpClientResolver {
+    fn read(&self, url: String) -> String {
+        let mut request = ureq::get(&url);
+        match &self.api_key {
+            Some(api_key) => {
+                request = request.set("X-API-KEY", api_key);
+            },
+            None => (),
+        };
+        match request.call() {
+            Ok(response) => match response.into_string() {
+                Ok(body) => body,
+                Err(_) => panic!("Couldn't read from url"),
+            },
+            Err(_) => panic!("Couldn't read from url"),
+        }
+    }
+    fn write(&self, url: String, content: String) {
+        let mut request = ureq::post(&url);
+        match &self.api_key {
+            Some(api_key) => {
+                request = request.set("X-API-KEY", api_key);
+            },
+            None => (),
+        };
+        match request.send_string(&content) {
+            Ok(_) => (),
+            Err(e) => panic!("{}", e),
+        }
+    }
+}
+
+pub struct MockResolver {
+}
+impl UrlResolver for MockResolver {
+    fn read(&self, url: String) -> String {
+        todo!()
+    }
+    fn write(&self, url: String, content: String) {
+        todo!()
+    }
+}
+
+/// Convert did:tdw:{method specific identifier} method specific identifier into resolvable url
+fn get_url_from_tdw(did_tdw: &String) -> String {
+    if !did_tdw.starts_with("did:tdw:") {
+        panic!("Invalid did:twd string. It has to start with did:tdw:")
+    }
+    let did_tdw = did_tdw.replace("did:tdw:","");
+
+    let mut decoded_url = String::from("");
+    url_escape::decode_to_string(did_tdw.replace(":", "/"), &mut decoded_url);
+    let url = match String::from_utf8(decoded_url.into_bytes()) {
+            Ok(url) => {
+                if url.starts_with("localhost") {
+                    format!("http://{}", url)
+                } else {
+                    format!("https://{}", url)
+                }
+            },
+            Err(_) => panic!("Couldn't convert did_tdw url to utf8 string"),
+    };
+    let has_path = regex::Regex::new(r"([a-z]|[0-9])\/([a-z]|[0-9])").unwrap();
+    match has_path.captures(url.as_str()) {
+        Some(_) => format!("{}/did.json", url),
+        None => format!("{}/.well-know/did.json", url),
+    }
+}
+
+/// Convert domain into did:tdw:{method specific identifier} method specific identifier
+fn get_tdw_domain_from_url(url: &String) -> String {
+    let mut did = String::from("");
+    if url.starts_with("https://") {
+        did = url.replace("https://", "");
+    } else if url.starts_with("http://localhost") {
+        did = url.replace("http://", "");
+    } else {
+        panic!("Invalid url. Only https is supported")
+    }
+
+    if did.contains(".well-known") {
+        panic!("Invalid url. Please remove .well-known from url")
+    }
+    if did.contains("did.jsonl") {
+        panic!("Invalid url. Please remove did.json from url")
+    }
+    let url = did.replace(":", "%3A");
+    url.replace("/", ":")
+}
+
+
 pub struct TrustDidWebProcessor {
+    resolver: Box<dyn UrlResolver>,
 }
 
 impl DidMethodOperation for TrustDidWebProcessor {
 
-    fn create(&self, domain: String, key_pair: &Ed25519KeyPair) -> String {
+    fn create(&self, url: String, key_pair: &Ed25519KeyPair) -> String {
+        // Check if domain is valid
+        let domain = get_tdw_domain_from_url(&url);
+
         // Create verification method for subject with placeholder
         let did_tdw = format!("did:tdw:{}:{}", domain, utils::SCID_PLACEHOLDER);
         let verification_method_suffix: String = thread_rng()
@@ -485,7 +589,7 @@ impl DidMethodOperation for TrustDidWebProcessor {
 
         // Initialize did log with genesis did doc
         let mut did_log: DidDocumentState = DidDocumentState::new();
-        match genesis_did_doc["controller"] {
+        let did_log_string = match genesis_did_doc["controller"] {
             JsonArray(ref controller) => {
                 let controller = match controller.first() {
                     Some(JsonString(ref controller)) => controller.to_string(),
@@ -495,11 +599,20 @@ impl DidMethodOperation for TrustDidWebProcessor {
                 did_log.to_string()
             },
             _ => panic!("Invalid did doc controller"),
-        }
+        };
+        let did = match genesis_did_doc["id"] {
+            JsonString(ref did_url) => did_url,
+            _ => panic!("Invalid did doc id"),
+        };
+        self.resolver.write(get_url_from_tdw(&did), did_log_string.to_owned());
+        did.to_string()
     }
 
     fn read(&self, did_tdw: String) -> String {
-        todo!("Read did string")
+        let url = get_url_from_tdw(&did_tdw);
+        let did_log_raw = self.resolver.read(url);
+        let did_doc_state = DidDocumentState::from(did_log_raw);
+        did_doc_state.to_string()
     }
 
     fn update(&self, did_tdw: String, did_doc: String) -> String {
@@ -529,9 +642,17 @@ fn generate_jcs_hash(json: &str) -> String {
 }
 
 impl TrustDidWebProcessor {
+    
+    pub fn new_with_api_key(api_key: String) -> Self {
+        TrustDidWebProcessor {
+            resolver: Box::new(HttpClientResolver{api_key: Some(api_key)})
+        }
+    }
 
     pub fn new() -> Self {
-        TrustDidWebProcessor {}
+        TrustDidWebProcessor {
+            resolver: Box::new(HttpClientResolver{api_key: None})
+        }
     }
 
     /// Create verification method object from public key

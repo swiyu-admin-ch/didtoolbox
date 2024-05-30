@@ -17,3 +17,5 @@ Cargo.lock
 # Added by cargo
 
 /target
+did_server/.venv/
+did_server/__pycache__/

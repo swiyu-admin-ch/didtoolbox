@@ -27,17 +27,21 @@ mod test {
 
     #[rstest]
     fn test_create_did() {
-        let processor = TrustDidWebProcessor::new();
+        let processor = TrustDidWebProcessor::new_with_api_key(String::from("secret"));
         let key_pair = Ed25519KeyPair::generate();
-        let did_lines = processor.create("example.com".to_string(), &key_pair);
-        print!("{}", did_lines);
-        let value = serde_json::from_str(&did_lines).unwrap();
-        match value {
-            serde_json::Value::Array(did_line) => {
-                assert!(did_line.len() == 6)
-            },
-            _ => assert!(false)
-        }
+        print!("{}",key_pair.get_signing_key().to_multibase());
+        let did = processor.create("https://localhost:8000".to_string(), &key_pair);
+        print!("{}", did);
+        assert!(did.len() > 0);
+    }
+
+    #[rstest]
+    fn test_read_did() {
+        let processor = TrustDidWebProcessor::new_with_api_key(String::from("secret"));
+        let key_pair = Ed25519KeyPair::generate();
+        print!("{}",key_pair.get_signing_key().to_multibase());
+        let did = processor.create("https://localhost:8000".to_string(), &key_pair);
+        let did_log = processor.read(String::from(did));
     }
 
 }
