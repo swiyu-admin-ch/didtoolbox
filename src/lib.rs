@@ -10,6 +10,7 @@ mod test {
     use super::trustdidweb::*;
     use super::ed25519::*;
     use rstest::rstest;
+    use serde_json::json;
 
     #[rstest]
     fn test_key_creation() {
@@ -28,9 +29,15 @@ mod test {
     fn test_create_did() {
         let processor = TrustDidWebProcessor::new();
         let key_pair = Ed25519KeyPair::generate();
-        let did = processor.create("example.com".to_string(), &key_pair);
-        print!("{}", did);
-        assert!(did.len() > 0)
+        let did_lines = processor.create("example.com".to_string(), &key_pair);
+        print!("{}", did_lines);
+        let value = serde_json::from_str(&did_lines).unwrap();
+        match value {
+            serde_json::Value::Array(did_line) => {
+                assert!(did_line.len() == 6)
+            },
+            _ => assert!(false)
+        }
     }
 
 }
