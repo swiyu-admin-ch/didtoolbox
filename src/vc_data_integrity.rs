@@ -47,7 +47,7 @@ impl CryptoSuiteOptions {
         }
     }
 }
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DataIntegrityProof {
     #[serde(rename = "type")]
     pub proof_type: String,
@@ -60,12 +60,14 @@ pub struct DataIntegrityProof {
     #[serde(rename = "proofPurpose")]
     pub proof_purpose: String,
     pub challenge: String,
+    #[serde(rename = "proofValue")]
+    pub proof_value: String,
 }
 impl DataIntegrityProof {
     pub fn from(json: String) -> Self {
         let value: serde_json::Value = serde_json::from_str(&json).unwrap();
         DataIntegrityProof {
-            proof_type: match value["proofType"] {
+            proof_type: match value["type"] {
                 serde_json::Value::String(ref s) => s.to_string(),
                 _ => String::from(""),
             },
@@ -88,8 +90,18 @@ impl DataIntegrityProof {
             challenge: match value["challenge"] {
                 serde_json::Value::String(ref s) => s.to_string(),
                 _ => String::from("")
-            }
+            },
+            proof_value: match value["proofValue"] {
+                serde_json::Value::String(ref s) => s.to_string(),
+                _ => String::from(""),
+            },
         }
+    }
+
+    pub fn to_value(&self) -> serde_json::Value {
+        let mut value = serde_json::to_value(&self).unwrap();
+        value["created"] = serde_json::Value::String(self.created.format(utils::DATE_TIME_FORMAT).to_string());
+        value
     }
 }
 
@@ -111,5 +123,5 @@ pub trait CryptoSuite {
 /// https://www.w3.org/TR/vc-data-integrity/#algorithms
 pub trait VCDataIntegrity {
     fn add_proof(&self, unsecured_document: &serde_json::Value, options: &CryptoSuiteOptions) -> serde_json::Value;
-    fn verify_proof(&self, secured_document: &serde_json::Value, presentation_header: String, public_key: &Ed25519VerifyingKey) -> CryptoSuiteVerificationResult;
+    fn verify_proof(&self, secured_document: &serde_json::Value) -> bool;
 }

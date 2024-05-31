@@ -7,7 +7,7 @@ pub trait Base64MultiBaseConverter {
 }
 
 pub struct Ed25519Signature {
-    signature: Signature,
+    pub signature: Signature,
 }
 impl Base64MultiBaseConverter for Ed25519Signature {
     fn to_multibase(&self) -> String {
@@ -48,10 +48,17 @@ impl Ed25519SigningKey {
             signing_key,
         }
     }
+
+    pub fn sign(&self, message: String) -> Ed25519Signature {
+        let signature = self.signing_key.sign(message.as_bytes());
+        Ed25519Signature {
+            signature,
+        }
+    }
 }
 
 pub struct Ed25519VerifyingKey {
-    verifying_key: VerifyingKey,
+    pub verifying_key: VerifyingKey,
 }
 impl Base64MultiBaseConverter for Ed25519VerifyingKey {
     fn to_multibase(&self) -> String {
@@ -112,10 +119,7 @@ impl Ed25519KeyPair {
     }
 
     pub fn sign(&self, message: String) -> Ed25519Signature {
-        let signature = self.signing_key.signing_key.sign(message.as_bytes());
-        Ed25519Signature {
-            signature,
-        }
+        self.signing_key.sign(message)
     }
 
 }

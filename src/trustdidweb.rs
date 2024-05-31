@@ -1,4 +1,6 @@
-use core::panic;
+use core::{hash, panic};
+use std::any;
+use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use chrono::serde::ts_seconds;
@@ -21,7 +23,7 @@ use crate::ed25519::*;
 use crate::vc_data_integrity::*;
 /// Entry in an did log file as shown here
 /// https://bcgov.github.io/trustdidweb/#term:did-log-entry
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DidLogEntry {
     pub entry_hash: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -76,6 +78,44 @@ impl DidLogEntry {
         generate_jcs_hash(&json)
     }
 
+    fn get_controller_verifying_key(&self) -> HashMap<String, (String, Ed25519VerifyingKey)> {
+        self.did_doc.verification_method.iter()
+            .filter(|entry| 
+                self.did_doc.controller.iter()
+                .any(|controller| entry.id.starts_with(controller)))
+            .map(|entry| (
+                entry.id.split("#").collect::<Vec<&str>>().first().unwrap().to_string(),
+                (entry.id.clone(), Ed25519VerifyingKey::from_multibase(&entry.public_key_multibase))
+            ))
+            .collect::<HashMap<String, (String, Ed25519VerifyingKey)>>()
+    }
+
+    fn check_if_verification_method_match_public_key(&self, did_tdw: &str, verifying_key: &Ed25519VerifyingKey) {
+        match self.get_controller_verifying_key().get(did_tdw) {
+            Some(public_key) => {
+                if public_key.1.to_multibase() != verifying_key.to_multibase() {
+                    panic!("Invalid key pair. The provided key pair is not the one referenced in the did doc")
+                }
+            },
+            None => panic!("Invalid did_tdw. The did_tdw is not a controller of the did doc")
+        }
+    }
+
+    /// Get the verification method id (did_tdw#key-1) and verifying key with which the data integrity proof was created
+    pub fn get_data_integrity_verifying_key(&self) -> Ed25519VerifyingKey {
+        let proof_verification_method = self.proof.as_ref().unwrap().verification_method.clone();
+        let verification_method = self.did_doc.verification_method.iter()
+            .filter(|entry| entry.id == proof_verification_method)
+            .collect::<Vec<&VerificationMethod>>().first().unwrap().to_owned();
+
+        // Make sure the the verification method is part of the authentication section
+        if !self.did_doc.authentication.contains(&verification_method.id) {
+            panic!("Invalid integrity proof for log with id {}. The verification method used for the integrity proof is not part of the authentication section", self.version_id.unwrap())
+        }
+
+        Ed25519VerifyingKey::from_multibase(&verification_method.public_key_multibase)
+    }
+
     pub fn to_log_entry_line(&self) -> serde_json::Value {
         match &self.proof {
             Some(proof) => serde_json::json!([
@@ -86,7 +126,7 @@ impl DidLogEntry {
                 {
                     "value": self.did_doc
                 },
-                proof
+                proof.to_value()
             ]),
             None => serde_json::json!([
                 self.entry_hash,
@@ -101,7 +141,7 @@ impl DidLogEntry {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DidMethodParameters {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
@@ -172,7 +212,10 @@ impl DidDocumentState {
                 };
                 // TODO replace this with toString call of log entry
                 DidLogEntry::new(
-                    entry[0].to_string(),
+                    match entry[0] {
+                        JsonString(ref entry_hash) => entry_hash.clone(),
+                        _ => panic!("Invalid entry hash"),
+                    },
                     entry[1].to_string().parse::<usize>().unwrap(),
                     DateTime::parse_from_str(entry[2].as_str().unwrap(), utils::DATE_TIME_FORMAT).unwrap().to_utc(),
                     serde_json::from_str(&entry[3].to_string()).unwrap(),
@@ -184,28 +227,71 @@ impl DidDocumentState {
         }
     }
 
-    /// Checks whether the did_tdw is an controller of the did doc and matches the provided key pair. Then its returns the 
-    /// id of the entry in the the verification method array to be later used as challenge in the integrity proof
-    /// https://bcgov.github.io/trustdidweb/#authorized-keys 
-    fn get_verification_method_key(&self, log_entry: &DidLogEntry, authorization_key_id: &str, verifying_key: &Ed25519VerifyingKey) -> String {
-        let authorization_key_is_controller = log_entry.did_doc.controller.contains(&authorization_key_id.to_string());
-        if !authorization_key_is_controller {
-            panic!("Authorization key is not the controller of the did doc. Please provide a valid controller id")
+    /// Checks if all entries in the did log are valid (data integrity, versioning etc.)
+    pub fn validate(&self) -> DidDoc {
+        let mut previous_entry: Option<DidLogEntry> = None;
+        let mut index = 1;
+        for entry in &self.did_log_entries {
+            match previous_entry {
+                Some(ref prev) => {
+                    // Check if version has incremented
+                    if entry.version_id.unwrap() != prev.version_id.unwrap()+1 {
+                        panic!("Invalid did log for version {}. Version id has to be incremented", entry.version_id.unwrap())
+                    }
+
+                    todo!("Make check for subsequent entries")
+                },
+                None => {
+                    // First / genesis entry in did log
+                    let genesis_entry = self.did_log_entries.first().unwrap();
+                    if genesis_entry.version_id.unwrap() != 1 {
+                        panic!("Invalid did log. First entry has to have version id 1")
+                    }
+
+                    // Verify data integrity proof 
+                    let verifying_key = genesis_entry.get_data_integrity_verifying_key();
+                    let eddsa_suite = EddsaCryptosuite {
+                        verifying_key: Some(verifying_key),
+                        signing_key: None,
+                    };
+                    let mut did_doc_value = serde_json::to_value(&genesis_entry.did_doc).unwrap();
+                    did_doc_value["proof"] = genesis_entry.proof.as_ref().unwrap().to_value();
+                    if !eddsa_suite.verify_proof(&did_doc_value) {
+                        panic!("Invalid did log. Genesis entry has invalid data integrity proof")
+                    }
+
+                    // Verify the entryHash
+                    let entry_without_proof = DidLogEntry {
+                        entry_hash: genesis_entry.parameters.scid.clone().unwrap(),
+                        version_id: genesis_entry.version_id,
+                        version_time: genesis_entry.version_time,
+                        parameters: genesis_entry.parameters.clone(),
+                        did_doc: genesis_entry.did_doc.clone(),
+                        proof: None
+                    };
+                    let entry_hash = entry_without_proof.get_hash();
+                    if entry_hash != genesis_entry.entry_hash {
+                        panic!("Invalid did log. Genesis entry has invalid entry hash")
+                    }
+
+                    // Verify that the SCID is correct
+                    let doc_string = serde_json::to_string(&genesis_entry.did_doc).unwrap();
+                    let scid = genesis_entry.parameters.scid.clone().unwrap();
+                    let did_doc_with_palaceholder = str::replace(&doc_string, &scid, utils::SCID_PLACEHOLDER);
+                    let did_doc: DidDoc = serde_json::from_str(&did_doc_with_palaceholder).unwrap();
+                    let original_scid = generate_scid(&did_doc);
+                    if original_scid != scid {
+                        panic!("Invalid did log. Genesis entry has invalid SCID")
+                    }
+
+                    previous_entry = Some(genesis_entry.clone());
+                }
+            };
         }
-
-        let verification_method_reference = log_entry.did_doc.authentication.iter()
-            .filter(|entry| entry.starts_with(&authorization_key_id))
-            .collect::<Vec<&String>>().first().unwrap().to_string();
-
-        let public_key_multibase = log_entry.did_doc.verification_method.iter()
-            .filter(|method| method.id == verification_method_reference)
-            .map(|method| method.public_key_multibase.clone())
-            .collect::<Vec<String>>().first().unwrap().to_string();
-
-        if public_key_multibase != verifying_key.to_multibase() {
-            panic!("Invalid key pair. The provided key pair is not the one referenced in the did doc")
+        match previous_entry {
+            Some(entry) => entry.did_doc.clone(),
+            None => panic!("Invalid did log. No entries found")
         }
-        verification_method_reference
     }
 
     /// Add a new entry to the did log file
@@ -223,7 +309,8 @@ impl DidDocumentState {
             if log_entry.entry_hash.len() == 0 {
                 panic!("For the initial log entry the SCID/previous hash has to be provided")
             }
-            verification_method = self.get_verification_method_key(&log_entry, did_tdw, key_pair.get_verifying_key());
+            log_entry.check_if_verification_method_match_public_key(did_tdw, key_pair.get_verifying_key());
+            verification_method = log_entry.get_controller_verifying_key().get(did_tdw).unwrap().0.clone();
         } else {
             // Subsequent entry (Update)
             let previous_entry = self.did_log_entries.last().unwrap();
@@ -231,7 +318,8 @@ impl DidDocumentState {
             index = previous_entry.version_id.unwrap() + 1;
             // Get last version hash
             previous_hash = previous_entry.entry_hash.clone();
-            verification_method = self.get_verification_method_key(&previous_entry, did_tdw, key_pair.get_verifying_key())
+            previous_entry.check_if_verification_method_match_public_key(did_tdw, key_pair.get_verifying_key());
+            verification_method = log_entry.get_controller_verifying_key().get(did_tdw).unwrap().0.clone();
         }
 
         // Generate new hash and use it as entry_hash and integrity challenge
@@ -252,8 +340,10 @@ impl DidDocumentState {
             verification_method,
             integrity_challenge
         );
+        let signing_key = key_pair.get_signing_key().to_multibase();
         let eddsa_suite = EddsaCryptosuite {
-            key_pair: Ed25519KeyPair::from(key_pair.get_signing_key().to_multibase().as_str()),
+            signing_key: Some(Ed25519SigningKey::from_multibase(&signing_key)),
+            verifying_key: None,
         };
         let did_doc_ = match serde_json::to_string(&doc_without_proof.did_doc) {
             Ok(doc) => doc,
@@ -353,7 +443,17 @@ pub struct DidDoc {
 }
 
 pub struct EddsaCryptosuite {
-    pub key_pair: Ed25519KeyPair,
+    pub verifying_key: Option<Ed25519VerifyingKey>,
+    pub signing_key: Option<Ed25519SigningKey>,
+}
+
+fn generate_jcs_hash_from_value(value: &serde_json::Value) -> String {
+    let json_doc = value.to_string();
+    let jcs_doc = jcs_from_str(&json_doc).unwrap();
+    let utf8_doc: String = String::from_utf8(jcs_doc).unwrap();
+    let mut doc_hasher = Sha256::new();
+    doc_hasher.update(utf8_doc);
+    doc_hasher.finalize().encode_hex()
 }
 
 impl VCDataIntegrity for EddsaCryptosuite {
@@ -366,10 +466,6 @@ impl VCDataIntegrity for EddsaCryptosuite {
         }
 
         // 3.1.3 Transformation of doc and options
-        let json_doc = unsecured_document.to_string();
-        let jcs_doc = jcs_from_str(&json_doc).unwrap();
-        let utf8_doc: String = String::from_utf8(jcs_doc).unwrap();
-
         let mut proof = json!({
             "type": options.proof_type,
             "cryptoSuite": options.crypto_suite.to_string(),
@@ -378,39 +474,61 @@ impl VCDataIntegrity for EddsaCryptosuite {
             "proofPurpose": options.proof_purpose,
             "challenge": options.challenge.as_ref().unwrap(),
         });
-        let json_proof = proof.to_string();
-        let jcs_proof = jcs_from_str(&json_proof).unwrap();
-        let utf8_proof: String = String::from_utf8(jcs_proof).unwrap();
-
         // 3.1.4 Hash didDoc and config
-        let mut doc_hasher = Sha256::new();
-        doc_hasher.update(utf8_doc);
-        let doc_hash: String = doc_hasher.finalize().encode_hex();
-        let mut proof_hasher = Sha256::new();
-        proof_hasher.update(utf8_proof);
-        let proof_hash: String = proof_hasher.finalize().encode_hex();
+        let proof_hash = generate_jcs_hash_from_value(&proof);
+        let doc_hash = generate_jcs_hash_from_value(unsecured_document);
         let hash_data = proof_hash + &doc_hash;
 
         // 3.1.6 Proof serialization
-        let proof_signature = self.key_pair.sign(hash_data);
+        let proof_signature = match &self.signing_key {
+            Some(signing_key) => {
+                signing_key.sign(hash_data)
+            },
+            None => panic!("Invalid eddsa cryptosuite. Signing key is missing but required for proof creation"),
+        };
         let proof_signature_multibase = proof_signature.to_multibase();
-        proof["proofValue"] = json!(proof_signature_multibase);
+        proof["proofValue"] = JsonString(proof_signature_multibase);
 
         // Create secured document
-        match serde_json::from_str::<serde_json::Value>(&json_doc) {
-            Ok(mut secured_document) => {
-                secured_document["proof"] = proof;
-                return secured_document;
+        let mut secured_document = unsecured_document.clone();
+        secured_document["proof"] = proof;
+        secured_document
+
+    }
+
+    fn verify_proof(&self, secured_document: &serde_json::Value) -> bool {
+        let original_proof = secured_document["proof"].clone();
+        let mut proof = json!({
+            "type": original_proof["type"],
+            "cryptoSuite": original_proof["cryptoSuite"],
+            "created": original_proof["created"],
+            "verificationMethod": original_proof["verificationMethod"],
+            "proofPurpose": original_proof["proofPurpose"],
+            "challenge": original_proof["challenge"],
+        });
+
+        let doc: DidDoc = serde_json::from_value(secured_document.clone()).unwrap();
+        let proof_hash = generate_jcs_hash_from_value(&proof);
+        let doc_hash = generate_jcs_hash_from_value(&serde_json::to_value(&doc).unwrap());
+        let hash_data = proof_hash + &doc_hash;
+
+        let signature = match secured_document["proof"]["proofValue"] {
+            JsonString(ref proof_value) => {
+                Ed25519Signature::from_multibase(proof_value)
             },
-            Err(_) => panic!("Invalid json document"),
+            _ => panic!("Invalid proof value. Expected string"),
+        };
+        match self.verifying_key {
+            Some(ref verifying_key) => {
+                match verifying_key.verifying_key.verify_strict(hash_data.as_bytes(), &signature.signature) {
+                    Ok(_) => true,
+                    Err(_) => false,
+                }
+            },
+            None => panic!("Invalid eddsa cryptosuite. Verifying key is missing but required for proof verification"),
         }
-
     }
-
-    fn verify_proof(&self, secured_document: &serde_json::Value, presentation_header: String, public_key: &Ed25519VerifyingKey) -> CryptoSuiteVerificationResult {
-        todo!()
-    }
-}   
+}
 
 pub trait UrlResolver {
     fn read(&self, url: String) -> String;
@@ -547,7 +665,7 @@ impl DidMethodOperation for TrustDidWebProcessor {
         };
 
         // Generate SCID and replace placeholder in did doc
-        let scid = self.generate_scid(&did_doc);
+        let scid = generate_scid(&did_doc);
         let did_doc_serialize = serde_json::to_string(&did_doc).unwrap();
         let did_doc_with_scid = str::replace(&did_doc_serialize, utils::SCID_PLACEHOLDER, &scid);
         // let did_doc_with_scid = re.replace_all(&did_doc_serialize, &scid).to_string();
@@ -571,8 +689,8 @@ impl DidMethodOperation for TrustDidWebProcessor {
         let url = get_url_from_tdw(&did_tdw);
         let did_log_raw = self.resolver.read(url);
         let did_doc_state = DidDocumentState::from(did_log_raw);
-
-        todo!("Read did string")
+        let did_doc = did_doc_state.validate();
+        serde_json::to_string(&did_doc).unwrap()
     }
 
     fn update(&self, did_tdw: String, did_doc: String) -> String {
@@ -601,6 +719,17 @@ fn generate_jcs_hash(json: &str) -> String {
     }
 }
 
+/// Generates an SCID (self certifying identifier) based on the initial DiDoC.
+/// This function is used as well in the initial generation as in the verification
+/// process of the DidDoc log file
+fn generate_scid(did_doc: &DidDoc) -> String {
+    if !did_doc.id.contains(utils::SCID_PLACEHOLDER) {
+        panic!("Invalid did:tdw document. SCID placeholder not found");
+    }
+    let json = serde_json::to_string(did_doc).unwrap();
+    generate_jcs_hash(&json)
+}
+
 impl TrustDidWebProcessor {
     
     pub fn new_with_api_key(api_key: String) -> Self {
@@ -624,16 +753,5 @@ impl TrustDidWebProcessor {
             verification_type: String::from("Multikey"),
             public_key_multibase: verifying_key.to_multibase(),
         }
-    }
-
-    /// Generates an SCID (self certifying identifier) based on the initial DiDoC.
-    /// This function is used as well in the initial generation as in the verification
-    /// process of the DidDoc log file
-    fn generate_scid(&self, did_doc: &DidDoc) -> String {
-        if !did_doc.id.contains(utils::SCID_PLACEHOLDER) {
-            panic!("Invalid did:tdw document. SCID placeholder not found");
-        }
-        let json = serde_json::to_string(did_doc).unwrap();
-        generate_jcs_hash(&json)
     }
 }
