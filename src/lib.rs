@@ -42,8 +42,9 @@ mod test {
     #[rstest]
     fn test_read_did() {
 
-        println!("{}", Utc::now().to_string());
-        match DateTime::parse_from_str("2024-05-31T08:42:05.705+0000", "%Y-%m-%dT%H:%M:%S%.3f%z") {
+        let t = Utc::now().format("%Y-%m-%dT%H:%M:%S%.3f%z").to_string();
+        println!("{}", t);
+        match DateTime::parse_from_str(&t, "%Y-%m-%dT%H:%M:%S%.3f%z") {
             Ok(date) => date,
             Err(e) => {
                 println!("Error: {}", e);

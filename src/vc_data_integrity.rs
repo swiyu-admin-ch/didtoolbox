@@ -1,5 +1,7 @@
 
-use crate::ed25519::{Ed25519VerifyingKey};
+use crate::{ed25519::Ed25519VerifyingKey, utils};
+use chrono::{serde::ts_seconds, DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone)]
 pub enum CryptoSuiteType {
@@ -42,6 +44,51 @@ impl CryptoSuiteOptions {
             verification_method,
             proof_purpose: "authentication".to_string(),
             challenge: Some(challenge),
+        }
+    }
+}
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DataIntegrityProof {
+    #[serde(rename = "type")]
+    pub proof_type: String,
+    #[serde(rename = "cryptoSuite")]
+    pub crypto_suite: String,
+    #[serde(with = "ts_seconds")]
+    pub created: DateTime<Utc>,
+    #[serde(rename = "verificationMethod")]
+    pub verification_method: String,
+    #[serde(rename = "proofPurpose")]
+    pub proof_purpose: String,
+    pub challenge: String,
+}
+impl DataIntegrityProof {
+    pub fn from(json: String) -> Self {
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        DataIntegrityProof {
+            proof_type: match value["proofType"] {
+                serde_json::Value::String(ref s) => s.to_string(),
+                _ => String::from(""),
+            },
+            crypto_suite: match value["cryptoSuite"] {
+                serde_json::Value::String(ref s) => s.to_string(),
+                _ => String::from(""),
+            },
+            created: match value["created"] {
+                serde_json::Value::String(ref s) => DateTime::parse_from_str(s, utils::DATE_TIME_FORMAT).unwrap().to_utc(),
+                _ => Utc::now(),
+            },
+            verification_method: match value["verificationMethod"] {
+                serde_json::Value::String(ref s) => s.to_string(),
+                _ => String::from(""),
+            },
+            proof_purpose: match value["proofPurpose"] {
+                serde_json::Value::String(ref s) => s.to_string(),
+                _ => String::from(""),
+            },
+            challenge: match value["challenge"] {
+                serde_json::Value::String(ref s) => s.to_string(),
+                _ => String::from("")
+            }
         }
     }
 }

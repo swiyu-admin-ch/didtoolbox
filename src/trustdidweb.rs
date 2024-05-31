@@ -29,14 +29,14 @@ pub struct DidLogEntry {
     #[serde(with = "ts_seconds")]
     pub version_time: DateTime<Utc>,
     pub parameters: DidMethodParameters,
-    pub did_doc: serde_json::Value,
+    pub did_doc: DidDoc,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub proof: Option<serde_json::Value>,
+    pub proof: Option<DataIntegrityProof>,
 }
 
 impl DidLogEntry {
     /// Import of existing log entry
-    pub fn new(entry_hash: String, version_id: usize, version_time: DateTime<Utc>, parameters: DidMethodParameters, did_doc: serde_json::Value, proof: serde_json::Value) -> Self {
+    pub fn new(entry_hash: String, version_id: usize, version_time: DateTime<Utc>, parameters: DidMethodParameters, did_doc: DidDoc, proof: DataIntegrityProof) -> Self {
         DidLogEntry {
             entry_hash,
             version_id: Some(version_id),
@@ -48,7 +48,7 @@ impl DidLogEntry {
     }
 
     /// Creation of new log entry (without integrity proof)
-    pub fn of_with_proof(entry_hash: String, parameters: DidMethodParameters, did_doc: serde_json::Value, proof: serde_json::Value) -> Self {
+    pub fn of_with_proof(entry_hash: String, parameters: DidMethodParameters, did_doc: DidDoc, proof: DataIntegrityProof) -> Self {
         DidLogEntry {
             entry_hash,
             version_id: Option::None,
@@ -60,7 +60,7 @@ impl DidLogEntry {
     }
 
     /// Creation of new log entry (without known version_id)
-    pub fn of(entry_hash: String, parameters: DidMethodParameters, did_doc: serde_json::Value) -> Self {
+    pub fn of(entry_hash: String, parameters: DidMethodParameters, did_doc: DidDoc) -> Self {
         DidLogEntry {
             entry_hash,
             version_id: Option::None,
@@ -81,7 +81,7 @@ impl DidLogEntry {
             Some(proof) => serde_json::json!([
                 self.entry_hash,
                 self.version_id,
-                self.version_time.to_owned().format("%Y-%m-%dT%H:%M:%S%.3f%z").to_string(),
+                self.version_time.to_owned().format(utils::DATE_TIME_FORMAT).to_string(),
                 self.parameters,
                 {
                     "value": self.did_doc
@@ -91,7 +91,7 @@ impl DidLogEntry {
             None => serde_json::json!([
                 self.entry_hash,
                 self.version_id,
-                self.version_time.to_owned().format("%Y-%m-%dT%H:%M:%S%.3f%z").to_string(),
+                self.version_time.to_owned().format(utils::DATE_TIME_FORMAT).to_string(),
                 self.parameters,
                 {
                     "value": self.did_doc
@@ -174,10 +174,10 @@ impl DidDocumentState {
                 DidLogEntry::new(
                     entry[0].to_string(),
                     entry[1].to_string().parse::<usize>().unwrap(),
-                    DateTime::parse_from_str(entry[2].as_str().unwrap(), "%Y-%m-%dT%H:%M:%S%.3f%z").unwrap().to_utc(),
+                    DateTime::parse_from_str(entry[2].as_str().unwrap(), utils::DATE_TIME_FORMAT).unwrap().to_utc(),
                     serde_json::from_str(&entry[3].to_string()).unwrap(),
-                    entry[4].clone(),
-                    entry[5].clone()
+                    serde_json::from_str(&entry[4]["value"].to_string()).unwrap(),
+                    DataIntegrityProof::from(entry[5].to_string())
                 )
                 // TODO continue here with fixing the parsing process
             }).collect::<Vec<DidLogEntry>>()
@@ -188,53 +188,19 @@ impl DidDocumentState {
     /// id of the entry in the the verification method array to be later used as challenge in the integrity proof
     /// https://bcgov.github.io/trustdidweb/#authorized-keys 
     fn get_verification_method_key(&self, log_entry: &DidLogEntry, authorization_key_id: &str, verifying_key: &Ed25519VerifyingKey) -> String {
-        let authorization_key_is_controller = match log_entry.did_doc["controller"] {
-            JsonArray(ref controller) => {
-                let controller_value = JsonString(authorization_key_id.to_string());
-                controller.contains(&controller_value)
-            },
-            _ => panic!("Invalid did doc controller"),
-        };
+        let authorization_key_is_controller = log_entry.did_doc.controller.contains(&authorization_key_id.to_string());
         if !authorization_key_is_controller {
             panic!("Authorization key is not the controller of the did doc. Please provide a valid controller id")
         }
 
-        let verification_method_reference: String = match log_entry.did_doc["authentication"] {
-            JsonArray(ref auth) => {
-                auth.iter()
-                    .map(|entry| match entry {
-                        JsonString(ref auth_method) => {
-                            auth_method.to_string()
-                        },
-                        _ => panic!("Invalid did doc authentication"),
-                    })
-                    .filter(|entry| entry.starts_with(&authorization_key_id))
-                    .collect::<Vec<String>>().first().unwrap().to_string()
-            },
-            _ => panic!("Invalid did doc authentication"),
-        };
+        let verification_method_reference = log_entry.did_doc.authentication.iter()
+            .filter(|entry| entry.starts_with(&authorization_key_id))
+            .collect::<Vec<&String>>().first().unwrap().to_string();
 
-        let public_key_multibase = match log_entry.did_doc["verificationMethod"] {
-            JsonArray(ref verification_methods) => {
-                verification_methods.iter()
-                .map(|method| {
-                    match method {
-                        JsonObject(ref verification_method) => {
-                            verification_method
-                        },
-                        _ => panic!("Invalid did doc verificationMethod"),
-                    }
-                })
-                .filter(|method| method["id"] == verification_method_reference)
-                .map(|method| method.get("publicKeyMultibase").unwrap())
-                .map(|value| match value {
-                    JsonString(ref public_key) => public_key.to_string(),
-                    _ => panic!("Invalid did doc verificationMethod"),
-                })
-                .collect::<Vec<String>>().first().unwrap().to_string()
-            },
-            _ => panic!("Invalid did doc verificationMethod"),
-        };
+        let public_key_multibase = log_entry.did_doc.verification_method.iter()
+            .filter(|method| method.id == verification_method_reference)
+            .map(|method| method.public_key_multibase.clone())
+            .collect::<Vec<String>>().first().unwrap().to_string();
 
         if public_key_multibase != verifying_key.to_multibase() {
             panic!("Invalid key pair. The provided key pair is not the one referenced in the did doc")
@@ -289,9 +255,15 @@ impl DidDocumentState {
         let eddsa_suite = EddsaCryptosuite {
             key_pair: Ed25519KeyPair::from(key_pair.get_signing_key().to_multibase().as_str()),
         };
-        let secured_document = eddsa_suite.add_proof(&doc_without_proof.did_doc, &suite_options);
+        let did_doc_ = match serde_json::to_string(&doc_without_proof.did_doc) {
+            Ok(doc) => doc,
+            Err(_) => panic!("Invalid did doc"),
+        };
+        let did_doc_value = serde_json::from_str(&did_doc_).unwrap();
+        let secured_document = eddsa_suite.add_proof(&did_doc_value, &suite_options);
+        let proof_value_string = secured_document["proof"].to_string();
         let doc = DidLogEntry {
-            proof: Some(secured_document["proofValue"].to_owned()),
+            proof: Some(DataIntegrityProof::from(proof_value_string)),
             ..doc_without_proof
         };
         self.did_log_entries.push(doc);
@@ -349,7 +321,7 @@ impl Clone for VerificationMethod {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DidDoc {
     #[serde(rename = "@context")]
     pub context: Vec<String>,
@@ -401,7 +373,7 @@ impl VCDataIntegrity for EddsaCryptosuite {
         let mut proof = json!({
             "type": options.proof_type,
             "cryptoSuite": options.crypto_suite.to_string(),
-            "created": Utc::now().to_string(),
+            "created": Utc::now().format(utils::DATE_TIME_FORMAT).to_string(),
             "verificationMethod": options.verification_method,
             "proofPurpose": options.proof_purpose,
             "challenge": options.challenge.as_ref().unwrap(),
@@ -427,7 +399,7 @@ impl VCDataIntegrity for EddsaCryptosuite {
         // Create secured document
         match serde_json::from_str::<serde_json::Value>(&json_doc) {
             Ok(mut secured_document) => {
-                secured_document["proofValue"] = proof;
+                secured_document["proof"] = proof;
                 return secured_document;
             },
             Err(_) => panic!("Invalid json document"),
@@ -579,7 +551,7 @@ impl DidMethodOperation for TrustDidWebProcessor {
         let did_doc_serialize = serde_json::to_string(&did_doc).unwrap();
         let did_doc_with_scid = str::replace(&did_doc_serialize, utils::SCID_PLACEHOLDER, &scid);
         // let did_doc_with_scid = re.replace_all(&did_doc_serialize, &scid).to_string();
-        let genesis_did_doc: serde_json::Value = serde_json::from_str(&did_doc_with_scid).unwrap();
+        let genesis_did_doc: DidDoc = serde_json::from_str(&did_doc_with_scid).unwrap();
 
         let log_without_proof_and_signature = DidLogEntry::of(
             scid.to_owned(),
@@ -589,23 +561,10 @@ impl DidMethodOperation for TrustDidWebProcessor {
 
         // Initialize did log with genesis did doc
         let mut did_log: DidDocumentState = DidDocumentState::new();
-        let did_log_string = match genesis_did_doc["controller"] {
-            JsonArray(ref controller) => {
-                let controller = match controller.first() {
-                    Some(JsonString(ref controller)) => controller.to_string(),
-                    _ => panic!("Invalid did doc controller"),
-                };
-                did_log.update(log_without_proof_and_signature,&controller , key_pair);
-                did_log.to_string()
-            },
-            _ => panic!("Invalid did doc controller"),
-        };
-        let did = match genesis_did_doc["id"] {
-            JsonString(ref did_url) => did_url,
-            _ => panic!("Invalid did doc id"),
-        };
-        self.resolver.write(get_url_from_tdw(&did), did_log_string.to_owned());
-        did.to_string()
+        let controller = genesis_did_doc.controller.first().unwrap();
+        did_log.update(log_without_proof_and_signature,&controller , key_pair);
+        self.resolver.write(get_url_from_tdw(&genesis_did_doc.id), did_log.to_string());
+        genesis_did_doc.id
     }
 
     fn read(&self, did_tdw: String) -> String {
