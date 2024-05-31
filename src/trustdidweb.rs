@@ -81,7 +81,7 @@ impl DidLogEntry {
             Some(proof) => serde_json::json!([
                 self.entry_hash,
                 self.version_id,
-                self.version_time.to_owned().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+                self.version_time.to_owned().format("%Y-%m-%dT%H:%M:%S%.3f%z").to_string(),
                 self.parameters,
                 {
                     "value": self.did_doc
@@ -91,7 +91,7 @@ impl DidLogEntry {
             None => serde_json::json!([
                 self.entry_hash,
                 self.version_id,
-                self.version_time.to_owned().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+                self.version_time.to_owned().format("%Y-%m-%dT%H:%M:%S%.3f%z").to_string(),
                 self.parameters,
                 {
                     "value": self.did_doc
@@ -174,7 +174,7 @@ impl DidDocumentState {
                 DidLogEntry::new(
                     entry[0].to_string(),
                     entry[1].to_string().parse::<usize>().unwrap(),
-                    DateTime::parse_from_str(entry[2].as_str().unwrap(), "%Y-%m-%dT%H:%M:%S%.3fZ").unwrap().to_utc(),
+                    DateTime::parse_from_str(entry[2].as_str().unwrap(), "%Y-%m-%dT%H:%M:%S%.3f%z").unwrap().to_utc(),
                     serde_json::from_str(&entry[3].to_string()).unwrap(),
                     entry[4].clone(),
                     entry[5].clone()
@@ -612,7 +612,8 @@ impl DidMethodOperation for TrustDidWebProcessor {
         let url = get_url_from_tdw(&did_tdw);
         let did_log_raw = self.resolver.read(url);
         let did_doc_state = DidDocumentState::from(did_log_raw);
-        did_doc_state.to_string()
+
+        todo!("Read did string")
     }
 
     fn update(&self, did_tdw: String, did_doc: String) -> String {

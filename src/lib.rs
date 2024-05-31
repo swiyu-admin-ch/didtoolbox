@@ -7,10 +7,14 @@ uniffi::include_scaffolding!("trustdidweb");
 
 #[cfg(test)]
 mod test {
+    use core::panic;
+
     use super::trustdidweb::*;
     use super::ed25519::*;
     use rstest::rstest;
     use serde_json::json;
+    use chrono::{DateTime, Utc};
+    use chrono::serde::ts_seconds;
 
     #[rstest]
     fn test_key_creation() {
@@ -37,6 +41,16 @@ mod test {
 
     #[rstest]
     fn test_read_did() {
+
+        println!("{}", Utc::now().to_string());
+        match DateTime::parse_from_str("2024-05-31T08:42:05.705+0000", "%Y-%m-%dT%H:%M:%S%.3f%z") {
+            Ok(date) => date,
+            Err(e) => {
+                println!("Error: {}", e);
+                panic!("Error parsing date");
+            }
+        };
+
         let processor = TrustDidWebProcessor::new_with_api_key(String::from("secret"));
         let key_pair = Ed25519KeyPair::generate();
         print!("{}",key_pair.get_signing_key().to_multibase());
