@@ -42,21 +42,21 @@ mod test {
     #[rstest]
     fn test_read_did() {
 
-        let t = Utc::now().format("%Y-%m-%dT%H:%M:%S%.3f%z").to_string();
-        println!("{}", t);
-        match DateTime::parse_from_str(&t, "%Y-%m-%dT%H:%M:%S%.3f%z") {
-            Ok(date) => date,
-            Err(e) => {
-                println!("Error: {}", e);
-                panic!("Error parsing date");
-            }
-        };
+        /// TODO
+        /// - Decoding of base 32 fails from time to time due to padding
 
         let processor = TrustDidWebProcessor::new_with_api_key(String::from("secret"));
         let key_pair = Ed25519KeyPair::generate();
-        print!("{}",key_pair.get_signing_key().to_multibase());
         let did = processor.create("https://localhost:8000".to_string(), &key_pair);
-        let did_log = processor.read(String::from(did));
+        let did_doc_str_v1 = processor.read(String::from(&did));
+        let mut did_doc_v1: serde_json::Value = serde_json::from_str(&did_doc_str_v1).unwrap();
+
+        did_doc_v1["new_property"] = json!("new_value");
+        let did_doc_v2 = did_doc_v1.to_string();
+        processor.update(did.clone(), did_doc_v2, &key_pair);
+
+        let did_doc_v3 = processor.read(String::from(&did));
+        todo!("Finish test")
     }
 
 }

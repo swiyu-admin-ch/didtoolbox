@@ -73,6 +73,37 @@ impl DidLogEntry {
         }
     }
 
+    /// Check wether the entry_hash of this log entry is based on the previous entry_hash
+    pub fn verify_entry_hash_integrity(&self, previous_entry_hash: &str) {
+        let entry_without_proof = DidLogEntry {
+            entry_hash: previous_entry_hash.to_string(),
+            version_id: self.version_id,
+            version_time: self.version_time,
+            parameters: self.parameters.clone(),
+            did_doc: self.did_doc.clone(),
+            proof: None
+        };
+        let entry_hash = entry_without_proof.get_hash();
+        if entry_hash != self.entry_hash {
+            panic!("Invalid did log. Genesis entry has invalid entry hash")
+        }
+    }
+
+    /// Check wether the integrity proof matches the content of the did document of this log entry
+    pub fn verify_data_integrity_proof(&self) {
+        // Verify data integrity proof 
+        let verifying_key = self.get_data_integrity_verifying_key();
+        let eddsa_suite = EddsaCryptosuite {
+            verifying_key: Some(verifying_key),
+            signing_key: None,
+        };
+        let mut did_doc_value = serde_json::to_value(&self.did_doc).unwrap();
+        did_doc_value["proof"] = self.proof.as_ref().unwrap().to_value();
+        if !eddsa_suite.verify_proof(&did_doc_value) {
+            panic!("Invalid did log. Entry of version {} has invalid data integrity proof", self.version_id.unwrap())
+        }
+    }
+
     fn get_hash(&self) -> String {
         let json = serde_json::to_string(&self.to_log_entry_line()).unwrap();
         generate_jcs_hash(&json)
@@ -185,6 +216,20 @@ impl DidMethodParameters {
             ttl: Option::None,
         }
     }
+
+    pub fn empty() -> Self {
+        DidMethodParameters {
+            method: Option::None,
+            scid: Option::None,
+            hash: Option::None,
+            cryptosuite: Option::None,
+            prerotation: Option::None,
+            next_keys: Option::None,
+            moved: Option::None,
+            deactivated: Option::None,
+            ttl: Option::None,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -203,13 +248,23 @@ impl DidDocumentState {
         }
     }
     pub fn from(did_log: String) -> Self {
+        let unescaped: String = serde_json::from_str(&did_log).unwrap();
         DidDocumentState {
-            did_log_entries: did_log.split("\n").map(|line| {
-                println!("{}", line);
+            did_log_entries: unescaped.split("\n")
+            .filter(|line| line.len() > 0)
+            .map(|line| {
                 let entry: serde_json::Value = match serde_json::from_str(line) {
                     Ok(entry) => entry,
                     Err(e) => panic!("{}", e),
                 };
+                match entry {
+                    JsonArray(ref entry) => {
+                        if entry.len() < 5 {
+                            panic!("Invalid did log entry. Expected at least 5 elements but got {}", entry.len())
+                        }
+                    },
+                    _ => panic!("Invalid did log entry. Expected array")
+                }
                 // TODO replace this with toString call of log entry
                 DidLogEntry::new(
                     match entry[0] {
@@ -227,10 +282,14 @@ impl DidDocumentState {
         }
     }
 
+    pub fn current(&self) -> &DidLogEntry {
+        let last_entry = self.did_log_entries.last().unwrap();
+        last_entry
+    }
+
     /// Checks if all entries in the did log are valid (data integrity, versioning etc.)
     pub fn validate(&self) -> DidDoc {
         let mut previous_entry: Option<DidLogEntry> = None;
-        let mut index = 1;
         for entry in &self.did_log_entries {
             match previous_entry {
                 Some(ref prev) => {
@@ -238,8 +297,12 @@ impl DidDocumentState {
                     if entry.version_id.unwrap() != prev.version_id.unwrap()+1 {
                         panic!("Invalid did log for version {}. Version id has to be incremented", entry.version_id.unwrap())
                     }
+                    // Verify data integrity proof 
+                    entry.verify_data_integrity_proof();
 
-                    todo!("Make check for subsequent entries")
+                    // Verify the entryHash
+                    entry.verify_entry_hash_integrity(&prev.entry_hash);
+                    previous_entry = Some(entry.clone());
                 },
                 None => {
                     // First / genesis entry in did log
@@ -247,33 +310,10 @@ impl DidDocumentState {
                     if genesis_entry.version_id.unwrap() != 1 {
                         panic!("Invalid did log. First entry has to have version id 1")
                     }
-
                     // Verify data integrity proof 
-                    let verifying_key = genesis_entry.get_data_integrity_verifying_key();
-                    let eddsa_suite = EddsaCryptosuite {
-                        verifying_key: Some(verifying_key),
-                        signing_key: None,
-                    };
-                    let mut did_doc_value = serde_json::to_value(&genesis_entry.did_doc).unwrap();
-                    did_doc_value["proof"] = genesis_entry.proof.as_ref().unwrap().to_value();
-                    if !eddsa_suite.verify_proof(&did_doc_value) {
-                        panic!("Invalid did log. Genesis entry has invalid data integrity proof")
-                    }
-
+                    genesis_entry.verify_data_integrity_proof();
                     // Verify the entryHash
-                    let entry_without_proof = DidLogEntry {
-                        entry_hash: genesis_entry.parameters.scid.clone().unwrap(),
-                        version_id: genesis_entry.version_id,
-                        version_time: genesis_entry.version_time,
-                        parameters: genesis_entry.parameters.clone(),
-                        did_doc: genesis_entry.did_doc.clone(),
-                        proof: None
-                    };
-                    let entry_hash = entry_without_proof.get_hash();
-                    if entry_hash != genesis_entry.entry_hash {
-                        panic!("Invalid did log. Genesis entry has invalid entry hash")
-                    }
-
+                    genesis_entry.verify_entry_hash_integrity(genesis_entry.parameters.scid.as_ref().unwrap());
                     // Verify that the SCID is correct
                     let doc_string = serde_json::to_string(&genesis_entry.did_doc).unwrap();
                     let scid = genesis_entry.parameters.scid.clone().unwrap();
@@ -283,7 +323,6 @@ impl DidDocumentState {
                     if original_scid != scid {
                         panic!("Invalid did log. Genesis entry has invalid SCID")
                     }
-
                     previous_entry = Some(genesis_entry.clone());
                 }
             };
@@ -376,7 +415,7 @@ impl std::fmt::Display for DidDocumentState {
 pub trait DidMethodOperation {
     fn create(&self, url: String, key_pair: &Ed25519KeyPair) -> String;
     fn read(&self, did_tdw: String) -> String;
-    fn update(&self, did_tdw: String, did_doc: String) -> String;
+    fn update(&self, did_tdw: String, did_doc: String, key_pair: &Ed25519KeyPair) -> String;
     fn deactivate(&self, did_tdw: String) -> String;
 }
 
@@ -562,7 +601,9 @@ impl UrlResolver for HttpClientResolver {
             },
             None => (),
         };
-        match request.send_string(&content) {
+        match request.send_form(&[
+            ("file", &content)
+        ]) {
             Ok(_) => (),
             Err(e) => panic!("{}", e),
         }
@@ -693,8 +734,27 @@ impl DidMethodOperation for TrustDidWebProcessor {
         serde_json::to_string(&did_doc).unwrap()
     }
 
-    fn update(&self, did_tdw: String, did_doc: String) -> String {
-        todo!("Update did string")
+    fn update(&self, did_tdw: String, did_doc: String, key_pair: &Ed25519KeyPair) -> String {
+        let url = get_url_from_tdw(&did_tdw);
+        let did_log_raw = self.resolver.read(url);
+        let mut did_doc_state = DidDocumentState::from(did_log_raw);
+        let current_did_doc = did_doc_state.validate();
+        let update_did_doc: DidDoc = serde_json::from_str(&did_doc).unwrap();
+
+        // TODO right now did cant be changed
+        if current_did_doc.id != update_did_doc.id {
+            panic!("Invalid did doc. The did doc id has to match the did_tdw")
+        }
+
+        let current_entry = did_doc_state.current();
+        let update_entry = DidLogEntry::of(
+            current_entry.entry_hash.clone(),
+            DidMethodParameters::empty(),
+            update_did_doc.clone()
+        );
+        did_doc_state.update(update_entry, &did_tdw, key_pair);
+        self.resolver.write(get_url_from_tdw(&did_tdw), did_doc_state.to_string());
+        String::from("safasdf")
     }
 
     fn deactivate(&self, did_tdw: String) -> String {
