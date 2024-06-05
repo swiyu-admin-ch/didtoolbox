@@ -28,7 +28,7 @@ uniffi = { version = "0.26.1", features = ["build"] }
 
 [lib]
 crate-type = ["cdylib"]
-name = "bbscryptosuite"
+name = "trustdidweb"
 
 [[bin]]
 name = "uniffi-bindgen"

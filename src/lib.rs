@@ -3,6 +3,9 @@ pub mod utils;
 pub mod vc_data_integrity;
 pub mod ed25519;
 
+use crate::trustdidweb::*;
+use crate::ed25519::*;
+
 uniffi::include_scaffolding!("trustdidweb");
 
 #[cfg(test)]

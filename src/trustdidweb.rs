@@ -268,7 +268,10 @@ impl DidDocumentState {
         }
     }
     pub fn from(did_log: String) -> Self {
-        let unescaped: String = serde_json::from_str(&did_log).unwrap();
+        let mut unescaped = did_log.clone();
+        if unescaped.contains("\\\"") {
+            unescaped = serde_json::from_str(&did_log).unwrap()
+        }
         DidDocumentState {
             did_log_entries: unescaped.split("\n")
             .filter(|line| line.len() > 0)
@@ -677,8 +680,8 @@ fn get_url_from_tdw(did_tdw: &String) -> String {
     };
     let has_path = regex::Regex::new(r"([a-z]|[0-9])\/([a-z]|[0-9])").unwrap();
     match has_path.captures(url.as_str()) {
-        Some(_) => format!("{}/did.json", url),
-        None => format!("{}/.well-know/did.json", url),
+        Some(_) => format!("{}/did.jsonl", url),
+        None => format!("{}/.well-know/did.jsonl", url),
     }
 }
 
@@ -862,4 +865,12 @@ impl TrustDidWebProcessor {
             resolver: Box::new(HttpClientResolver{api_key: None})
         }
     }
+}
+
+unsafe impl Send for TrustDidWebProcessor {
+
+}
+
+unsafe impl Sync for TrustDidWebProcessor {
+
 }

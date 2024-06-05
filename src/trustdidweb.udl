@@ -1,2 +1,44 @@
 namespace trustdidweb {
 };
+
+interface TrustDidWebProcessor {
+    constructor();
+    [Name=new_with_api_key]
+    constructor(string api_key);
+    string create(string url, [ByRef] Ed25519KeyPair key_pair);
+    string read(string did_tdw);
+    string update(string did_tdw, string did_doc, [ByRef] Ed25519KeyPair key_pair);
+    string deactivate(string did_tdw, [ByRef] Ed25519KeyPair key_pair);
+};
+
+interface Ed25519KeyPair {
+    [Name=generate]
+    constructor();
+    [Name=from]
+    constructor([ByRef] string signing_key_multibase);
+};
+
+interface DidDocumentState {
+    [Name=from]
+    constructor(string did_log);
+    DidDoc validate();
+};
+
+dictionary VerificationMethod {
+    string id;
+    string controller;
+    string verification_type;
+    string public_key_multibase;
+};
+
+dictionary DidDoc {
+    sequence<string> context;
+    string id;
+    sequence<VerificationMethod> verification_method;
+    sequence<string> authentication;
+    sequence<VerificationMethod> capability_invocation;
+    sequence<VerificationMethod> capability_delegation;
+    sequence<VerificationMethod> assertion_method;
+    sequence<string> controller;
+    boolean? deactivated;
+};
