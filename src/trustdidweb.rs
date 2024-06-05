@@ -2,6 +2,7 @@ use core::{hash, panic};
 use std::any;
 use std::collections::HashMap;
 
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
 use chrono::serde::ts_seconds;
 use serde::{Deserialize, Serialize};
@@ -202,6 +203,7 @@ pub struct DidMethodParameters {
     #[serde(default)]
     pub ttl: Option<i64>,
 }
+
 impl DidMethodParameters {
     pub fn for_genesis_did_doc(scid: String) -> Self {
         DidMethodParameters {
@@ -679,14 +681,19 @@ impl DidMethodOperation for TrustDidWebProcessor {
         // Check if domain is valid
         let domain = get_tdw_domain_from_url(&url);
 
-        // Create verification method for subject with placeholder
+        // Create verification method suffix so that it can be used as part of verification method id property
         let did_tdw = format!("did:tdw:{}:{}", domain, utils::SCID_PLACEHOLDER);
-        let verification_method_suffix: String = thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(32)
-            .map(char::from)
-            .collect();
-
+        let key_def = json!({
+            "type": "Multikey",
+            "publicKeyMultibase": key_pair.verifying_key.to_multibase(),
+        });
+        let key_def_jcs = jcs_from_str(&key_def.to_string()).unwrap();
+        let mut hasher = Sha256::new();
+        hasher.update(key_def_jcs);
+        let key_def_hash: String = hasher.finalize().encode_hex();
+        let verification_method_suffix = URL_SAFE_NO_PAD.encode(key_def_hash.as_bytes());
+        
+        // Create verification method for subject with placeholder
         let verification_method = VerificationMethod {
             id: format!("{}#{}", &did_tdw, verification_method_suffix),
             controller: did_tdw.clone(),
@@ -739,9 +746,12 @@ impl DidMethodOperation for TrustDidWebProcessor {
         let did_log_raw = self.resolver.read(url);
         let mut did_doc_state = DidDocumentState::from(did_log_raw);
         let current_did_doc = did_doc_state.validate();
-        let update_did_doc: DidDoc = serde_json::from_str(&did_doc).unwrap();
+        let update_did_doc: DidDoc = match serde_json::from_str(&did_doc) {
+            Ok(doc) => doc,
+            Err(_) => panic!("The did doc you provided is invalid or contains an argument which isn't part of the did specification/recommendation"),
+        };
 
-        // TODO right now did cant be changed
+        // TODO right now did can't be changed
         if current_did_doc.id != update_did_doc.id {
             panic!("Invalid did doc. The did doc id has to match the did_tdw")
         }
@@ -754,7 +764,7 @@ impl DidMethodOperation for TrustDidWebProcessor {
         );
         did_doc_state.update(update_entry, &did_tdw, key_pair);
         self.resolver.write(get_url_from_tdw(&did_tdw), did_doc_state.to_string());
-        String::from("safasdf")
+        serde_json::to_string(&did_doc_state.current().did_doc).unwrap()
     }
 
     fn deactivate(&self, did_tdw: String) -> String {
