@@ -94,6 +94,13 @@ impl DidLogEntry {
     pub fn verify_data_integrity_proof(&self) {
         // Verify data integrity proof 
         let verifying_key = self.get_data_integrity_verifying_key();
+
+        // Check if verifying key is actually a controller and therefore allowed to update the doc => valid key to create the proof
+        let controller_keys = self.get_controller_verifying_key();
+        if !controller_keys.values().any(|(id, key)| key.to_multibase() == verifying_key.to_multibase()) {
+            panic!("Invalid key pair. The provided key pair is not the one referenced in the did doc")
+        }
+
         let eddsa_suite = EddsaCryptosuite {
             verifying_key: Some(verifying_key),
             signing_key: None,
@@ -253,9 +260,6 @@ pub struct DidDocumentState {
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub did_log_entries: Vec<DidLogEntry>,
 }
-
-#[derive(Deserialize, Debug)]
-pub struct Entry(String, usize, DateTime<Utc>, DidMethodParameters, serde_json::Value, Option<serde_json::Value>);
 
 impl DidDocumentState {
     pub fn new() -> Self {
