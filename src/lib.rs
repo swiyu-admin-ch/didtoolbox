@@ -14,8 +14,6 @@ mod test {
     use super::ed25519::*;
     use rstest::rstest;
     use serde_json::json;
-    use chrono::{DateTime, Utc};
-    use chrono::serde::ts_seconds;
 
     /// TODO
     /// - Decoding of base 32 fails from time to time due to padding
@@ -79,10 +77,6 @@ mod test {
             public_key_multibase: String::from("SomeKey")
         };
         did_doc_v2["assertionMethod"] = json!(vec![serde_json::to_value(&verification_method).unwrap()]);
-        match did_doc_v2["assertionMethod"] {
-            serde_json::Value::Array(ref s) => assert!(s.len() == 1),
-            _ => panic!("Invalid did doc"),
-        }
         let did_doc_v2 = did_doc_v2.to_string();
         processor.update(did.clone(), did_doc_v2, &key_pair);
 
@@ -93,5 +87,34 @@ mod test {
             serde_json::Value::String(ref s) => assert!(s.eq("did:jwk:123#type1")),
             _ => panic!("Invalid did doc"),
         };
+    }
+
+    #[rstest]
+    #[should_panic(expected = "Invalid did doc. The did doc is already deactivated. For simplicity reasons we don't allow updates of dids")]
+    fn test_deactivate_did_tdw() {
+        // Register did tdw
+        let processor = TrustDidWebProcessor::new_with_api_key(String::from("secret"));
+        let key_pair = Ed25519KeyPair::from("Mw9qGFWOhK0pbPTAbdc815ZLwZfubmgceTWBOY8V1vr0=");
+        let did = processor.create("https://localhost:8000".to_string(), &key_pair);
+
+        // Deactivate did
+        processor.deactivate(did.clone(), &key_pair);
+
+        // Read original did doc 
+        let did_doc_str_v1 = processor.read(String::from(&did));
+        let did_doc_v1: serde_json::Value = serde_json::from_str(&did_doc_str_v1).unwrap();
+
+        // Update did document after it has been deactivated
+        let mut did_doc_v2: serde_json::Value = did_doc_v1.clone();
+        let verification_method: VerificationMethod = VerificationMethod {
+            id: String::from("did:jwk:123#type1"),
+            controller: String::from("did:jwk:123"),
+            verification_type: String::from("TestKey"),
+            public_key_multibase: String::from("SomeKey")
+        };
+        did_doc_v2["assertionMethod"] = json!(vec![serde_json::to_value(&verification_method).unwrap()]);
+
+        let did_doc_v2 = did_doc_v2.to_string();
+        processor.update(did.clone(), did_doc_v2, &key_pair);
     }
 }

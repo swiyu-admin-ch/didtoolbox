@@ -232,6 +232,20 @@ impl DidMethodParameters {
             ttl: Option::None,
         }
     }
+
+    pub fn deactivate() -> Self {
+        DidMethodParameters {
+            method: Option::None,
+            scid: Option::None,
+            hash: Option::None,
+            cryptosuite: Option::None,
+            prerotation: Option::None,
+            next_keys: Option::None,
+            moved: Option::None,
+            deactivated: Option::Some(true),
+            ttl: Option::None,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -344,6 +358,8 @@ impl DidDocumentState {
         let mut previous_hash = log_entry.entry_hash.clone();
         let mut verification_method = String::new();
 
+        // Make sure only activated did docs can be updated
+
         if self.did_log_entries.len() == 0 {
             // Genesis entry (Create)
             // Check if version hash is present
@@ -355,6 +371,17 @@ impl DidDocumentState {
         } else {
             // Subsequent entry (Update)
             let previous_entry = self.did_log_entries.last().unwrap();
+
+            // Make sure only activated did docs can be updated
+            match previous_entry.did_doc.deactivated{
+                Some(deactivated) => {
+                    if deactivated {
+                        panic!("Invalid did doc. The did doc is already deactivated. For simplicity reasons we don't allow updates of dids")
+                    }
+                },
+                None => (),
+            }
+
             // Get new version index
             index = previous_entry.version_id.unwrap() + 1;
             // Get last version hash
@@ -418,7 +445,7 @@ pub trait DidMethodOperation {
     fn create(&self, url: String, key_pair: &Ed25519KeyPair) -> String;
     fn read(&self, did_tdw: String) -> String;
     fn update(&self, did_tdw: String, did_doc: String, key_pair: &Ed25519KeyPair) -> String;
-    fn deactivate(&self, did_tdw: String) -> String;
+    fn deactivate(&self, did_tdw: String, key_pair: &Ed25519KeyPair) -> String;
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -481,6 +508,8 @@ pub struct DidDoc {
     pub assertion_method: Vec<VerificationMethod>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub controller: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deactivated: Option<bool>,
 }
 
 pub struct EddsaCryptosuite {
@@ -709,7 +738,8 @@ impl DidMethodOperation for TrustDidWebProcessor {
             capability_invocation: vec![],
             capability_delegation: vec![],
             assertion_method: vec![],
-            controller: vec![format!("did:tdw:{}:{}", domain, utils::SCID_PLACEHOLDER)]
+            controller: vec![format!("did:tdw:{}:{}", domain, utils::SCID_PLACEHOLDER)],
+            deactivated: None,
         };
 
         // Generate SCID and replace placeholder in did doc
@@ -767,8 +797,23 @@ impl DidMethodOperation for TrustDidWebProcessor {
         serde_json::to_string(&did_doc_state.current().did_doc).unwrap()
     }
 
-    fn deactivate(&self, did_tdw: String) -> String {
-        todo!("Deactivate did string")
+    fn deactivate(&self, did_tdw: String, key_pair: &Ed25519KeyPair) -> String {
+        let url = get_url_from_tdw(&did_tdw);
+        let did_log_raw = self.resolver.read(url);
+        let mut did_doc_state = DidDocumentState::from(did_log_raw);
+        let mut current_did_doc = did_doc_state.validate();
+        
+        // Mark did doc as deactivated and set did log parameters accordingly
+        current_did_doc.deactivated = Some(true);
+        let current_entry = did_doc_state.current();
+        let update_entry = DidLogEntry::of(
+            current_entry.entry_hash.clone(),
+            DidMethodParameters::deactivate(),
+            current_did_doc
+        );
+        did_doc_state.update(update_entry, &did_tdw, key_pair);
+        self.resolver.write(get_url_from_tdw(&did_tdw), did_doc_state.to_string());
+        serde_json::to_string(&did_doc_state.current().did_doc).unwrap()
     }
 }
 
@@ -811,17 +856,6 @@ impl TrustDidWebProcessor {
     pub fn new() -> Self {
         TrustDidWebProcessor {
             resolver: Box::new(HttpClientResolver{api_key: None})
-        }
-    }
-
-    /// Create verification method object from public key
-    fn create_verification_method_from_verifying_key(&self, domain: &String, id_suffix: &String, verifying_key: &Ed25519VerifyingKey) -> VerificationMethod {
-        let kid = format!("#{}",id_suffix);
-        VerificationMethod {
-            id: format!("{}{}", domain, kid),
-            controller: domain.to_string(),
-            verification_type: String::from("Multikey"),
-            public_key_multibase: verifying_key.to_multibase(),
         }
     }
 }
