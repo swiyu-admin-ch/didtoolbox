@@ -26,10 +26,6 @@ url-escape = "0.1.1"
 [build-dependencies]
 uniffi = { version = "0.26.1", features = ["build"] }
 
-[lib]
-crate-type = ["cdylib"]
-name = "trustdidweb"
-
 [[bin]]
 name = "uniffi-bindgen"
 path = "uniffi-bindgen.rs"
