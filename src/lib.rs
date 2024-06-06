@@ -48,14 +48,17 @@ mod test {
     #[rstest]
     fn test_read_did_tdw() {
         let processor = TrustDidWebProcessor::new_with_api_key(String::from("secret"));
-        let key_pair = Ed25519KeyPair::from("Mw9qGFWOhK0pbPTAbdc815ZLwZfubmgceTWBOY8V1vr0=");
+        let key_pair = Ed25519KeyPair::from("uw9qGFWOhK0pbPTAbdc815ZLwZfubmgceTWBOY8V1vr0");
         let did = processor.create("https://localhost:8000".to_string(), &key_pair);
         
         // Read original did document
         let did_doc_str_v1 = processor.read(String::from(&did));
         let did_doc_v1: serde_json::Value = serde_json::from_str(&did_doc_str_v1).unwrap();
         match did_doc_v1["id"] {
-            serde_json::Value::String(ref s) => assert!(s.eq("did:tdw:localhost%3A8000:mq4tenryme2tsojuge2tsndcguzdamdcgvrwcyrxg4ywczbqgqytsodfg5stqzddg4ywcm3cmnqtszjwmezgcmlgmm4wmyrqhezgiyi=")),
+            serde_json::Value::String(ref s) => {
+                println!("{}", s);
+                assert!(s.eq("did:tdw:localhost%3A8000:gjrwgnlemuytanzwgzrwgmldmfsdgyrshbrdozbqmu2ggndghbswgmrxg43tombugvtdsztegaywmmtbgfrdeyrrg5qwgobtmrstgni="))
+            },
             _ => panic!("Invalid did doc"),
         }
     }

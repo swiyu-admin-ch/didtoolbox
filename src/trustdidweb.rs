@@ -148,7 +148,7 @@ impl DidLogEntry {
             .collect::<Vec<&VerificationMethod>>().first().unwrap().to_owned();
 
         // Make sure the the verification method is part of the authentication section
-        if !self.did_doc.authentication.contains(&verification_method.id) {
+        if !self.did_doc.authentication.iter().any(|authentication_method| authentication_method.id == verification_method.id) {
             panic!("Invalid integrity proof for log with id {}. The verification method used for the integrity proof is not part of the authentication section", self.version_id.unwrap())
         }
 
@@ -494,7 +494,7 @@ pub struct DidDoc {
     #[serde(rename = "verificationMethod")]
     pub verification_method: Vec<VerificationMethod>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    pub authentication: Vec<String>,
+    pub authentication: Vec<VerificationMethod>,
     #[serde(
         rename = "capabilityInvocation",
         skip_serializing_if = "Vec::is_empty",
@@ -741,7 +741,7 @@ impl DidMethodOperation for TrustDidWebProcessor {
             context: vec![utils::DID_CONTEXT.to_string(), utils::MKEY_CONTEXT.to_string()],
             id: did_tdw.clone(),
             verification_method: vec![verification_method.clone()],
-            authentication: vec![format!("did:tdw:{}:{}#{}", domain, utils::SCID_PLACEHOLDER, verification_method_suffix)],
+            authentication: vec![verification_method.clone()],
             capability_invocation: vec![],
             capability_delegation: vec![],
             assertion_method: vec![],
