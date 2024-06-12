@@ -80,7 +80,8 @@ mod test {
             id: String::from("did:jwk:123#type1"),
             controller: String::from("did:jwk:123"),
             verification_type: String::from("TestKey"),
-            public_key_multibase: String::from("SomeKey")
+            public_key_multibase: Some(String::from("SomeKey")),
+            public_key_jwk: None
         };
         did_doc_v2["assertionMethod"] = json!(vec![serde_json::to_value(&verification_method).unwrap()]);
         let did_doc_v2 = did_doc_v2.to_string();
@@ -113,7 +114,8 @@ mod test {
             id: String::from("did:jwk:123#type1"),
             controller: String::from("did:jwk:123"),
             verification_type: String::from("TestKey"),
-            public_key_multibase: String::from("SomeKey")
+            public_key_multibase: Some(String::from("SomeKey")),
+            public_key_jwk: None
         };
         did_doc_v2["assertionMethod"] = json!(vec![serde_json::to_value(&verification_method).unwrap()]);
         let did_doc_v2 = did_doc_v2.to_string();
@@ -142,7 +144,8 @@ mod test {
             id: String::from("did:jwk:123#type1"),
             controller: String::from("did:jwk:123"),
             verification_type: String::from("TestKey"),
-            public_key_multibase: String::from("SomeKey")
+            public_key_multibase: Some(String::from("SomeKey")),
+            public_key_jwk: None
         };
         did_doc_v2["assertionMethod"] = json!(vec![serde_json::to_value(&verification_method).unwrap()]);
 

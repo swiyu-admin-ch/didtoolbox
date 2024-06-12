@@ -124,7 +124,7 @@ impl DidLogEntry {
                 .any(|controller| entry.id.starts_with(controller)))
             .map(|entry| (
                 entry.id.split("#").collect::<Vec<&str>>().first().unwrap().to_string(),
-                (entry.id.clone(), Ed25519VerifyingKey::from_multibase(&entry.public_key_multibase))
+                (entry.id.clone(), Ed25519VerifyingKey::from_multibase(entry.public_key_multibase.as_ref().unwrap()))
             ))
             .collect::<HashMap<String, (String, Ed25519VerifyingKey)>>()
     }
@@ -152,7 +152,7 @@ impl DidLogEntry {
             panic!("Invalid integrity proof for log with id {}. The verification method used for the integrity proof is not part of the authentication section", self.version_id.unwrap())
         }
 
-        Ed25519VerifyingKey::from_multibase(&verification_method.public_key_multibase)
+        Ed25519VerifyingKey::from_multibase(verification_method.public_key_multibase.as_ref().unwrap())
     }
 
     pub fn to_log_entry_line(&self) -> serde_json::Value {
@@ -455,14 +455,23 @@ pub trait DidMethodOperation {
     fn deactivate(&self, did_tdw: String, key_pair: &Ed25519KeyPair) -> String;
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Jwk {
+    pub kty: String,
+    pub crv: String,
+    pub x: String,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct VerificationMethod {
     pub id: String,
     pub controller: String,
     #[serde(rename = "type")]
     pub verification_type: String,
-    #[serde(rename = "publicKeyMultibase")]
-    pub public_key_multibase: String,
+    #[serde(rename = "publicKeyMultibase", skip_serializing_if = "Option::is_none")]
+    pub public_key_multibase: Option<String>,
+    #[serde(rename = "publicKeyJwk", skip_serializing_if = "Option::is_none")]
+    pub public_key_jwk: Option<Jwk>,
 }
 
 impl VerificationMethod {
@@ -471,7 +480,8 @@ impl VerificationMethod {
             id: id,
             controller: controller,
             verification_type: String::from("Multikey"),
-            public_key_multibase: public_key_multibase,
+            public_key_multibase: Some(public_key_multibase),
+            public_key_jwk: None,
         }
     }
 }
@@ -482,6 +492,7 @@ impl Clone for VerificationMethod {
             controller: self.controller.clone(),
             verification_type: self.verification_type.clone(),
             public_key_multibase: self.public_key_multibase.clone(),
+            public_key_jwk: self.public_key_jwk.clone()
         }
     }
 }
@@ -734,7 +745,8 @@ impl DidMethodOperation for TrustDidWebProcessor {
             id: format!("{}#{}", &did_tdw, verification_method_suffix),
             controller: did_tdw.clone(),
             verification_type: String::from("Multikey"),
-            public_key_multibase: key_pair.verifying_key.to_multibase(),
+            public_key_multibase: Some(key_pair.verifying_key.to_multibase()),
+            public_key_jwk: None
         };
         // Create initial did doc with placeholder
         let did_doc = DidDoc {

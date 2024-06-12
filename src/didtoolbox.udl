@@ -24,11 +24,18 @@ interface DidDocumentState {
     DidDoc validate();
 };
 
+dictionary Jwk {
+  string kty;
+  string crv;
+  string x;
+};
+
 dictionary VerificationMethod {
     string id;
     string controller;
     string verification_type;
-    string public_key_multibase;
+    string? public_key_multibase;
+    Jwk? public_key_jwk;
 };
 
 dictionary DidDoc {
