@@ -1,4 +1,3 @@
-use core::{hash, panic};
 use std::any;
 use std::collections::HashMap;
 
@@ -6,7 +5,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
 use chrono::serde::ts_seconds;
 use serde::{Deserialize, Serialize};
-use base64::{engine::general_purpose::STANDARD, engine::general_purpose::URL_SAFE , Engine as _};
+use base64::{Engine as _};
 use base32::{decode as base32_decode, encode as base32_encode, Alphabet};
 use serde_jcs::{to_vec as jcs_from_str, to_string as jcs_to_string};
 use serde_json::json;
@@ -14,7 +13,6 @@ use serde_json::Value::{String as JsonString, Object as JsonObject, Array as Jso
 use sha2::{Sha256, Digest};
 use hex;
 use hex::ToHex;
-use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use regex;
 use ureq;
