@@ -2,9 +2,11 @@ pub mod didtoolbox;
 pub mod utils;
 pub mod vc_data_integrity;
 pub mod ed25519;
+pub mod did_tdw;
 
 use crate::didtoolbox::*;
 use crate::ed25519::*;
+use crate::did_tdw::*;
 
 uniffi::include_scaffolding!("didtoolbox");
 
@@ -15,6 +17,7 @@ mod test {
 
     use super::didtoolbox::*;
     use super::ed25519::*;
+    use super::did_tdw::*;
     use rstest::rstest;
     use serde_json::json;
 

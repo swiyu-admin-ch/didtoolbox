@@ -11,11 +11,38 @@ interface TrustDidWebProcessor {
     string deactivate(string did_tdw, [ByRef] Ed25519KeyPair key_pair);
 };
 
+interface TrustDidWeb {
+    [Name=create]
+    constructor(string url, [ByRef] Ed25519KeyPair key_pair);
+    [Name=read]
+    constructor(string did_tdw);
+    [Name=update]
+    constructor(string did_tdw, string did_log, string did_doc, [ByRef] Ed25519KeyPair key_pair);
+    [Name=deactivate]
+    constructor(string did_tdw, string did_log, [ByRef] Ed25519KeyPair key_pair);
+    string get_did();
+    string get_did_log();
+    string get_did_doc();
+};
+
+interface Ed25519Signature {
+    [Name=from_multibase]
+    constructor([ByRef] string multibase);
+    string to_multibase();  
+};
+
+interface Ed25519SigningKey {
+    [Name=from_multibase]
+    constructor([ByRef] string multibase);
+    string to_multibase();
+};
+
 interface Ed25519KeyPair {
     [Name=generate]
     constructor();
     [Name=from]
     constructor([ByRef] string signing_key_multibase);
+    Ed25519Signature sign(string message);
 };
 
 interface DidDocumentState {
