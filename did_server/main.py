@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, Response, status, File
 from fastapi.security import APIKeyHeader
 from typing import Annotated
-from bindings.python import trustdidweb as tdw
+from bindings.python import didtoolbox as toolbox
 import uvicorn
 
 app = FastAPI(title="DID Server")
@@ -18,7 +18,7 @@ async def save_did_lines(response: Response, scid: str,  file: Annotated[bytes, 
         response.status_code = status.HTTP_201_CREATED
         
         # Validate entire did.jsonl file before storing it
-        doc_state = tdw.DidDocumentState._from(file.decode())
+        doc_state = toolbox.DidDocumentState._from(file.decode())
         did_doc = doc_state.validate()
         
         registry[scid] = file

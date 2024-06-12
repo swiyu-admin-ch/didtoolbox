@@ -1,3 +1,3 @@
 fn main() {
-    uniffi::generate_scaffolding("src/trustdidweb.udl").unwrap();
+    uniffi::generate_scaffolding("src/didtoolbox.udl").unwrap();
 }

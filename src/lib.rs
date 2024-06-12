@@ -1,19 +1,19 @@
-pub mod trustdidweb;
+pub mod didtoolbox;
 pub mod utils;
 pub mod vc_data_integrity;
 pub mod ed25519;
 
-use crate::trustdidweb::*;
+use crate::didtoolbox::*;
 use crate::ed25519::*;
 
-uniffi::include_scaffolding!("trustdidweb");
+uniffi::include_scaffolding!("didtoolbox");
 
 #[cfg(test)]
 mod test {
     use core::panic;
     use std::vec;
 
-    use super::trustdidweb::*;
+    use super::didtoolbox::*;
     use super::ed25519::*;
     use rstest::rstest;
     use serde_json::json;
