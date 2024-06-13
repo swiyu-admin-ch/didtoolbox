@@ -118,7 +118,7 @@ impl DidLogEntry {
         self.did_doc.verification_method.iter()
             .filter(|entry| 
                 self.did_doc.controller.iter()
-                .any(|controller| entry.id.starts_with(controller)))
+                .any(|controller| entry.id.starts_with(controller) && entry.verification_type == utils::EDDSA_VERIFICATION_KEY_TYPE))
             .map(|entry| (
                 entry.id.split("#").collect::<Vec<&str>>().first().unwrap().to_string(),
                 (entry.id.clone(), Ed25519VerifyingKey::from_multibase(entry.public_key_multibase.as_ref().unwrap()))
@@ -147,6 +147,10 @@ impl DidLogEntry {
         // Make sure the the verification method is part of the authentication section
         if !self.did_doc.authentication.iter().any(|authentication_method| authentication_method.id == verification_method.id) {
             panic!("Invalid integrity proof for log with id {}. The verification method used for the integrity proof is not part of the authentication section", self.version_id.unwrap())
+        }
+
+        if verification_method.verification_type != utils::EDDSA_VERIFICATION_KEY_TYPE {
+            panic!("Invalid verification method. Only eddsa verification keys are supported")
         }
 
         Ed25519VerifyingKey::from_multibase(verification_method.public_key_multibase.as_ref().unwrap())
@@ -577,7 +581,7 @@ impl TrustDidWeb {
         // Create verification method suffix so that it can be used as part of verification method id property
         let did_tdw = format!("did:tdw:{}:{}", domain, utils::SCID_PLACEHOLDER);
         let key_def = json!({
-            "type": "Multikey",
+            "type": utils::EDDSA_VERIFICATION_KEY_TYPE,
             "publicKeyMultibase": key_pair.verifying_key.to_multibase(),
         });
         let key_def_jcs = jcs_from_str(&key_def.to_string()).unwrap();
@@ -590,7 +594,7 @@ impl TrustDidWeb {
         let verification_method = VerificationMethod {
             id: format!("{}#{}", &did_tdw, verification_method_suffix),
             controller: did_tdw.clone(),
-            verification_type: String::from("Multikey"),
+            verification_type: String::from(utils::EDDSA_VERIFICATION_KEY_TYPE),
             public_key_multibase: Some(key_pair.verifying_key.to_multibase()),
             public_key_jwk: None
         };

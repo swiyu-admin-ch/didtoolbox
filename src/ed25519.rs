@@ -66,18 +66,29 @@ pub struct Ed25519VerifyingKey {
 }
 impl Base64MultiBaseConverter for Ed25519VerifyingKey {
     fn to_multibase(&self) -> String {
-        let public_key_bytes = self.verifying_key.to_bytes();
-        utils::convert_to_multibase_base64(&public_key_bytes)
+        let public_key_without_prefix = self.verifying_key.to_bytes();
+        let mut public_key_with_prefix: [u8; PUBLIC_KEY_LENGTH + 2] = [0; PUBLIC_KEY_LENGTH + 2];
+        public_key_with_prefix[0] = 0xed;
+        public_key_with_prefix[1] = 0x01;
+        public_key_with_prefix[2..].copy_from_slice(&public_key_without_prefix);
+        utils::convert_to_multibase_base64(&public_key_with_prefix)
     }
 
     fn from_multibase(multibase: &str) -> Self {
-        let mut public_key_bytes: [u8; PUBLIC_KEY_LENGTH] = [0; PUBLIC_KEY_LENGTH];
-        utils::convert_from_multibase_base64(multibase, &mut public_key_bytes);
-        match VerifyingKey::from_bytes(&mut public_key_bytes) {
+        // According to https://www.w3.org/community/reports/credentials/CG-FINAL-di-eddsa-2020-20220724/#ed25519verificationkey2020
+        // the public key has a **two** byte prefix of 0xed01, which is not part of the public key instance itself
+        // therefore "+2" is added to the length of the multibase public key
+        let mut public_key_with_prefix: [u8; PUBLIC_KEY_LENGTH + 2] = [0; PUBLIC_KEY_LENGTH + 2];
+        utils::convert_from_multibase_base64(multibase, &mut public_key_with_prefix);
+        
+        let mut public_key: [u8; PUBLIC_KEY_LENGTH] = [0; PUBLIC_KEY_LENGTH];
+        public_key.copy_from_slice(&public_key_with_prefix[2..]);
+
+        match VerifyingKey::from_bytes(&public_key) {
             Ok(verifying_key) => Ed25519VerifyingKey {
                 verifying_key: verifying_key,
             },
-            Err(_) => panic!("Invalid ed25519 public key"),
+            Err(_) => panic!("{} is an invalid ed25519 public key", multibase),
         }
     }
 }

@@ -51,7 +51,8 @@ mod test {
     #[rstest]
     fn test_read_did_tdw() {
         let processor = TrustDidWebProcessor::new_with_api_key(String::from("secret"));
-        let key_pair = Ed25519KeyPair::from("uw9qGFWOhK0pbPTAbdc815ZLwZfubmgceTWBOY8V1vr0");
+        let key_pair = Ed25519KeyPair::from("uQm7HM3hPG8ar7HqoXAC7RW_fy9Ah5TnLHwyIid-lh4I");
+        print!("|> {} <|",key_pair.get_signing_key().to_multibase());
         let did = processor.create("https://localhost:8000".to_string(), &key_pair);
         
         // Read original did document
@@ -60,7 +61,7 @@ mod test {
         match did_doc_v1["id"] {
             serde_json::Value::String(ref s) => {
                 println!("{}", s);
-                assert!(s.eq("did:tdw:localhost%3A8000:gjrwgnlemuytanzwgzrwgmldmfsdgyrshbrdozbqmu2ggndghbswgmrxg43tombugvtdsztegaywmmtbgfrdeyrrg5qwgobtmrstgni="))
+                assert!(s.eq("did:tdw:localhost%3A8000:gu4geodcmvsgmzbqge3wimrugeygeolcgzsgenlggbtdczdcge3dcnzwgi3tonzsg5sweyjwmrswintbguytimbsmm3tcmzsmiywimy="))
             },
             _ => panic!("Invalid did doc"),
         }
