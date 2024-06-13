@@ -370,7 +370,7 @@ impl DidDocumentState {
             if log_entry.entry_hash.len() == 0 {
                 panic!("For the initial log entry the SCID/previous hash has to be provided")
             }
-            log_entry.check_if_verification_method_match_public_key(did_tdw, key_pair.get_verifying_key());
+            log_entry.check_if_verification_method_match_public_key(did_tdw, key_pair.get_verifying_key().as_ref());
             verification_method = log_entry.get_controller_verifying_key().get(did_tdw).unwrap().0.clone();
         } else {
             // Subsequent entry (Update)
@@ -390,7 +390,7 @@ impl DidDocumentState {
             index = previous_entry.version_id.unwrap() + 1;
             // Get last version hash
             previous_hash = previous_entry.entry_hash.clone();
-            previous_entry.check_if_verification_method_match_public_key(did_tdw, key_pair.get_verifying_key());
+            previous_entry.check_if_verification_method_match_public_key(did_tdw, key_pair.get_verifying_key().as_ref());
             verification_method = log_entry.get_controller_verifying_key().get(did_tdw).unwrap().0.clone();
         }
 

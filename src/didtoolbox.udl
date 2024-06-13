@@ -37,12 +37,20 @@ interface Ed25519SigningKey {
     string to_multibase();
 };
 
+interface Ed25519VerifyingKey {
+    [Name=from_multibase]
+    constructor([ByRef] string multibase);
+    string to_multibase();
+};
+
 interface Ed25519KeyPair {
     [Name=generate]
     constructor();
     [Name=from]
     constructor([ByRef] string signing_key_multibase);
     Ed25519Signature sign(string message);
+    Ed25519SigningKey get_signing_key();
+    Ed25519VerifyingKey get_verifying_key();
 };
 
 interface DidDocumentState {
