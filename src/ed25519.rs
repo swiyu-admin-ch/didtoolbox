@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ed25519_dalek::{SigningKey, Signature, Signer, Verifier, VerifyingKey, SECRET_KEY_LENGTH, PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
 use rand::rngs::OsRng;
 use crate::utils;
@@ -5,7 +7,7 @@ pub trait Base64MultiBaseConverter {
     fn to_multibase(&self) -> String;
     fn from_multibase(multibase: &str) -> Self;
 }
-
+#[derive(Clone)]
 pub struct Ed25519Signature {
     pub signature: Signature,
 }
@@ -49,11 +51,11 @@ impl Ed25519SigningKey {
         }
     }
 
-    pub fn sign(&self, message: String) -> Ed25519Signature {
+    pub fn sign(&self, message: String) -> Arc<Ed25519Signature> {
         let signature = self.signing_key.sign(message.as_bytes());
         Ed25519Signature {
             signature,
-        }
+        }.into()
     }
 }
 
@@ -118,7 +120,7 @@ impl Ed25519KeyPair {
         &self.verifying_key
     }
 
-    pub fn sign(&self, message: String) -> Ed25519Signature {
+    pub fn sign(&self, message: String) -> Arc<Ed25519Signature> {
         self.signing_key.sign(message)
     }
 

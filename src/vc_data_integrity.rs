@@ -1,7 +1,15 @@
 
-use crate::{ed25519::Ed25519VerifyingKey, utils};
+use crate::ed25519::*;
+use crate::utils::{DATE_TIME_FORMAT};
+use crate::didtoolbox::*;
+use serde_jcs::{to_vec as jcs_from_str, to_string as jcs_to_string};
 use chrono::{serde::ts_seconds, DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sha2::{Sha256, Digest};
+use serde_json::json;
+use serde_json::Value::String as JsonString;
+use hex;
+use hex::ToHex;
 
 #[derive(Clone)]
 pub enum CryptoSuiteType {
@@ -76,7 +84,7 @@ impl DataIntegrityProof {
                 _ => String::from(""),
             },
             created: match value["created"] {
-                serde_json::Value::String(ref s) => DateTime::parse_from_str(s, utils::DATE_TIME_FORMAT).unwrap().to_utc(),
+                serde_json::Value::String(ref s) => DateTime::parse_from_str(s, DATE_TIME_FORMAT).unwrap().to_utc(),
                 _ => Utc::now(),
             },
             verification_method: match value["verificationMethod"] {
@@ -100,7 +108,7 @@ impl DataIntegrityProof {
 
     pub fn to_value(&self) -> serde_json::Value {
         let mut value = serde_json::to_value(&self).unwrap();
-        value["created"] = serde_json::Value::String(self.created.format(utils::DATE_TIME_FORMAT).to_string());
+        value["created"] = serde_json::Value::String(self.created.format(DATE_TIME_FORMAT).to_string());
         value
     }
 }
@@ -124,4 +132,93 @@ pub trait CryptoSuite {
 pub trait VCDataIntegrity {
     fn add_proof(&self, unsecured_document: &serde_json::Value, options: &CryptoSuiteOptions) -> serde_json::Value;
     fn verify_proof(&self, secured_document: &serde_json::Value) -> bool;
+}
+
+pub struct EddsaCryptosuite {
+    pub verifying_key: Option<Ed25519VerifyingKey>,
+    pub signing_key: Option<Ed25519SigningKey>,
+}
+
+fn generate_jcs_hash_from_value(value: &serde_json::Value) -> String {
+    let json_doc = value.to_string();
+    let jcs_doc = jcs_from_str(&json_doc).unwrap();
+    let utf8_doc: String = String::from_utf8(jcs_doc).unwrap();
+    let mut doc_hasher = Sha256::new();
+    doc_hasher.update(utf8_doc);
+    doc_hasher.finalize().encode_hex()
+}
+
+
+impl VCDataIntegrity for EddsaCryptosuite {
+    fn add_proof(&self, unsecured_document: &serde_json::Value, options: &CryptoSuiteOptions) -> serde_json::Value {
+        if !matches!(options.crypto_suite, CryptoSuiteType::EddsaJcs2022) {
+            panic!("Invalid crypto suite. Only eddsa-jcs-2022 is supported");
+        }
+        if options.proof_type != "DataIntegrityProof" {
+            panic!("Invalid proof type. Only DataIntegrityProof is supported");
+        }
+
+        // 3.1.3 Transformation of doc and options
+        let mut proof = json!({
+            "type": options.proof_type,
+            "cryptoSuite": options.crypto_suite.to_string(),
+            "created": Utc::now().format(DATE_TIME_FORMAT).to_string(),
+            "verificationMethod": options.verification_method,
+            "proofPurpose": options.proof_purpose,
+            "challenge": options.challenge.as_ref().unwrap(),
+        });
+        // 3.1.4 Hash didDoc and config
+        let proof_hash = generate_jcs_hash_from_value(&proof);
+        let doc_hash = generate_jcs_hash_from_value(unsecured_document);
+        let hash_data = proof_hash + &doc_hash;
+
+        // 3.1.6 Proof serialization
+        let proof_signature = match &self.signing_key {
+            Some(signing_key) => {
+                signing_key.sign(hash_data)
+            },
+            None => panic!("Invalid eddsa cryptosuite. Signing key is missing but required for proof creation"),
+        };
+        let proof_signature_multibase = proof_signature.to_multibase();
+        proof["proofValue"] = JsonString(proof_signature_multibase);
+
+        // Create secured document
+        let mut secured_document = unsecured_document.clone();
+        secured_document["proof"] = proof;
+        secured_document
+
+    }
+
+    fn verify_proof(&self, secured_document: &serde_json::Value) -> bool {
+        let original_proof = secured_document["proof"].clone();
+        let mut proof = json!({
+            "type": original_proof["type"],
+            "cryptoSuite": original_proof["cryptoSuite"],
+            "created": original_proof["created"],
+            "verificationMethod": original_proof["verificationMethod"],
+            "proofPurpose": original_proof["proofPurpose"],
+            "challenge": original_proof["challenge"],
+        });
+
+        let doc: DidDoc = serde_json::from_value(secured_document.clone()).unwrap();
+        let proof_hash = generate_jcs_hash_from_value(&proof);
+        let doc_hash = generate_jcs_hash_from_value(&serde_json::to_value(&doc).unwrap());
+        let hash_data = proof_hash + &doc_hash;
+
+        let signature = match secured_document["proof"]["proofValue"] {
+            JsonString(ref proof_value) => {
+                Ed25519Signature::from_multibase(proof_value)
+            },
+            _ => panic!("Invalid proof value. Expected string"),
+        };
+        match self.verifying_key {
+            Some(ref verifying_key) => {
+                match verifying_key.verifying_key.verify_strict(hash_data.as_bytes(), &signature.signature) {
+                    Ok(_) => true,
+                    Err(_) => false,
+                }
+            },
+            None => panic!("Invalid eddsa cryptosuite. Verifying key is missing but required for proof verification"),
+        }
+    }
 }
