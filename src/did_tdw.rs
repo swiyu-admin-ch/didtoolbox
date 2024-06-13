@@ -721,7 +721,7 @@ impl DidMethodOperation for TrustDidWebProcessor {
     fn update(&self, did_tdw: String, did_doc: String, key_pair: &Ed25519KeyPair) -> String {
         let url = get_url_from_tdw(&did_tdw);
         let did_log_raw = self.resolver.read(url);
-        let tdw = TrustDidWeb::update(did_log_raw, did_tdw.clone(), did_doc, key_pair);
+        let tdw = TrustDidWeb::update(did_tdw.clone(),did_log_raw, did_doc, key_pair);
         self.resolver.write(get_url_from_tdw(&did_tdw), tdw.did_log);
         tdw.did_doc
     }
