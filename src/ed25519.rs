@@ -26,6 +26,7 @@ impl Base64MultiBaseConverter for Ed25519Signature {
     }
 }
 
+#[derive(Clone)]
 pub struct Ed25519SigningKey {
     signing_key: SigningKey,
 }
@@ -59,6 +60,7 @@ impl Ed25519SigningKey {
     }
 }
 
+#[derive(Clone)]
 pub struct Ed25519VerifyingKey {
     pub verifying_key: VerifyingKey,
 }
@@ -87,6 +89,7 @@ impl Ed25519VerifyingKey {
     }
 }
 
+#[derive(Clone)]
 pub struct Ed25519KeyPair {
     pub verifying_key: Ed25519VerifyingKey,
     pub signing_key: Ed25519SigningKey,
@@ -112,12 +115,12 @@ impl Ed25519KeyPair {
         }
     }
 
-    pub fn get_signing_key(&self) -> &Ed25519SigningKey {
-        &self.signing_key
+    pub fn get_signing_key(&self) -> Arc<Ed25519SigningKey> {
+        self.signing_key.clone().into()
     }
 
-    pub fn get_verifying_key(&self) -> &Ed25519VerifyingKey {
-        &self.verifying_key
+    pub fn get_verifying_key(&self) -> Arc<Ed25519VerifyingKey> {
+        self.verifying_key.clone().into()
     }
 
     pub fn sign(&self, message: String) -> Arc<Ed25519Signature> {
