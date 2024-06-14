@@ -17,5 +17,8 @@ pub fn convert_from_multibase_base64(multibase: &str, result: &mut [u8]) -> () {
         panic!("Invalid multibase format");
     }
     let raw = multibase.chars().skip(1).collect::<String>();
-    URL_SAFE_NO_PAD.decode_slice(raw, result).unwrap();
+    match URL_SAFE_NO_PAD.decode_slice(raw, result) {
+        Ok(_) => (),
+        Err(_) => panic!("Entered base 64 content {} is invalid", multibase),
+    }
 }
