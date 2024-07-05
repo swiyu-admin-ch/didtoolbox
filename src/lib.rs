@@ -43,7 +43,7 @@ mod test {
         let processor = TrustDidWebProcessor::new_with_api_key(String::from("secret"));
         let key_pair = Ed25519KeyPair::generate();
         print!("{}",key_pair.get_signing_key().to_multibase());
-        let did = processor.create("https://localhost:8000".to_string(), &key_pair);
+        let did = processor.create("https://localhost:8000".to_string(), &key_pair, Some(false));
         print!("{}", did);
         assert!(did.len() > 0);
     }
@@ -53,10 +53,10 @@ mod test {
         let processor = TrustDidWebProcessor::new_with_api_key(String::from("secret"));
         let key_pair = Ed25519KeyPair::from("uQm7HM3hPG8ar7HqoXAC7RW_fy9Ah5TnLHwyIid-lh4I");
         print!("|> {} <|",key_pair.get_signing_key().to_multibase());
-        let did = processor.create("https://localhost:8000".to_string(), &key_pair);
+        let did = processor.create("https://localhost:8000".to_string(), &key_pair, Some(false));
         
         // Read original did document
-        let did_doc_str_v1 = processor.read(String::from(&did));
+        let did_doc_str_v1 = processor.read(String::from(&did), Some(false));
         let did_doc_v1: serde_json::Value = serde_json::from_str(&did_doc_str_v1).unwrap();
         match did_doc_v1["id"] {
             serde_json::Value::String(ref s) => {
@@ -72,10 +72,10 @@ mod test {
         // Register did tdw
         let processor = TrustDidWebProcessor::new_with_api_key(String::from("secret"));
         let key_pair = Ed25519KeyPair::generate();
-        let did = processor.create("https://localhost:8000".to_string(), &key_pair);
+        let did = processor.create("https://localhost:8000".to_string(), &key_pair, Some(false));
         
         // Read original did doc 
-        let did_doc_str_v1 = processor.read(String::from(&did));
+        let did_doc_str_v1 = processor.read(String::from(&did), Some(false));
         let did_doc_v1: serde_json::Value = serde_json::from_str(&did_doc_str_v1).unwrap();
 
         // Update did document by adding a new verification method
@@ -89,10 +89,10 @@ mod test {
         };
         did_doc_v2["assertionMethod"] = json!(vec![serde_json::to_value(&verification_method).unwrap()]);
         let did_doc_v2 = did_doc_v2.to_string();
-        processor.update(did.clone(), did_doc_v2, &key_pair);
+        processor.update(did.clone(), did_doc_v2, &key_pair, Some(false));
 
         // Read updated did doc with new property
-        let did_doc_str_v3 = processor.read(String::from(&did));
+        let did_doc_str_v3 = processor.read(String::from(&did), Some(false));
         let did_doc_v3: serde_json::Value = serde_json::from_str(&did_doc_str_v3).unwrap();
         match did_doc_v3["assertionMethod"][0]["id"] {
             serde_json::Value::String(ref s) => assert!(s.eq("did:jwk:123#type1")),
@@ -106,10 +106,10 @@ mod test {
         // Register did tdw
         let processor = TrustDidWebProcessor::new_with_api_key(String::from("secret"));
         let key_pair = Ed25519KeyPair::generate();
-        let did = processor.create("https://localhost:8000".to_string(), &key_pair);
+        let did = processor.create("https://localhost:8000".to_string(), &key_pair, Some(false));
         
         // Read original did doc 
-        let did_doc_str_v1 = processor.read(String::from(&did));
+        let did_doc_str_v1 = processor.read(String::from(&did), Some(false));
         let did_doc_v1: serde_json::Value = serde_json::from_str(&did_doc_str_v1).unwrap();
 
         // Update did document by adding a new verification method
@@ -124,7 +124,7 @@ mod test {
         did_doc_v2["assertionMethod"] = json!(vec![serde_json::to_value(&verification_method).unwrap()]);
         let did_doc_v2 = did_doc_v2.to_string();
         let unauthorized_key_pair = Ed25519KeyPair::generate();
-        processor.update(did.clone(), did_doc_v2, &unauthorized_key_pair);
+        processor.update(did.clone(), did_doc_v2, &unauthorized_key_pair, Some(false));
     }
 
     #[rstest]
@@ -133,13 +133,13 @@ mod test {
         // Register did tdw
         let processor = TrustDidWebProcessor::new_with_api_key(String::from("secret"));
         let key_pair = Ed25519KeyPair::generate();
-        let did = processor.create("https://localhost:8000".to_string(), &key_pair);
+        let did = processor.create("https://localhost:8000".to_string(), &key_pair, Some(false));
 
         // Deactivate did
-        processor.deactivate(did.clone(), &key_pair);
+        processor.deactivate(did.clone(), &key_pair, Some(false));
 
         // Read original did doc 
-        let did_doc_str_v1 = processor.read(String::from(&did));
+        let did_doc_str_v1 = processor.read(String::from(&did), Some(false));
         let did_doc_v1: serde_json::Value = serde_json::from_str(&did_doc_str_v1).unwrap();
 
         // Update did document after it has been deactivated
@@ -154,6 +154,6 @@ mod test {
         did_doc_v2["assertionMethod"] = json!(vec![serde_json::to_value(&verification_method).unwrap()]);
 
         let did_doc_v2 = did_doc_v2.to_string();
-        processor.update(did.clone(), did_doc_v2, &key_pair);
+        processor.update(did.clone(), did_doc_v2, &key_pair, Some(false));
     }
 }
