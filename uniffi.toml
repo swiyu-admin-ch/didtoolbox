@@ -1,0 +1,4 @@
+[bindings.kotlin]
+android = true
+android_cleaner = true
+package_name = "ch.admin.eid.didtoolbox"
