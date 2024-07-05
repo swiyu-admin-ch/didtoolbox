@@ -458,10 +458,10 @@ pub trait DidMethodOperationWrapper {
 
 /// Basic user facing did method operations to handle a did
 pub trait DidMethodOperation {
-    fn create(&self, url: String, key_pair: &Ed25519KeyPair) -> String;
-    fn read(&self, did_tdw: String) -> String;
-    fn update(&self, did_tdw: String, did_doc: String, key_pair: &Ed25519KeyPair) -> String;
-    fn deactivate(&self, did_tdw: String, key_pair: &Ed25519KeyPair) -> String;
+    fn create(&self, url: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> String;
+    fn read(&self, did_tdw: String, allow_http: Option<bool>) -> String;
+    fn update(&self, did_tdw: String, did_doc: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> String;
+    fn deactivate(&self, did_tdw: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> String;
 }
 
 pub trait UrlResolver: Send + Sync {
@@ -507,7 +507,7 @@ impl UrlResolver for HttpClientResolver {
 
 
 /// Convert did:tdw:{method specific identifier} method specific identifier into resolvable url
-fn get_url_from_tdw(did_tdw: &String) -> String {
+fn get_url_from_tdw(did_tdw: &String, allow_http: Option<bool>) -> String {
     if !did_tdw.starts_with("did:tdw:") {
         panic!("Invalid did:twd string. It has to start with did:tdw:")
     }
@@ -517,7 +517,7 @@ fn get_url_from_tdw(did_tdw: &String) -> String {
     url_escape::decode_to_string(did_tdw.replace(":", "/"), &mut decoded_url);
     let url = match String::from_utf8(decoded_url.into_bytes()) {
             Ok(url) => {
-                if url.starts_with("localhost") {
+                if url.starts_with("localhost") || allow_http.unwrap_or(false) {
                     format!("http://{}", url)
                 } else {
                     format!("https://{}", url)
@@ -533,11 +533,11 @@ fn get_url_from_tdw(did_tdw: &String) -> String {
 }
 
 /// Convert domain into did:tdw:{method specific identifier} method specific identifier
-fn get_tdw_domain_from_url(url: &String) -> String {
+fn get_tdw_domain_from_url(url: &String, allow_http: Option<bool>) -> String {
     let mut did = String::from("");
     if url.starts_with("https://") {
         did = url.replace("https://", "");
-    } else if url.starts_with("http://localhost") {
+    } else if url.starts_with("http://localhost") || allow_http.unwrap_or(false) {
         did = url.replace("http://", "");
     } else {
         panic!("Invalid url. Only https is supported")
@@ -574,9 +574,9 @@ impl TrustDidWeb {
         self.did_doc.clone()
     }
 
-    pub fn create(url: String, key_pair: &Ed25519KeyPair) -> Self {
+    pub fn create(url: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Self {
         // Check if domain is valid
-        let domain = get_tdw_domain_from_url(&url);
+        let domain = get_tdw_domain_from_url(&url, allow_http);
 
         // Create verification method suffix so that it can be used as part of verification method id property
         let did_tdw = format!("did:tdw:{}:{}", domain, utils::SCID_PLACEHOLDER);
@@ -632,12 +632,12 @@ impl TrustDidWeb {
         Self {
             did: genesis_did_doc.id,
             did_log: did_log.to_string(),
-            did_doc: genesis_str,
+            did_doc: genesis_str
         }
     }
 
-    pub fn read(did_tdw: String) -> Self {
-        let url = get_url_from_tdw(&did_tdw);
+    pub fn read(did_tdw: String, allow_http: Option<bool>) -> Self {
+        let url = get_url_from_tdw(&did_tdw, allow_http);
         let resolver = HttpClientResolver {
             api_key: Option::None,
         };
@@ -648,7 +648,7 @@ impl TrustDidWeb {
         Self {
             did: did_doc.id,
             did_log: did_doc_state.to_string(),
-            did_doc: did_doc_str,
+            did_doc: did_doc_str
         }
     }
 
@@ -676,7 +676,7 @@ impl TrustDidWeb {
         Self {
             did: update_did_doc.id,
             did_log: did_doc_state.to_string(),
-            did_doc: did_doc_str,
+            did_doc: did_doc_str
         }
     }
 
@@ -697,7 +697,7 @@ impl TrustDidWeb {
         Self {
             did: current_did_doc.id,
             did_log: did_doc_state.to_string(),
-            did_doc: did_doc_str,
+            did_doc: did_doc_str
         }
     }
 }
@@ -708,33 +708,33 @@ pub struct TrustDidWebProcessor {
 
 impl DidMethodOperation for TrustDidWebProcessor {
 
-    fn create(&self, url: String, key_pair: &Ed25519KeyPair) -> String {
-        let tdw = TrustDidWeb::create(url, key_pair);
-        self.resolver.write(get_url_from_tdw(&tdw.did), tdw.did_log);
+    fn create(&self, url: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> String {
+        let tdw = TrustDidWeb::create(url, key_pair, allow_http);
+        self.resolver.write(get_url_from_tdw(&tdw.did, allow_http), tdw.did_log);
         tdw.did
     }
 
-    fn read(&self, did_tdw: String) -> String {
-        let url = get_url_from_tdw(&did_tdw);
+    fn read(&self, did_tdw: String, allow_http: Option<bool>) -> String {
+        let url = get_url_from_tdw(&did_tdw, allow_http);
         let did_log_raw = self.resolver.read(url);
         let did_doc_state = DidDocumentState::from(did_log_raw);
         let did_doc = did_doc_state.validate();
         serde_json::to_string(&did_doc).unwrap()
     }
 
-    fn update(&self, did_tdw: String, did_doc: String, key_pair: &Ed25519KeyPair) -> String {
-        let url = get_url_from_tdw(&did_tdw);
+    fn update(&self, did_tdw: String, did_doc: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> String {
+        let url = get_url_from_tdw(&did_tdw, allow_http);
         let did_log_raw = self.resolver.read(url);
         let tdw = TrustDidWeb::update(did_tdw.clone(),did_log_raw, did_doc, key_pair);
-        self.resolver.write(get_url_from_tdw(&did_tdw), tdw.did_log);
+        self.resolver.write(get_url_from_tdw(&did_tdw, allow_http), tdw.did_log);
         tdw.did_doc
     }
 
-    fn deactivate(&self, did_tdw: String, key_pair: &Ed25519KeyPair) -> String {
-        let url = get_url_from_tdw(&did_tdw);
+    fn deactivate(&self, did_tdw: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> String {
+        let url = get_url_from_tdw(&did_tdw, allow_http);
         let did_log_raw = self.resolver.read(url);
         let tdw = TrustDidWeb::deactivate(did_tdw.clone(), did_log_raw, key_pair);
-        self.resolver.write(get_url_from_tdw(&did_tdw), tdw.did_log);
+        self.resolver.write(get_url_from_tdw(&did_tdw, allow_http), tdw.did_log);
         tdw.did_doc
     }
 }

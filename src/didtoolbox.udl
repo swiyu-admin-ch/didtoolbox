@@ -5,17 +5,17 @@ interface TrustDidWebProcessor {
     constructor();
     [Name=new_with_api_key]
     constructor(string api_key);
-    string create(string url, [ByRef] Ed25519KeyPair key_pair);
-    string read(string did_tdw);
-    string update(string did_tdw, string did_doc, [ByRef] Ed25519KeyPair key_pair);
-    string deactivate(string did_tdw, [ByRef] Ed25519KeyPair key_pair);
+    string create(string url, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
+    string read(string did_tdw, boolean? allow_http);
+    string update(string did_tdw, string did_doc, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
+    string deactivate(string did_tdw, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
 };
 
 interface TrustDidWeb {
     [Name=create]
-    constructor(string url, [ByRef] Ed25519KeyPair key_pair);
+    constructor(string url, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
     [Name=read]
-    constructor(string did_tdw);
+    constructor(string did_tdw, boolean? allow_http);
     [Name=update]
     constructor(string did_tdw, string did_log, string did_doc, [ByRef] Ed25519KeyPair key_pair);
     [Name=deactivate]
