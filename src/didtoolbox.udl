@@ -1,4 +1,5 @@
 namespace didtoolbox {
+    DidDoc create_did_doc_from_json(string json_content);
 };
 
 interface TrustDidWebProcessor {

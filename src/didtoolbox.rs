@@ -76,3 +76,19 @@ pub struct DidDoc {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deactivated: Option<bool>,
 }
+
+impl DidDoc {
+    pub fn from_json(json_content: String) -> Self {
+        let did_doc: DidDoc = match serde_json::from_str(&json_content) {
+            Ok(did_doc) => did_doc,
+            Err(e) => {
+                panic!("Error parsing DID Document. Make sure the content is correct -> {}", e);
+            }
+        };
+        did_doc
+    }
+}
+
+pub fn create_did_doc_from_json(json_content: String) -> DidDoc {
+    DidDoc::from_json(json_content)
+}
