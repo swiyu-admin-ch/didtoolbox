@@ -30,7 +30,7 @@ mod test {
         let key_pair = Ed25519KeyPair::generate();
         let did = processor.create("https://localhost:8000".to_string(), &key_pair, Some(false));
         let did_read = TrustDidWeb::read(did.clone(), Some(true));
-        let did_doc = create_did_doc_from_json(did_read.get_did_doc());
+        let did_doc = DidDoc::from_json(&did_read.get_did_doc());
         assert_eq!(did_doc.id, did);
     }
     
