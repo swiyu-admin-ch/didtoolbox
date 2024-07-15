@@ -1,5 +1,4 @@
 namespace didtoolbox {
-    DidDoc create_did_doc_from_json(string json_content);
 };
 
 interface TrustDidWebProcessor {
@@ -74,14 +73,16 @@ dictionary VerificationMethod {
     Jwk? public_key_jwk;
 };
 
-dictionary DidDoc {
-    sequence<string> context;
-    string id;
-    sequence<VerificationMethod> verification_method;
-    sequence<VerificationMethod> authentication;
-    sequence<VerificationMethod> capability_invocation;
-    sequence<VerificationMethod> capability_delegation;
-    sequence<VerificationMethod> assertion_method;
-    sequence<string> controller;
-    boolean? deactivated;
+interface DidDoc {
+    [Name=from_json]
+    constructor([ByRef] string json_content);
+    sequence<string> get_context();
+    string get_id();
+    sequence<VerificationMethod> get_verification_method();
+    sequence<VerificationMethod> get_authentication();
+    sequence<VerificationMethod> get_capability_invocation();
+    sequence<VerificationMethod> get_capability_delegation();
+    sequence<VerificationMethod> get_assertion_method();
+    sequence<string> get_controller();
+    boolean get_deactivated();
 };

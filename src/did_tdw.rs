@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
 use chrono::serde::ts_seconds;
@@ -312,7 +313,7 @@ impl DidDocumentState {
     }
 
     /// Checks if all entries in the did log are valid (data integrity, versioning etc.)
-    pub fn validate(&self) -> DidDoc {
+    pub fn validate(&self) -> Arc<DidDoc> {
         let mut previous_entry: Option<DidLogEntry> = None;
         for entry in &self.did_log_entries {
             match previous_entry {
@@ -352,7 +353,7 @@ impl DidDocumentState {
             };
         }
         match previous_entry {
-            Some(entry) => entry.did_doc.clone(),
+            Some(entry) => entry.did_doc.clone().into(),
             None => panic!("Invalid did log. No entries found")
         }
     }
@@ -643,7 +644,8 @@ impl TrustDidWeb {
         };
         let did_log_raw = resolver.read(url);
         let did_doc_state = DidDocumentState::from(did_log_raw);
-        let did_doc = did_doc_state.validate();
+        let did_doc_arc = did_doc_state.validate();
+        let did_doc = did_doc_arc.as_ref().clone();
         let did_doc_str = serde_json::to_string(&did_doc).unwrap();
         Self {
             did: did_doc.id,
@@ -682,7 +684,7 @@ impl TrustDidWeb {
 
     pub fn deactivate(did_tdw: String, did_log: String, key_pair: &Ed25519KeyPair) -> Self {
         let mut did_doc_state = DidDocumentState::from(did_log);
-        let mut current_did_doc = did_doc_state.validate();
+        let mut current_did_doc = did_doc_state.validate().as_ref().clone();
         
         // Mark did doc as deactivated and set did log parameters accordingly
         current_did_doc.deactivated = Some(true);
@@ -719,7 +721,7 @@ impl DidMethodOperation for TrustDidWebProcessor {
         let did_log_raw = self.resolver.read(url);
         let did_doc_state = DidDocumentState::from(did_log_raw);
         let did_doc = did_doc_state.validate();
-        serde_json::to_string(&did_doc).unwrap()
+        serde_json::to_string(&did_doc.as_ref()).unwrap()
     }
 
     fn update(&self, did_tdw: String, did_doc: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> String {

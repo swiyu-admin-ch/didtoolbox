@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 /// Entry in an did log file as shown here
 /// https://bcgov.github.io/trustdidweb/#term:did-log-entry
@@ -78,8 +80,44 @@ pub struct DidDoc {
 }
 
 impl DidDoc {
-    pub fn from_json(json_content: String) -> Self {
-        let did_doc: DidDoc = match serde_json::from_str(&json_content) {
+    pub fn get_context(&self) -> Vec<String> {
+        self.context.clone()
+    }
+
+    pub fn get_id(&self) -> String {
+        self.id.clone()
+    }
+
+    pub fn get_verification_method(&self) -> Vec<VerificationMethod> {
+        self.verification_method.clone()
+    }
+
+    pub fn get_authentication(&self) -> Vec<VerificationMethod> {
+        self.authentication.clone()
+    }
+
+    pub fn get_capability_invocation(&self) -> Vec<VerificationMethod> {
+        self.capability_invocation.clone()
+    }
+
+    pub fn get_capability_delegation(&self) -> Vec<VerificationMethod> {
+        self.capability_delegation.clone()
+    }
+
+    pub fn get_assertion_method(&self) -> Vec<VerificationMethod> {
+        self.assertion_method.clone()
+    }
+
+    pub fn get_controller(&self) -> Vec<String> {
+        self.controller.clone()
+    }
+
+    pub fn get_deactivated(&self) -> bool {
+        self.deactivated.unwrap_or(false)
+    }
+
+    pub fn from_json(json_content: &String) -> Self {
+        let did_doc: DidDoc = match serde_json::from_str(json_content) {
             Ok(did_doc) => did_doc,
             Err(e) => {
                 panic!("Error parsing DID Document. Make sure the content is correct -> {}", e);
@@ -87,8 +125,4 @@ impl DidDoc {
         };
         did_doc
     }
-}
-
-pub fn create_did_doc_from_json(json_content: String) -> DidDoc {
-    DidDoc::from_json(json_content)
 }
