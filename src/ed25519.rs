@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 use std::sync::Arc;
 
 use ed25519_dalek::{SigningKey, Signature, Signer, Verifier, VerifyingKey, SECRET_KEY_LENGTH, PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};

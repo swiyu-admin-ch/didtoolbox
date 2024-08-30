@@ -1,4 +1,4 @@
-
+// SPDX-License-Identifier: MIT
 use crate::ed25519::*;
 use crate::utils::{DATE_TIME_FORMAT};
 use crate::didtoolbox::*;

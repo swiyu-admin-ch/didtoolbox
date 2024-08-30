@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 pub mod didtoolbox;
 pub mod utils;
 pub mod vc_data_integrity;

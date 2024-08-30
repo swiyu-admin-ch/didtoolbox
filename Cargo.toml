@@ -2,6 +2,16 @@
 name = "didtoolbox"
 version = "0.0.1"
 edition = "2021"
+license = "MIT"
+description = "Toolbox containtin did:tdw"
+authors = ["Frithjof Hoppe"]
+homepage = "https://github.com/e-id-admin"
+readme = "README.md"
+include = [
+    "Cargo.toml",
+    "README.md",
+    "src/**/*",
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
