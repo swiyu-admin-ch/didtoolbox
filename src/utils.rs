@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 
 pub const DID_CONTEXT: &str = "https://www.w3.org/ns/did/v1";
