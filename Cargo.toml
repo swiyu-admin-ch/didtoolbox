@@ -36,6 +36,10 @@ url-escape = "0.1.1"
 [build-dependencies]
 uniffi = { version = "0.26.1", features = ["build"] }
 
+[lib]
+crate-type = ["lib","cdylib"]
+name = "didtoolbox"
+
 [[bin]]
 name = "uniffi-bindgen"
 path = "uniffi-bindgen.rs"
