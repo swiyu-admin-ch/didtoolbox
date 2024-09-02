@@ -37,7 +37,7 @@ url-escape = "0.1.1"
 uniffi = { version = "0.26.1", features = ["build"] }
 
 [lib]
-crate-type = ["lib","cdylib"]
+crate-type = ["lib","cdylib","staticlib"]
 name = "didtoolbox"
 
 [[bin]]
