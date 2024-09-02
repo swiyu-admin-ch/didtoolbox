@@ -212,6 +212,9 @@ pub struct DidMethodParameters {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub ttl: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub portable: Option<bool>,
 }
 
 impl DidMethodParameters {
@@ -226,6 +229,7 @@ impl DidMethodParameters {
             moved: Option::None,
             deactivated: Option::None,
             ttl: Option::None,
+            portable: Option::Some(false),
         }
     }
 
@@ -240,6 +244,7 @@ impl DidMethodParameters {
             moved: Option::None,
             deactivated: Option::None,
             ttl: Option::None,
+            portable: Option::None
         }
     }
 
@@ -254,6 +259,7 @@ impl DidMethodParameters {
             moved: Option::None,
             deactivated: Option::Some(true),
             ttl: Option::None,
+            portable: Option::None
         }
     }
 }
@@ -382,6 +388,13 @@ impl DidDocumentState {
             // Subsequent entry (Update)
             let previous_entry = self.did_log_entries.last().unwrap();
 
+            // Make sure portability cant be set afterward to true
+            if let Some(portable) = log_entry.parameters.portable {
+                if portable {
+                    panic!("Portability can only be set in genesis entry to true")
+                }
+            }
+
             // Make sure only activated did docs can be updated
             match previous_entry.did_doc.deactivated{
                 Some(deactivated) => {
@@ -509,14 +522,15 @@ impl UrlResolver for HttpClientResolver {
 
 
 /// Convert did:tdw:{method specific identifier} method specific identifier into resolvable url
-fn get_url_from_tdw(did_tdw: &String, allow_http: Option<bool>) -> String {
+pub fn get_url_from_tdw(did_tdw: &String, allow_http: Option<bool>) -> String {
     if !did_tdw.starts_with("did:tdw:") {
         panic!("Invalid did:twd string. It has to start with did:tdw:")
     }
-    let did_tdw = did_tdw.replace("did:tdw:","");
+    let did_tdw: String = did_tdw.replace("did:tdw:","");
+    let (scid,did_tdw_reduced) = did_tdw.split_once(":").unwrap();
 
     let mut decoded_url = String::from("");
-    url_escape::decode_to_string(did_tdw.replace(":", "/"), &mut decoded_url);
+    url_escape::decode_to_string(did_tdw_reduced.replace(":", "/"), &mut decoded_url);
     let url = match String::from_utf8(decoded_url.into_bytes()) {
             Ok(url) => {
                 if url.starts_with("localhost") || allow_http.unwrap_or(false) {
@@ -528,14 +542,16 @@ fn get_url_from_tdw(did_tdw: &String, allow_http: Option<bool>) -> String {
             Err(_) => panic!("Couldn't convert did_tdw url to utf8 string"),
     };
     let has_path = regex::Regex::new(r"([a-z]|[0-9])\/([a-z]|[0-9])").unwrap();
-    match has_path.captures(url.as_str()) {
-        Some(_) => format!("{}/did.jsonl", url),
-        None => format!("{}/.well-know/did.jsonl", url),
+    let has_port = regex::Regex::new(r"\:[0-9]+").unwrap();
+    if has_path.captures(url.as_str()).is_some() || has_port.captures(url.as_str()).is_some() {
+        format!("{}/did.jsonl", url)
+    } else{
+        format!("{}/.well-known/did.jsonl", url)
     }
 }
 
 /// Convert domain into did:tdw:{method specific identifier} method specific identifier
-fn get_tdw_domain_from_url(url: &String, allow_http: Option<bool>) -> String {
+pub fn get_tdw_domain_from_url(url: &String, allow_http: Option<bool>) -> String {
     let mut did = String::from("");
     if url.starts_with("https://") {
         did = url.replace("https://", "");
@@ -581,7 +597,7 @@ impl TrustDidWeb {
         let domain = get_tdw_domain_from_url(&url, allow_http);
 
         // Create verification method suffix so that it can be used as part of verification method id property
-        let did_tdw = format!("did:tdw:{}:{}", domain, utils::SCID_PLACEHOLDER);
+        let did_tdw = format!("did:tdw:{}:{}", utils::SCID_PLACEHOLDER, domain);
         let key_def = json!({
             "type": utils::EDDSA_VERIFICATION_KEY_TYPE,
             "publicKeyMultibase": key_pair.verifying_key.to_multibase(),
@@ -609,7 +625,7 @@ impl TrustDidWeb {
             capability_invocation: vec![],
             capability_delegation: vec![],
             assertion_method: vec![],
-            controller: vec![format!("did:tdw:{}:{}", domain, utils::SCID_PLACEHOLDER)],
+            controller: vec![format!("did:tdw:{}:{}", utils::SCID_PLACEHOLDER, domain)],
             deactivated: None,
         };
 
@@ -671,6 +687,7 @@ impl TrustDidWeb {
         let current_entry = did_doc_state.current();
         let update_entry = DidLogEntry::of(
             current_entry.entry_hash.clone(),
+            // TODO make parameters configurable
             DidMethodParameters::empty(),
             update_did_doc.clone()
         );
