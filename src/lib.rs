@@ -8,6 +8,7 @@ pub mod did_tdw;
 use crate::didtoolbox::*;
 use crate::ed25519::*;
 use crate::did_tdw::*;
+use rand::{Rng}; // 0.8
 
 uniffi::include_scaffolding!("didtoolbox");
 
@@ -15,21 +16,56 @@ uniffi::include_scaffolding!("didtoolbox");
 mod test {
     use core::panic;
     use std::vec;
-
+    use rand::distributions::Alphanumeric;
+    use rand::Rng;
     use super::didtoolbox::*;
     use super::ed25519::*;
     use super::did_tdw::*;
-    use rstest::rstest;
+    use rstest::{fixture, rstest};
     use serde_json::json;
 
-    /// TODO
-    /// - Decoding of base 32 fails from time to time due to padding
+    // INFO: To run the test you need to start the did_server located in the folder with the same name
+
+    #[fixture]
+    fn unique_base_url() -> String {
+        let random_thing: String = rand::thread_rng()
+            .sample_iter(Alphanumeric)
+            .take(7)
+            .map(char::from)
+            .collect();
+        format!("https://localhost:8000/{random_thing}")
+    }
 
     #[rstest]
-    fn test_did_wrapping() {
+    #[case("did:tdw:myScid:localhost%3A8000:123:456", "http://localhost:8000/123/456/did.jsonl")]
+    #[case("did:tdw:myScid:localhost%3A8000", "http://localhost:8000/did.jsonl")]
+    #[case("did:tdw:myScid:localhost", "http://localhost/.well-known/did.jsonl")]
+    #[case("did:tdw:myScid:admin.ch%3A8000:123:456", "http://admin.ch:8000/123/456/did.jsonl")]
+    #[case("did:tdw:myScid:admin.ch%3A8000", "http://admin.ch:8000/did.jsonl")]
+    #[case("did:tdw:myScid:admin.ch", "http://admin.ch/.well-known/did.jsonl")]
+    #[case("did:tdw:myScid:sub.admin.ch", "http://sub.admin.ch/.well-known/did.jsonl")]
+    #[case("did:tdw:myScid:sub.admin.ch:mypath:mytrala", "http://sub.admin.ch/mypath/mytrala/did.jsonl")]
+    fn test_tdw_to_url_conversion(#[case] tdw: String, #[case] url: String) {
+        let (_,resolved_url) = get_scid_and_url_from_tdw(&tdw, Some(true));
+        assert_eq!(resolved_url, url)
+    }
+
+    #[rstest]
+    #[case("http://localhost:8000/123/456", "localhost%3A8000:123:456")]
+    #[case("http://localhost:8000", "localhost%3A8000")]
+    #[case("http://localhost/123/456", "localhost:123:456")]
+    #[case("http://sub.localhost/123/456", "sub.localhost:123:456")]
+    #[case("http://sub.localhost", "sub.localhost")]
+    fn test_url_to_tdw_domain(#[case] url: String, #[case] domain: String) {
+        let resolved_domain = get_tdw_domain_from_url(&url, Some(true));
+        assert_eq!(domain, resolved_domain)
+    }
+
+    #[rstest]
+    fn test_did_wrapping(unique_base_url: String) {
         let processor = TrustDidWebProcessor::new_with_api_key(String::from("secret"));
         let key_pair = Ed25519KeyPair::generate();
-        let did = processor.create("https://localhost:8000".to_string(), &key_pair, Some(false));
+        let did = processor.create(unique_base_url, &key_pair, Some(false));
         let did_read = TrustDidWeb::read(did.clone(), Some(true));
         let did_doc = DidDoc::from_json(&did_read.get_did_doc());
         assert_eq!(did_doc.id, did);
@@ -49,11 +85,11 @@ mod test {
     }
 
     #[rstest]
-    fn test_create_did() {
+    fn test_create_did(unique_base_url: String) {
         let processor = TrustDidWebProcessor::new_with_api_key(String::from("secret"));
         let key_pair = Ed25519KeyPair::generate();
         print!("{}",key_pair.get_signing_key().to_multibase());
-        let did = processor.create("https://localhost:8000".to_string(), &key_pair, Some(false));
+        let did = processor.create(unique_base_url, &key_pair, Some(false));
         print!("{}", did);
         assert!(did.len() > 0);
     }
@@ -62,8 +98,8 @@ mod test {
     fn test_read_did_tdw() {
         let processor = TrustDidWebProcessor::new_with_api_key(String::from("secret"));
         let key_pair = Ed25519KeyPair::from("uQm7HM3hPG8ar7HqoXAC7RW_fy9Ah5TnLHwyIid-lh4I");
-        print!("|> {} <|",key_pair.get_signing_key().to_multibase());
-        let did = processor.create("https://localhost:8000".to_string(), &key_pair, Some(false));
+        println!("|> {} <|",key_pair.get_signing_key().to_multibase());
+        let did = processor.create("https://localhost:8000/12345678".to_string(), &key_pair, Some(false));
         
         // Read original did document
         let did_doc_str_v1 = processor.read(String::from(&did), Some(false));
@@ -71,18 +107,18 @@ mod test {
         match did_doc_v1["id"] {
             serde_json::Value::String(ref s) => {
                 println!("{}", s);
-                assert!(s.eq("did:tdw:localhost%3A8000:gu4geodcmvsgmzbqge3wimrugeygeolcgzsgenlggbtdczdcge3dcnzwgi3tonzsg5sweyjwmrswintbguytimbsmm3tcmzsmiywimy="))
+                assert!(s.eq("did:tdw:ga3geodemrsggm3cmqydozlgguygcyrsgyydonlfgq2wgyrumzrdaylbgrsdcmbygnsten3gga2tonddgm3toyzqgmzdsyrxgvrdsoi=:localhost%3A8000:12345678"))
             },
             _ => panic!("Invalid did doc"),
         }
     }
 
     #[rstest]
-    fn test_update_did_tdw() {
+    fn test_update_did_tdw(unique_base_url: String) {
         // Register did tdw
         let processor = TrustDidWebProcessor::new_with_api_key(String::from("secret"));
         let key_pair = Ed25519KeyPair::generate();
-        let did = processor.create("https://localhost:8000".to_string(), &key_pair, Some(false));
+        let did = processor.create(unique_base_url, &key_pair, Some(false));
         
         // Read original did doc 
         let did_doc_str_v1 = processor.read(String::from(&did), Some(false));
@@ -112,11 +148,11 @@ mod test {
 
     #[rstest]
     #[should_panic(expected = "Invalid key pair. The provided key pair is not the one referenced in the did doc")]
-    fn test_update_did_tdw_with_non_controller_did() {
+    fn test_update_did_tdw_with_non_controller_did(unique_base_url: String) {
         // Register did tdw
         let processor = TrustDidWebProcessor::new_with_api_key(String::from("secret"));
         let key_pair = Ed25519KeyPair::generate();
-        let did = processor.create("https://localhost:8000".to_string(), &key_pair, Some(false));
+        let did = processor.create(unique_base_url, &key_pair, Some(false));
         
         // Read original did doc 
         let did_doc_str_v1 = processor.read(String::from(&did), Some(false));
@@ -139,11 +175,11 @@ mod test {
 
     #[rstest]
     #[should_panic(expected = "Invalid did doc. The did doc is already deactivated. For simplicity reasons we don't allow updates of dids")]
-    fn test_deactivate_did_tdw() {
+    fn test_deactivate_did_tdw(unique_base_url: String) {
         // Register did tdw
         let processor = TrustDidWebProcessor::new_with_api_key(String::from("secret"));
         let key_pair = Ed25519KeyPair::generate();
-        let did = processor.create("https://localhost:8000".to_string(), &key_pair, Some(false));
+        let did = processor.create(unique_base_url, &key_pair, Some(false));
 
         // Deactivate did
         processor.deactivate(did.clone(), &key_pair, Some(false));

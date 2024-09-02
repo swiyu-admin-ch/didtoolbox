@@ -212,6 +212,9 @@ pub struct DidMethodParameters {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub ttl: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub portable: Option<bool>,
 }
 
 impl DidMethodParameters {
@@ -226,6 +229,7 @@ impl DidMethodParameters {
             moved: Option::None,
             deactivated: Option::None,
             ttl: Option::None,
+            portable: Option::Some(false),
         }
     }
 
@@ -240,6 +244,7 @@ impl DidMethodParameters {
             moved: Option::None,
             deactivated: Option::None,
             ttl: Option::None,
+            portable: Option::None
         }
     }
 
@@ -254,6 +259,7 @@ impl DidMethodParameters {
             moved: Option::None,
             deactivated: Option::Some(true),
             ttl: Option::None,
+            portable: Option::None
         }
     }
 }
@@ -314,7 +320,7 @@ impl DidDocumentState {
     }
 
     /// Checks if all entries in the did log are valid (data integrity, versioning etc.)
-    pub fn validate(&self) -> Arc<DidDoc> {
+    pub fn validate_with_scid(&self, scid_to_validate: Option<String>) -> Arc<DidDoc> {
         let mut previous_entry: Option<DidLogEntry> = None;
         for entry in &self.did_log_entries {
             match previous_entry {
@@ -323,7 +329,7 @@ impl DidDocumentState {
                     if entry.version_id.unwrap() != prev.version_id.unwrap()+1 {
                         panic!("Invalid did log for version {}. Version id has to be incremented", entry.version_id.unwrap())
                     }
-                    // Verify data integrity proof 
+                    // Verify data integrity proof
                     entry.verify_data_integrity_proof();
 
                     // Verify the entryHash
@@ -336,13 +342,18 @@ impl DidDocumentState {
                     if genesis_entry.version_id.unwrap() != 1 {
                         panic!("Invalid did log. First entry has to have version id 1")
                     }
-                    // Verify data integrity proof 
+                    // Verify data integrity proof
                     genesis_entry.verify_data_integrity_proof();
                     // Verify the entryHash
                     genesis_entry.verify_entry_hash_integrity(genesis_entry.parameters.scid.as_ref().unwrap());
                     // Verify that the SCID is correct
                     let doc_string = serde_json::to_string(&genesis_entry.did_doc).unwrap();
                     let scid = genesis_entry.parameters.scid.clone().unwrap();
+                    if let Some(res) = &scid_to_validate {
+                        if res.ne(scid.as_str()) {
+                            panic!("The scid from the did doc {scid} doesnt match the requested one {res}")
+                        }
+                    }
                     let did_doc_with_palaceholder = str::replace(&doc_string, &scid, utils::SCID_PLACEHOLDER);
                     let did_doc: DidDoc = serde_json::from_str(&did_doc_with_palaceholder).unwrap();
                     let original_scid = generate_scid(&did_doc);
@@ -357,6 +368,11 @@ impl DidDocumentState {
             Some(entry) => entry.did_doc.clone().into(),
             None => panic!("Invalid did log. No entries found")
         }
+    }
+
+    /// Checks if all entries in the did log are valid (data integrity, versioning etc.)
+    pub fn validate(&self) -> Arc<DidDoc> {
+        self.validate_with_scid(None)
     }
 
     /// Add a new entry to the did log file
@@ -381,6 +397,13 @@ impl DidDocumentState {
         } else {
             // Subsequent entry (Update)
             let previous_entry = self.did_log_entries.last().unwrap();
+
+            // Make sure portability cant be set afterward to true
+            if let Some(portable) = log_entry.parameters.portable {
+                if portable {
+                    panic!("Portability can only be set in genesis entry to true")
+                }
+            }
 
             // Make sure only activated did docs can be updated
             match previous_entry.did_doc.deactivated{
@@ -509,33 +532,36 @@ impl UrlResolver for HttpClientResolver {
 
 
 /// Convert did:tdw:{method specific identifier} method specific identifier into resolvable url
-fn get_url_from_tdw(did_tdw: &String, allow_http: Option<bool>) -> String {
+pub fn get_scid_and_url_from_tdw(did_tdw: &String, allow_http: Option<bool>) -> (String, String) {
     if !did_tdw.starts_with("did:tdw:") {
         panic!("Invalid did:twd string. It has to start with did:tdw:")
     }
-    let did_tdw = did_tdw.replace("did:tdw:","");
+    let did_tdw: String = did_tdw.replace("did:tdw:","");
+    let (scid,did_tdw_reduced) = did_tdw.split_once(":").unwrap();
 
     let mut decoded_url = String::from("");
-    url_escape::decode_to_string(did_tdw.replace(":", "/"), &mut decoded_url);
+    url_escape::decode_to_string(did_tdw_reduced.replace(":", "/"), &mut decoded_url);
     let url = match String::from_utf8(decoded_url.into_bytes()) {
-            Ok(url) => {
-                if url.starts_with("localhost") || allow_http.unwrap_or(false) {
-                    format!("http://{}", url)
-                } else {
-                    format!("https://{}", url)
-                }
-            },
-            Err(_) => panic!("Couldn't convert did_tdw url to utf8 string"),
+        Ok(url) => {
+            if url.starts_with("localhost") || allow_http.unwrap_or(false) {
+                format!("http://{}", url)
+            } else {
+                format!("https://{}", url)
+            }
+        },
+        Err(_) => panic!("Couldn't convert did_tdw url to utf8 string"),
     };
     let has_path = regex::Regex::new(r"([a-z]|[0-9])\/([a-z]|[0-9])").unwrap();
-    match has_path.captures(url.as_str()) {
-        Some(_) => format!("{}/did.jsonl", url),
-        None => format!("{}/.well-know/did.jsonl", url),
+    let has_port = regex::Regex::new(r"\:[0-9]+").unwrap();
+    if has_path.captures(url.as_str()).is_some() || has_port.captures(url.as_str()).is_some() {
+        (scid.to_string(),format!("{}/did.jsonl", url))
+    } else{
+        (scid.to_string(), format!("{}/.well-known/did.jsonl", url))
     }
 }
 
 /// Convert domain into did:tdw:{method specific identifier} method specific identifier
-fn get_tdw_domain_from_url(url: &String, allow_http: Option<bool>) -> String {
+pub fn get_tdw_domain_from_url(url: &String, allow_http: Option<bool>) -> String {
     let mut did = String::from("");
     if url.starts_with("https://") {
         did = url.replace("https://", "");
@@ -581,7 +607,7 @@ impl TrustDidWeb {
         let domain = get_tdw_domain_from_url(&url, allow_http);
 
         // Create verification method suffix so that it can be used as part of verification method id property
-        let did_tdw = format!("did:tdw:{}:{}", domain, utils::SCID_PLACEHOLDER);
+        let did_tdw = format!("did:tdw:{}:{}", utils::SCID_PLACEHOLDER, domain);
         let key_def = json!({
             "type": utils::EDDSA_VERIFICATION_KEY_TYPE,
             "publicKeyMultibase": key_pair.verifying_key.to_multibase(),
@@ -609,7 +635,7 @@ impl TrustDidWeb {
             capability_invocation: vec![],
             capability_delegation: vec![],
             assertion_method: vec![],
-            controller: vec![format!("did:tdw:{}:{}", domain, utils::SCID_PLACEHOLDER)],
+            controller: vec![format!("did:tdw:{}:{}", utils::SCID_PLACEHOLDER, domain)],
             deactivated: None,
         };
 
@@ -639,13 +665,13 @@ impl TrustDidWeb {
     }
 
     pub fn read(did_tdw: String, allow_http: Option<bool>) -> Self {
-        let url = get_url_from_tdw(&did_tdw, allow_http);
+        let (scid, url) = get_scid_and_url_from_tdw(&did_tdw, allow_http);
         let resolver = HttpClientResolver {
             api_key: Option::None,
         };
         let did_log_raw = resolver.read(url);
         let did_doc_state = DidDocumentState::from(did_log_raw);
-        let did_doc_arc = did_doc_state.validate();
+        let did_doc_arc = did_doc_state.validate_with_scid(Some(scid));
         let did_doc = did_doc_arc.as_ref().clone();
         let did_doc_str = serde_json::to_string(&did_doc).unwrap();
         Self {
@@ -655,9 +681,10 @@ impl TrustDidWeb {
         }
     }
 
-    pub fn update(did_tdw: String, did_log: String, did_doc: String,  key_pair: &Ed25519KeyPair) -> Self {
+    pub fn update(did_tdw: String, did_log: String, did_doc: String,  key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Self {
         let mut did_doc_state = DidDocumentState::from(did_log);
-        let current_did_doc = did_doc_state.validate();
+        let (scid, _) = get_scid_and_url_from_tdw(&did_tdw, allow_http);
+        let current_did_doc = did_doc_state.validate_with_scid(Some(scid));
         let update_did_doc: DidDoc = match serde_json::from_str(&did_doc) {
             Ok(doc) => doc,
             Err(_) => panic!("The did doc you provided is invalid or contains an argument which isn't part of the did specification/recommendation"),
@@ -671,6 +698,7 @@ impl TrustDidWeb {
         let current_entry = did_doc_state.current();
         let update_entry = DidLogEntry::of(
             current_entry.entry_hash.clone(),
+            // TODO make parameters configurable
             DidMethodParameters::empty(),
             update_did_doc.clone()
         );
@@ -683,9 +711,10 @@ impl TrustDidWeb {
         }
     }
 
-    pub fn deactivate(did_tdw: String, did_log: String, key_pair: &Ed25519KeyPair) -> Self {
+    pub fn deactivate(did_tdw: String, did_log: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Self {
         let mut did_doc_state = DidDocumentState::from(did_log);
-        let mut current_did_doc = did_doc_state.validate().as_ref().clone();
+        let (scid,_) = get_scid_and_url_from_tdw(&did_tdw, allow_http);
+        let mut current_did_doc = did_doc_state.validate_with_scid(Some(scid)).as_ref().clone();
         
         // Mark did doc as deactivated and set did log parameters accordingly
         current_did_doc.deactivated = Some(true);
@@ -713,31 +742,31 @@ impl DidMethodOperation for TrustDidWebProcessor {
 
     fn create(&self, url: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> String {
         let tdw = TrustDidWeb::create(url, key_pair, allow_http);
-        self.resolver.write(get_url_from_tdw(&tdw.did, allow_http), tdw.did_log);
+        self.resolver.write(get_scid_and_url_from_tdw(&tdw.did, allow_http).1, tdw.did_log);
         tdw.did
     }
 
     fn read(&self, did_tdw: String, allow_http: Option<bool>) -> String {
-        let url = get_url_from_tdw(&did_tdw, allow_http);
+        let (scid, url) = get_scid_and_url_from_tdw(&did_tdw, allow_http);
         let did_log_raw = self.resolver.read(url);
         let did_doc_state = DidDocumentState::from(did_log_raw);
-        let did_doc = did_doc_state.validate();
+        let did_doc = did_doc_state.validate_with_scid(Some(scid));
         serde_json::to_string(&did_doc.as_ref()).unwrap()
     }
 
     fn update(&self, did_tdw: String, did_doc: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> String {
-        let url = get_url_from_tdw(&did_tdw, allow_http);
+        let (_, url) = get_scid_and_url_from_tdw(&did_tdw, allow_http);
         let did_log_raw = self.resolver.read(url);
-        let tdw = TrustDidWeb::update(did_tdw.clone(),did_log_raw, did_doc, key_pair);
-        self.resolver.write(get_url_from_tdw(&did_tdw, allow_http), tdw.did_log);
+        let tdw = TrustDidWeb::update(did_tdw.clone(),did_log_raw, did_doc, key_pair, allow_http);
+        self.resolver.write(get_scid_and_url_from_tdw(&did_tdw, allow_http).1, tdw.did_log);
         tdw.did_doc
     }
 
     fn deactivate(&self, did_tdw: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> String {
-        let url = get_url_from_tdw(&did_tdw, allow_http);
+        let (_, url) = get_scid_and_url_from_tdw(&did_tdw, allow_http);
         let did_log_raw = self.resolver.read(url);
-        let tdw = TrustDidWeb::deactivate(did_tdw.clone(), did_log_raw, key_pair);
-        self.resolver.write(get_url_from_tdw(&did_tdw, allow_http), tdw.did_log);
+        let tdw = TrustDidWeb::deactivate(did_tdw.clone(), did_log_raw, key_pair, allow_http);
+        self.resolver.write(get_scid_and_url_from_tdw(&did_tdw, allow_http).1, tdw.did_log);
         tdw.did_doc
     }
 }

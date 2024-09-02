@@ -18,9 +18,9 @@ interface TrustDidWeb {
     [Name=read]
     constructor(string did_tdw, boolean? allow_http);
     [Name=update]
-    constructor(string did_tdw, string did_log, string did_doc, [ByRef] Ed25519KeyPair key_pair);
+    constructor(string did_tdw, string did_log, string did_doc, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
     [Name=deactivate]
-    constructor(string did_tdw, string did_log, [ByRef] Ed25519KeyPair key_pair);
+    constructor(string did_tdw, string did_log, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
     string get_did();
     string get_did_log();
     string get_did_doc();
@@ -58,6 +58,7 @@ interface DidDocumentState {
     [Name=from]
     constructor(string did_log);
     DidDoc validate();
+    DidDoc validate_with_scid(string? scid);
 };
 
 dictionary Jwk {
