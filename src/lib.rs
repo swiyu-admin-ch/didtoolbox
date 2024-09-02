@@ -46,7 +46,7 @@ mod test {
     #[case("did:tdw:myScid:sub.admin.ch", "http://sub.admin.ch/.well-known/did.jsonl")]
     #[case("did:tdw:myScid:sub.admin.ch:mypath:mytrala", "http://sub.admin.ch/mypath/mytrala/did.jsonl")]
     fn test_tdw_to_url_conversion(#[case] tdw: String, #[case] url: String) {
-        let resolved_url = get_url_from_tdw(&tdw, Some(true));
+        let (_,resolved_url) = get_scid_and_url_from_tdw(&tdw, Some(true));
         assert_eq!(resolved_url, url)
     }
 
