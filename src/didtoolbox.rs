@@ -5,11 +5,23 @@ use serde::{Deserialize, Serialize};
 /// Entry in an did log file as shown here
 /// https://bcgov.github.io/trustdidweb/#term:did-log-entry
 
+// Implement basic properties related to EC algorithm
+// https://www.rfc-editor.org/rfc/rfc7517#section-4
+// https://www.rfc-editor.org/rfc/rfc7518.html#section-6.2.1
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Jwk {
-    pub kty: String,
-    pub crv: String,
-    pub x: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alg: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kty: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub crv: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub x: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub y: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
