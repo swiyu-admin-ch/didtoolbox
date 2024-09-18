@@ -62,9 +62,12 @@ interface DidDocumentState {
 };
 
 dictionary Jwk {
-  string kty;
-  string crv;
-  string x;
+  string? alg;
+  string? kid;
+  string? kty;
+  string? crv;
+  string? x;
+  string? y;
 };
 
 dictionary VerificationMethod {
