@@ -21,3 +21,4 @@ did_server/.venv/
 did_server/__pycache__/
 /bindings
 did_server/bindings
+.idea/*

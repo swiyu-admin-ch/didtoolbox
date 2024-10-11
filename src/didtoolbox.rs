@@ -24,6 +24,7 @@ pub struct Jwk {
     pub y: Option<String>,
 }
 
+// See https://www.w3.org/TR/did-core/#verification-methods
 #[derive(Serialize, Deserialize, Debug)]
 pub struct VerificationMethod {
     pub id: String,
@@ -59,6 +60,9 @@ impl Clone for VerificationMethod {
     }
 }
 
+
+// See      https://www.w3.org/TR/did-core/#dfn-did-documents
+// Examples https://www.w3.org/TR/did-core/#did-documents
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DidDoc {
     #[serde(rename = "@context")]
