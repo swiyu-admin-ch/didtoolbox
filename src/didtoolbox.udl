@@ -1,20 +1,10 @@
 // SPDX-License-Identifier: MIT
 namespace didtoolbox {
-    string parse_did_tdw_scid(string did_tdw, boolean? allow_http);
-    string parse_did_tdw_url(string did_tdw, boolean? allow_http);
-};
-
-interface TrustDidWebProcessor {
-    constructor();
-    [Name=new_with_api_key]
-    constructor(string api_key);
-    string create(string url, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
-    string read(string did_tdw, boolean? allow_http);
-    string update(string did_tdw, string did_doc, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
-    string deactivate(string did_tdw, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
 };
 
 interface TrustDidWeb {
+    [Name=new_from_did]
+    constructor(string did_tdw, boolean? allow_http);
     [Name=create]
     constructor(string url, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
     [Name=read]
@@ -24,6 +14,8 @@ interface TrustDidWeb {
     [Name=deactivate]
     constructor(string did_tdw, string did_log, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
     string get_did();
+    string get_scid();
+    string get_url();
     string get_did_log();
     string get_did_doc();
 };

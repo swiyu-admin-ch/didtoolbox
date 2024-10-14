@@ -57,7 +57,7 @@ impl DidLogEntry {
             version_time: Utc::now(),
             parameters,
             did_doc,
-            proof: Some(proof)
+            proof: Some(proof),
         }
     }
 
@@ -69,7 +69,7 @@ impl DidLogEntry {
             version_time: Utc::now(),
             parameters,
             did_doc,
-            proof: None
+            proof: None,
         }
     }
 
@@ -81,7 +81,7 @@ impl DidLogEntry {
             version_time: self.version_time,
             parameters: self.parameters.clone(),
             did_doc: self.did_doc.clone(),
-            proof: None
+            proof: None,
         };
         let entry_hash = entry_without_proof.get_hash();
         if entry_hash != self.entry_hash {
@@ -118,9 +118,9 @@ impl DidLogEntry {
 
     fn get_controller_verifying_key(&self) -> HashMap<String, (String, Ed25519VerifyingKey)> {
         self.did_doc.verification_method.iter()
-            .filter(|entry| 
+            .filter(|entry|
                 self.did_doc.controller.iter()
-                .any(|controller| entry.id.starts_with(controller) && entry.verification_type == utils::EDDSA_VERIFICATION_KEY_TYPE))
+                    .any(|controller| entry.id.starts_with(controller) && entry.verification_type == utils::EDDSA_VERIFICATION_KEY_TYPE))
             .map(|entry| (
                 entry.id.split("#").collect::<Vec<&str>>().first().unwrap().to_string(),
                 (entry.id.clone(), Ed25519VerifyingKey::from_multibase(entry.public_key_multibase.as_ref().unwrap()))
@@ -134,7 +134,7 @@ impl DidLogEntry {
                 if public_key.1.to_multibase() != verifying_key.to_multibase() {
                     panic!("Invalid key pair. The provided key pair is not the one referenced in the did doc")
                 }
-            },
+            }
             None => panic!("Invalid did_tdw. The did_tdw is not a controller of the did doc")
         }
     }
@@ -245,7 +245,7 @@ impl DidMethodParameters {
             moved: Option::None,
             deactivated: Option::None,
             ttl: Option::None,
-            portable: Option::None
+            portable: Option::None,
         }
     }
 
@@ -260,7 +260,7 @@ impl DidMethodParameters {
             moved: Option::None,
             deactivated: Option::Some(true),
             ttl: Option::None,
-            portable: Option::None
+            portable: Option::None,
         }
     }
 }
@@ -284,34 +284,34 @@ impl DidDocumentState {
         }
         DidDocumentState {
             did_log_entries: unescaped.split("\n")
-            .filter(|line| line.len() > 0)
-            .map(|line| {
-                let entry: serde_json::Value = match serde_json::from_str(line) {
-                    Ok(entry) => entry,
-                    Err(e) => panic!("{}", e),
-                };
-                match entry {
-                    JsonArray(ref entry) => {
-                        if entry.len() < 5 {
-                            panic!("Invalid did log entry. Expected at least 5 elements but got {}", entry.len())
+                .filter(|line| line.len() > 0)
+                .map(|line| {
+                    let entry: serde_json::Value = match serde_json::from_str(line) {
+                        Ok(entry) => entry,
+                        Err(e) => panic!("{}", e),
+                    };
+                    match entry {
+                        JsonArray(ref entry) => {
+                            if entry.len() < 5 {
+                                panic!("Invalid did log entry. Expected at least 5 elements but got {}", entry.len())
+                            }
                         }
-                    },
-                    _ => panic!("Invalid did log entry. Expected array")
-                }
-                // TODO replace this with toString call of log entry
-                DidLogEntry::new(
-                    match entry[0] {
-                        JsonString(ref entry_hash) => entry_hash.clone(),
-                        _ => panic!("Invalid entry hash"),
-                    },
-                    entry[1].to_string().parse::<usize>().unwrap(),
-                    DateTime::parse_from_str(entry[2].as_str().unwrap(), utils::DATE_TIME_FORMAT).unwrap().to_utc(),
-                    serde_json::from_str(&entry[3].to_string()).unwrap(),
-                    serde_json::from_str(&entry[4]["value"].to_string()).unwrap(),
-                    DataIntegrityProof::from(entry[5].to_string())
-                )
-                // TODO continue here with fixing the parsing process
-            }).collect::<Vec<DidLogEntry>>()
+                        _ => panic!("Invalid did log entry. Expected array")
+                    }
+                    // TODO replace this with toString call of log entry
+                    DidLogEntry::new(
+                        match entry[0] {
+                            JsonString(ref entry_hash) => entry_hash.clone(),
+                            _ => panic!("Invalid entry hash"),
+                        },
+                        entry[1].to_string().parse::<usize>().unwrap(),
+                        DateTime::parse_from_str(entry[2].as_str().unwrap(), utils::DATE_TIME_FORMAT).unwrap().to_utc(),
+                        serde_json::from_str(&entry[3].to_string()).unwrap(),
+                        serde_json::from_str(&entry[4]["value"].to_string()).unwrap(),
+                        DataIntegrityProof::from(entry[5].to_string()),
+                    )
+                    // TODO continue here with fixing the parsing process
+                }).collect::<Vec<DidLogEntry>>()
         }
     }
 
@@ -327,7 +327,7 @@ impl DidDocumentState {
             match previous_entry {
                 Some(ref prev) => {
                     // Check if version has incremented
-                    if entry.version_id.unwrap() != prev.version_id.unwrap()+1 {
+                    if entry.version_id.unwrap() != prev.version_id.unwrap() + 1 {
                         panic!("Invalid did log for version {}. Version id has to be incremented", entry.version_id.unwrap())
                     }
                     // Verify data integrity proof
@@ -336,7 +336,7 @@ impl DidDocumentState {
                     // Verify the entryHash
                     entry.verify_entry_hash_integrity(&prev.entry_hash);
                     previous_entry = Some(entry.clone());
-                },
+                }
                 None => {
                     // First / genesis entry in did log
                     let genesis_entry = self.did_log_entries.first().unwrap();
@@ -407,12 +407,12 @@ impl DidDocumentState {
             }
 
             // Make sure only activated did docs can be updated
-            match previous_entry.did_doc.deactivated{
+            match previous_entry.did_doc.deactivated {
                 Some(deactivated) => {
                     if deactivated {
                         panic!("Invalid did doc. The did doc is already deactivated. For simplicity reasons we don't allow updates of dids")
                     }
-                },
+                }
                 None => (),
             }
 
@@ -425,13 +425,13 @@ impl DidDocumentState {
         }
 
         // Generate new hash and use it as entry_hash and integrity challenge
-        let doc_without_entry_hash = DidLogEntry{
+        let doc_without_entry_hash = DidLogEntry {
             version_id: Some(index),
             entry_hash: previous_hash,
             ..log_entry
         };
         let integrity_challenge = doc_without_entry_hash.get_hash();
-        let doc_without_proof = DidLogEntry{
+        let doc_without_proof = DidLogEntry {
             entry_hash: integrity_challenge.clone(),
             ..doc_without_entry_hash
         };
@@ -440,7 +440,7 @@ impl DidDocumentState {
         let suite_options = CryptoSuiteOptions::new(
             CryptoSuiteType::EddsaJcs2022,
             verification_method,
-            integrity_challenge
+            integrity_challenge,
         );
         let signing_key = key_pair.get_signing_key().to_multibase();
         let eddsa_suite = EddsaCryptosuite {
@@ -459,7 +459,7 @@ impl DidDocumentState {
             ..doc_without_proof
         };
         self.did_log_entries.push(doc);
-    }   
+    }
 }
 
 impl std::fmt::Display for DidDocumentState {
@@ -496,26 +496,6 @@ pub trait DidMethodOperation {
     fn deactivate(&self, did_tdw: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> String;
 }
 
-/// TWD parsing helper.
-///
-/// In case of a parsing error, empty string is returned.
-pub fn parse_did_tdw_scid(did_tdw: String, allow_http: Option<bool>) -> String {
-    if let Some(x) = ssi_dids::parse_did_tdw_scid_and_url(did_tdw, allow_http) {
-        return x. 0;
-    }
-    "".to_string()
-}
-
-/// TWD parsing helper.
-///
-/// In case of a parsing error, empty string is returned.
-pub fn parse_did_tdw_url(did_tdw: String, allow_http: Option<bool>) -> String {
-    if let Some(x) = ssi_dids::parse_did_tdw_scid_and_url(did_tdw, allow_http) {
-        return x.1;
-    }
-    "".to_string()
-}
-
 /// Convert domain into did:tdw:{method specific identifier} method specific identifier
 pub fn get_tdw_domain_from_url(url: &String, allow_http: Option<bool>) -> String {
     let mut did = String::from("");
@@ -540,13 +520,40 @@ pub fn get_tdw_domain_from_url(url: &String, allow_http: Option<bool>) -> String
 /// TODO Doc comments missing
 pub struct TrustDidWeb {
     did: String,
+    scid: String,
+    url: String,
     did_log: String,
     did_doc: String,
 }
 
 impl TrustDidWeb {
+    /// Yet another non-empty constructor.
+    /// In case of a parsing error, it panics.
+    pub fn new_from_did(did_tdw: String, allow_http: Option<bool>) -> Self {
+        match ssi_dids::parse_did_tdw(did_tdw.to_owned(), allow_http) {
+            Ok(parsed) => {
+                Self {
+                    did: did_tdw,
+                    scid: parsed.clone().unwrap().0,
+                    url: parsed.unwrap().1,
+                    did_log: String::from(""),
+                    did_doc: String::from(""),
+                }
+            }
+            Err(e) => panic!("{}", e.to_string()),
+        }
+    }
+
     pub fn get_did(&self) -> String {
         self.did.clone()
+    }
+
+    pub fn get_scid(&self) -> String {
+        self.scid.clone()
+    }
+
+    pub fn get_url(&self) -> String {
+        self.url.clone()
     }
 
     pub fn get_did_log(&self) -> String {
@@ -563,6 +570,8 @@ impl TrustDidWeb {
 
         // Create verification method suffix so that it can be used as part of verification method id property
         let did_tdw = format!("did:tdw:{}:{}", utils::SCID_PLACEHOLDER, domain);
+        //let tdw = TrustDidWeb::new_from_did(did_tdw.to_owned(), Some(true));
+
         let key_def = json!({
             "type": utils::EDDSA_VERIFICATION_KEY_TYPE,
             "publicKeyMultibase": key_pair.verifying_key.to_multibase(),
@@ -572,14 +581,14 @@ impl TrustDidWeb {
         hasher.update(key_def_jcs);
         let key_def_hash: String = hasher.finalize().encode_hex();
         let verification_method_suffix = URL_SAFE_NO_PAD.encode(key_def_hash.as_bytes());
-        
+
         // Create verification method for subject with placeholder
         let verification_method = VerificationMethod {
             id: format!("{}#{}", &did_tdw, verification_method_suffix),
             controller: did_tdw.clone(),
             verification_type: String::from(utils::EDDSA_VERIFICATION_KEY_TYPE),
             public_key_multibase: Some(key_pair.verifying_key.to_multibase()),
-            public_key_jwk: None
+            public_key_jwk: None,
         };
         // Create initial did doc with placeholder
         let did_doc = DidDoc {
@@ -604,37 +613,43 @@ impl TrustDidWeb {
         let log_without_proof_and_signature = DidLogEntry::of(
             scid.to_owned(),
             DidMethodParameters::for_genesis_did_doc(scid.to_owned()),
-            genesis_did_doc.clone()
+            genesis_did_doc.clone(),
         );
 
         // Initialize did log with genesis did doc
         let mut did_log: DidDocumentState = DidDocumentState::new();
         let controller = genesis_did_doc.controller.first().unwrap();
-        did_log.update(log_without_proof_and_signature,&controller , key_pair);
+        did_log.update(log_without_proof_and_signature, &controller, key_pair);
         let genesis_str = serde_json::to_string(&genesis_did_doc).unwrap();
         Self {
             did: genesis_did_doc.id,
+            scid,
+            url: domain, //tdw.get_url(),
             did_log: did_log.to_string(),
-            did_doc: genesis_str
+            did_doc: genesis_str,
         }
     }
 
     pub fn read(scid: String, did_log_raw: String) -> Self {
         let did_doc_state = DidDocumentState::from(did_log_raw);
-        let did_doc_arc = did_doc_state.validate_with_scid(Some(scid));
+        let did_doc_arc = did_doc_state.validate_with_scid(Some(scid.to_owned()));
         let did_doc = did_doc_arc.as_ref().clone();
         let did_doc_str = serde_json::to_string(&did_doc).unwrap();
+        let tdw = TrustDidWeb::new_from_did(did_doc.id.to_owned(), Some(false));
         Self {
             did: did_doc.id,
+            scid: tdw.get_scid(),
+            url: tdw.get_url(),
             did_log: did_doc_state.to_string(),
-            did_doc: did_doc_str
+            did_doc: did_doc_str,
         }
     }
 
-    pub fn update(did_tdw: String, did_log: String, did_doc: String,  key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Self {
+    pub fn update(did_tdw: String, did_log: String, did_doc: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Self {
         let mut did_doc_state = DidDocumentState::from(did_log);
-        let scid = parse_did_tdw_scid(did_tdw.clone(), allow_http);
-        let current_did_doc = did_doc_state.validate_with_scid(Some(scid));
+        let tdw = TrustDidWeb::new_from_did(did_tdw.to_owned(), allow_http);
+        let scid = tdw.get_scid();
+        let current_did_doc = did_doc_state.validate_with_scid(Some(scid.to_owned()));
         let update_did_doc: DidDoc = match serde_json::from_str(&did_doc) {
             Ok(doc) => doc,
             Err(_) => panic!("The did doc you provided is invalid or contains an argument which isn't part of the did specification/recommendation"),
@@ -650,37 +665,42 @@ impl TrustDidWeb {
             current_entry.entry_hash.clone(),
             // TODO make parameters configurable
             DidMethodParameters::empty(),
-            update_did_doc.clone()
+            update_did_doc.clone(),
         );
         did_doc_state.update(update_entry, &did_tdw, key_pair);
         let did_doc_str = serde_json::to_string(&update_did_doc).unwrap();
         Self {
             did: update_did_doc.id,
+            scid,
+            url: tdw.get_url(),
             did_log: did_doc_state.to_string(),
-            did_doc: did_doc_str
+            did_doc: did_doc_str,
         }
     }
 
     /// It  https://identity.foundation/trustdidweb/#deactivate-revoke
     pub fn deactivate(did_tdw: String, did_log: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Self {
         let mut did_doc_state = DidDocumentState::from(did_log);
-        let scid = parse_did_tdw_scid(did_tdw.clone(), allow_http);
-        let mut current_did_doc = did_doc_state.validate_with_scid(Some(scid)).as_ref().clone();
-        
+        let tdw = TrustDidWeb::new_from_did(did_tdw.to_owned(), allow_http);
+        let scid = tdw.get_scid();
+        let mut current_did_doc = did_doc_state.validate_with_scid(Some(scid.to_owned())).as_ref().clone();
+
         // Mark did doc as deactivated and set did log parameters accordingly
         current_did_doc.deactivated = Some(true);
         let current_entry = did_doc_state.current();
         let update_entry = DidLogEntry::of(
             current_entry.entry_hash.clone(),
             DidMethodParameters::deactivate(),
-            current_did_doc.clone()
+            current_did_doc.clone(),
         );
         did_doc_state.update(update_entry, &did_tdw, key_pair);
         let did_doc_str = serde_json::to_string(&current_did_doc).unwrap();
         Self {
             did: current_did_doc.id,
+            scid,
+            url: tdw.get_url(),
             did_log: did_doc_state.to_string(),
-            did_doc: did_doc_str
+            did_doc: did_doc_str,
         }
     }
 }
