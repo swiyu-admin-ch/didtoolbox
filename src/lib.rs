@@ -200,25 +200,19 @@ mod test {
     }
 
     #[rstest]
-    #[should_panic(
-        expected = "DID method `xyz` not supported"
-    )]
     #[case("did:xyz:myScid:localhost%3A8000:123:456")]
-    fn test_tdw_to_url_conversion_that_panics_1(#[case] tdw: String) {
+    fn test_tdw_to_url_conversion_error_kind_method_not_supported(#[case] tdw: String) {
         match TrustDidWebId::try_from((tdw, Some(true))) {
-            Err(e) => panic!("{}", e.to_string()),
+            Err(e) => assert_eq!(e.kind(), TrustDidWebIdResolutionErrorKind::MethodNotSupported),
             _ => (),
         }
     }
 
     #[rstest]
-    #[should_panic(
-        expected = "invalid method specific identifier: did:tdw:"
-    )]
     #[case("did:tdw:")]
-    fn test_tdw_to_url_conversion_that_panics_2(#[case] tdw: String) {
+    fn test_tdw_to_url_conversion_error_kind_invalid_method_specific_id(#[case] tdw: String) {
         match TrustDidWebId::try_from((tdw, Some(true))) {
-            Err(e) => panic!("{}", e.to_string()),
+            Err(e) => assert_eq!(e.kind(), TrustDidWebIdResolutionErrorKind::InvalidMethodSpecificId),
             _ => (),
         }
     }

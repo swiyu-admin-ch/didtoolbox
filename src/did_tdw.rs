@@ -528,19 +528,6 @@ pub fn get_tdw_domain_from_url(url: &String, allow_http: Option<bool>) -> String
     url.replace("/", ":")
 }
 
-/// As specified at https://identity.foundation/trustdidweb/#method-specific-identifier:
-///
-/// "The did:tdw method-specific identifier contains both the self-certifying identifier (SCID) for the DID,
-/// and a fully qualified domain name (with an optional path) that is secured by a TLS/SSL certificate."
-pub struct TrustDidWebId {
-    scid: String,
-    url: String,
-    // TODO path: Option<String>
-}
-
-static HAS_PATH_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"([a-z]|[0-9])\/([a-z]|[0-9])").unwrap());
-static HAS_PORT_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\:[0-9]+").unwrap());
-
 /// Yet another UniFFI-compliant error.
 ///
 /// Resembles ssi::dids::resolution::Error
@@ -554,7 +541,40 @@ pub enum TrustDidWebIdResolutionError {
     InvalidMethodSpecificId(String),
 }
 
+impl TrustDidWebIdResolutionError {
+    /// Returns the error kind.
+    pub fn kind(&self) -> TrustDidWebIdResolutionErrorKind {
+        match self {
+            Self::MethodNotSupported(_) => TrustDidWebIdResolutionErrorKind::MethodNotSupported,
+            Self::InvalidMethodSpecificId(_) => TrustDidWebIdResolutionErrorKind::InvalidMethodSpecificId,
+        }
+    }
+}
+
+/// Resolution error kind.
+///
+/// Each resolution [`TrustDidWebIdResolutionErrorKind`] has a kind provided by the [`TrustDidWebIdResolutionErrorKind::kind`] method.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, uniffi::Enum)]
+pub enum TrustDidWebIdResolutionErrorKind {
+    MethodNotSupported,
+    InvalidMethodSpecificId,
+}
+
+/// As specified at https://identity.foundation/trustdidweb/#method-specific-identifier:
+///
+/// "The did:tdw method-specific identifier contains both the self-certifying identifier (SCID) for the DID,
+/// and a fully qualified domain name (with an optional path) that is secured by a TLS/SSL certificate."
+pub struct TrustDidWebId {
+    scid: String,
+    url: String,
+    // TODO path: Option<String>
+}
+
+static HAS_PATH_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"([a-z]|[0-9])\/([a-z]|[0-9])").unwrap());
+static HAS_PORT_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\:[0-9]+").unwrap());
+
 impl TrustDidWebId {
+    /// Just for the sake of generating the default constructor by uniffi-bindgen.
     pub const fn new() -> Self {
         Self {
             scid: String::new(),
