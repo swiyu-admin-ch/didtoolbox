@@ -2,11 +2,19 @@
 namespace didtoolbox {
 };
 
+[Error]
+enum TrustDidWebIdResolutionError {
+    "MethodNotSupported",
+    "InvalidMethodSpecificId"
+};
+
 interface TrustDidWebId {
-    [Name=from_did]
-    constructor(string did_tdw, boolean? allow_http);
+    [Name=new]
+    constructor();
     string get_scid();
     string get_url();
+    [Throws=TrustDidWebIdResolutionError]
+    TrustDidWebId parse_did_tdw(string did_tdw, boolean? allow_http);
 };
 
 interface TrustDidWeb {
@@ -26,7 +34,7 @@ interface TrustDidWeb {
 interface Ed25519Signature {
     [Name=from_multibase]
     constructor([ByRef] string multibase);
-    string to_multibase();  
+    string to_multibase();
 };
 
 interface Ed25519SigningKey {

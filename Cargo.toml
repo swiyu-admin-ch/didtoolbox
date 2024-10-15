@@ -35,6 +35,7 @@ url-escape = "0.1.1"
 mockito = "1.5.0"
 bs58 = { version = "0.5.1", features = ["check", "cb58"] }
 ssi = { version = "0.9.0", features = ["example", "http-did"] }
+thiserror = "1.0.64"
 
 [build-dependencies]
 uniffi = { version = "0.28.2", features = ["build"] }

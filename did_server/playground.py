@@ -7,16 +7,17 @@ if __name__ == "__main__":
     try:
         key_pair = toolbox.Ed25519KeyPair.generate()
         created = toolbox.TrustDidWeb.create("https://127.0.0.1/8000", key_pair, False)
-        did_log = json.dumps(json.loads(created.get_did_log())) # Is it a proper JSON?
+        did_log = json.dumps(json.loads(created.get_did_log())) # Ensure it's a proper JSON.
         #print(did_log)
         #did_doc_json = json.loads(created.get_did_doc())
         #print(str(did_doc_json["verificationMethod"][0]))
 
         did = created.get_did()
-        #tdw_id = toolbox.TrustDidWebId.from_did("did:xyz::127.0.0.1%3A8000:12345678", False) # "DID method `xyz` not supported"
-        #tdw_id = toolbox.TrustDidWebId.from_did("did:tdw:============:127.0.0.1%3A8000:12345678", False) # "invalid method specific identifier: did:tdw:============:127.0.0.1%3A8000:12345678"
-        tdw_id = toolbox.TrustDidWebId.from_did(did, False)
-        scid = tdw_id.get_scid()
+
+        #scid = toolbox.TrustDidWebId().parse_did_tdw("did:xyz::127.0.0.1%3A8000:12345678", False).get_scid() # "DID method `xyz` not supported"
+        #scid = toolbox.TrustDidWebId().parse_did_tdw("did:tdw:============:127.0.0.1%3A8000:12345678", False).get_scid() # "invalid method specific identifier: did:tdw:============:127.0.0.1%3A8000:12345678"
+        scid = toolbox.TrustDidWebId().parse_did_tdw(did, False).get_scid()
+        print(scid)
 
         #did_log_raw = toolbox.TrustDidWeb.read(scid, "") # "Invalid did log. No entries found"
         read = toolbox.TrustDidWeb.read(scid, did_log)
@@ -29,8 +30,13 @@ if __name__ == "__main__":
         #deactivate = toolbox.TrustDidWeb.deactivate(did, did_log, key_pair, False) # Invalid did doc. The did doc is already deactivated. For simplicity reasons we don't allow updates of dids
         #update = toolbox.TrustDidWeb.update(scid, did, did_log_v1, did_doc_v1, key_pair, False)
         #did_log = update.get_did_log()
-        print(did_log)
+        #print(did_log)
+
+    except toolbox.TrustDidWebIdResolutionError as err:
+        # e.g. "DID method `xyz` not supported"
+        # e.g. "invalid method specific identifier: did:tdw:============:127.0.0.1%3A8000:12345678"
+        print(f"{str(err)}")
 
     except Exception as e:
-        # e.g. "Unexpected e = InternalError('DID method `xyz` not supported'), type(e) = <class 'bindings.python.didtoolbox.InternalError'>"
+        # e.g. "Unexpected e = TrustDidWebIdResolutionError.MethodNotSupported('DID method `xyz` not supported'), type(e) = <class 'bindings.python.didtoolbox.TrustDidWebIdResolutionError.MethodNotSupported'>"
         print(f"Unexpected {e = }, {type(e) = }")

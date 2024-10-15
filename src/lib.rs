@@ -194,7 +194,7 @@ mod test {
     #[case("did:tdw:myScid:sub.admin.ch:mypath:mytrala", "http://sub.admin.ch/mypath/mytrala/did.jsonl"
     )]
     fn test_tdw_to_url_conversion(#[case] tdw: String, #[case] url: String) {
-        let tdw = TrustDidWebId::from_did(tdw, Some(true));
+        let tdw = TrustDidWebId::try_from((tdw, Some(true))).unwrap();
         let resolved_url = tdw.get_url();
         assert_eq!(resolved_url, url)
     }
@@ -205,7 +205,10 @@ mod test {
     )]
     #[case("did:xyz:myScid:localhost%3A8000:123:456")]
     fn test_tdw_to_url_conversion_that_panics_1(#[case] tdw: String) {
-        TrustDidWebId::from_did(tdw, Some(true)).get_url();
+        match TrustDidWebId::try_from((tdw, Some(true))) {
+            Err(e) => panic!("{}", e.to_string()),
+            _ => (),
+        }
     }
 
     #[rstest]
@@ -214,7 +217,10 @@ mod test {
     )]
     #[case("did:tdw:")]
     fn test_tdw_to_url_conversion_that_panics_2(#[case] tdw: String) {
-        TrustDidWebId::from_did(tdw, Some(true)).get_url();
+        match TrustDidWebId::try_from((tdw, Some(true))) {
+            Err(e) => panic!("{}", e.to_string()),
+            _ => (),
+        }
     }
 
     #[rstest]
@@ -232,7 +238,7 @@ mod test {
     fn test_did_wrapping(tdw_mock: TdwMock, // fixture
                          http_client: &HttpClient, // fixture
     ) {
-        let tdw_id = TrustDidWebId::from_did(tdw_mock.get_did(), Some(false));
+        let tdw_id = TrustDidWebId::try_from((tdw_mock.get_did(), Some(false))).unwrap();
 
         // As any client (since EIDSYS-262) would/should do (after parsing DID to extract url)...
         let did_log_raw = http_client.read(tdw_id.get_url());
@@ -275,7 +281,7 @@ mod test {
     fn test_read_did_tdw(tdw_mock: TdwMock, // fixture
                          http_client: &HttpClient, // fixture
     ) {
-        let tdw_id = TrustDidWebId::from_did(tdw_mock.get_did(), Some(false));
+        let tdw_id = TrustDidWebId::try_from((tdw_mock.get_did(), Some(false))).unwrap();
 
         // As any client (since EIDSYS-262) would/should do (after parsing DID to extract url)...
         let did_log_raw = http_client.read(tdw_id.get_url());
@@ -304,7 +310,7 @@ mod test {
         let did = tdw_mock.get_did();
         let mut server = tdw_mock.get_server();
 
-        let tdw_id = TrustDidWebId::from_did(did.to_owned(), Some(false));
+        let tdw_id = TrustDidWebId::try_from((did.to_owned(), Some(false))).unwrap();
 
         // As any client (since EIDSYS-262) would/should do (after parsing DID to extract url)...
         let mut did_log = http_client.read(tdw_id.get_url());
@@ -355,7 +361,7 @@ mod test {
     ) {
         let did = tdw_mock.get_did();
 
-        let tdw_id = TrustDidWebId::from_did(did.to_owned(), Some(false));
+        let tdw_id = TrustDidWebId::try_from((did.to_owned(), Some(false))).unwrap();
 
         // As any client (since EIDSYS-262) would/should do (after parsing DID to extract url)...
         let did_log_raw = http_client.read(tdw_id.get_url());
@@ -392,7 +398,7 @@ mod test {
         let did = tdw_mock.get_did();
         let mut server = tdw_mock.get_server();
 
-        let tdw_id = TrustDidWebId::from_did(did.to_owned(), Some(false));
+        let tdw_id = TrustDidWebId::try_from((did.to_owned(), Some(false))).unwrap();
 
         // As any client (since EIDSYS-262) would/should do (after parsing DID to extract url)...
         let did_log = http_client.read(tdw_id.get_url());
