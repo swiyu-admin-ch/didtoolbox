@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
 use chrono::serde::ts_seconds;
@@ -10,16 +10,26 @@ use serde_jcs::{to_vec as jcs_from_str};
 use serde_json::json;
 use serde_json::Value::{String as JsonString, Object as JsonObject, Array as JsonArray};
 use sha2::{Sha256, Digest};
+use ssi::dids::{DIDMethod as SSIDIDMethod,
+                DIDBuf as SSIDIDBuf,
+                resolution::{
+                    Error as SSIResolutionError,
+                    DIDMethodResolver as SSIDIDMethodResolver,
+                    Options as SSIOptions,
+                    Output as SSIOutput,
+                },
+};
 use hex;
 use hex::ToHex;
 use regex;
+use regex::Regex;
 use ureq;
 use url_escape;
-use crate::ssi_dids;
 use crate::utils;
 use crate::ed25519::*;
 use crate::vc_data_integrity::*;
 use crate::didtoolbox::*;
+
 /// Entry in a did log file as shown here
 /// https://identity.foundation/trustdidweb/#term:did-log-entry
 /// See https://github.com.mcas.ms/decentralized-identity/trustdidweb/blob/63e21b69d84f7d9344f4e6ef4809e7823975c965/spec/specification.md
@@ -517,35 +527,69 @@ pub fn get_tdw_domain_from_url(url: &String, allow_http: Option<bool>) -> String
     url.replace("/", ":")
 }
 
-/// TODO Doc comments missing
-pub struct TrustDidWeb {
-    did: String,
+/// As specified at https://identity.foundation/trustdidweb/#method-specific-identifier
+///
+/// The did:tdw method-specific identifier contains both the self-certifying identifier (SCID) for the DID,
+/// and a fully qualified domain name (with an optional path) that is secured by a TLS/SSL certificate.
+pub struct TrustDidWebId {
     scid: String,
     url: String,
-    did_log: String,
-    did_doc: String,
+    // TODO path: Option<String>
 }
 
-impl TrustDidWeb {
+static HAS_PATH_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"([a-z]|[0-9])\/([a-z]|[0-9])").unwrap());
+static HAS_PORT_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\:[0-9]+").unwrap());
+
+impl TrustDidWebId {
+    /// ssi_dids_core-based parsing private helper.
+    fn parse_did_tdw(did_tdw: String, allow_http: Option<bool>) -> Result<Option<(String, String)>, SSIResolutionError> {
+        match SSIDIDBuf::try_from(did_tdw.to_owned()) {
+            Ok(buf) => {
+                if !buf.method_name().starts_with(TrustDidWeb::DID_METHOD_NAME) {
+                    return Err(SSIResolutionError::MethodNotSupported(buf.method_name().to_owned()));
+                };
+
+                match buf.method_specific_id().split_once(":") {
+                    Some((scid, did_tdw_reduced)) => {
+                        let mut decoded_url = String::from("");
+                        url_escape::decode_to_string(did_tdw_reduced.replace(":", "/"), &mut decoded_url);
+
+                        let url = match String::from_utf8(decoded_url.into_bytes()) {
+                            Ok(url) => {
+                                if url.starts_with("localhost") || url.starts_with("127.0.0.1") || allow_http.unwrap_or(false) {
+                                    format!("http://{}", url)
+                                } else {
+                                    format!("https://{}", url)
+                                }
+                            }
+                            Err(_) => return Err(SSIResolutionError::InvalidMethodSpecificId(did_tdw_reduced.to_owned())),
+                        };
+                        if HAS_PATH_REGEX.captures(url.as_str()).is_some() || HAS_PORT_REGEX.captures(url.as_str()).is_some() {
+                            Ok(Some((scid.to_string(), format!("{}/did.jsonl", url))))
+                        } else {
+                            Ok(Some((scid.to_string(), format!("{}/.well-known/did.jsonl", url))))
+                        }
+                    }
+                    None => Err(SSIResolutionError::InvalidMethodSpecificId(buf.method_specific_id().to_owned())),
+                }
+            }
+            Err(_) => Err(SSIResolutionError::InvalidMethodSpecificId(did_tdw)),
+        }
+    }
+
     /// Yet another non-empty constructor.
+    ///
     /// In case of a parsing error, it panics.
-    pub fn new_from_did(did_tdw: String, allow_http: Option<bool>) -> Self {
-        match ssi_dids::parse_did_tdw(did_tdw.to_owned(), allow_http) {
+    pub fn from_did(did_tdw: String, allow_http: Option<bool>) -> Self {
+        match Self::parse_did_tdw(did_tdw.to_owned(), allow_http) {
             Ok(parsed) => {
                 Self {
-                    did: did_tdw,
                     scid: parsed.clone().unwrap().0,
                     url: parsed.unwrap().1,
-                    did_log: String::from(""),
-                    did_doc: String::from(""),
                 }
             }
             Err(e) => panic!("{}", e.to_string()),
         }
-    }
-
-    pub fn get_did(&self) -> String {
-        self.did.clone()
     }
 
     pub fn get_scid(&self) -> String {
@@ -554,6 +598,19 @@ impl TrustDidWeb {
 
     pub fn get_url(&self) -> String {
         self.url.clone()
+    }
+}
+
+/// TODO Doc comments missing
+pub struct TrustDidWeb {
+    did: String,
+    did_log: String,
+    did_doc: String,
+}
+
+impl TrustDidWeb {
+    pub fn get_did(&self) -> String {
+        self.did.clone()
     }
 
     pub fn get_did_log(&self) -> String {
@@ -570,7 +627,6 @@ impl TrustDidWeb {
 
         // Create verification method suffix so that it can be used as part of verification method id property
         let did_tdw = format!("did:tdw:{}:{}", utils::SCID_PLACEHOLDER, domain);
-        //let tdw = TrustDidWeb::new_from_did(did_tdw.to_owned(), Some(true));
 
         let key_def = json!({
             "type": utils::EDDSA_VERIFICATION_KEY_TYPE,
@@ -623,8 +679,6 @@ impl TrustDidWeb {
         let genesis_str = serde_json::to_string(&genesis_did_doc).unwrap();
         Self {
             did: genesis_did_doc.id,
-            scid,
-            url: domain, //tdw.get_url(),
             did_log: did_log.to_string(),
             did_doc: genesis_str,
         }
@@ -635,11 +689,8 @@ impl TrustDidWeb {
         let did_doc_arc = did_doc_state.validate_with_scid(Some(scid.to_owned()));
         let did_doc = did_doc_arc.as_ref().clone();
         let did_doc_str = serde_json::to_string(&did_doc).unwrap();
-        let tdw = TrustDidWeb::new_from_did(did_doc.id.to_owned(), Some(false));
         Self {
             did: did_doc.id,
-            scid: tdw.get_scid(),
-            url: tdw.get_url(),
             did_log: did_doc_state.to_string(),
             did_doc: did_doc_str,
         }
@@ -647,9 +698,9 @@ impl TrustDidWeb {
 
     pub fn update(did_tdw: String, did_log: String, did_doc: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Self {
         let mut did_doc_state = DidDocumentState::from(did_log);
-        let tdw = TrustDidWeb::new_from_did(did_tdw.to_owned(), allow_http);
+        let tdw = TrustDidWebId::from_did(did_tdw.to_owned(), allow_http);
         let scid = tdw.get_scid();
-        let current_did_doc = did_doc_state.validate_with_scid(Some(scid.to_owned()));
+        let current_did_doc = did_doc_state.validate_with_scid(Some(scid));
         let update_did_doc: DidDoc = match serde_json::from_str(&did_doc) {
             Ok(doc) => doc,
             Err(_) => panic!("The did doc you provided is invalid or contains an argument which isn't part of the did specification/recommendation"),
@@ -671,8 +722,6 @@ impl TrustDidWeb {
         let did_doc_str = serde_json::to_string(&update_did_doc).unwrap();
         Self {
             did: update_did_doc.id,
-            scid,
-            url: tdw.get_url(),
             did_log: did_doc_state.to_string(),
             did_doc: did_doc_str,
         }
@@ -681,9 +730,9 @@ impl TrustDidWeb {
     /// It  https://identity.foundation/trustdidweb/#deactivate-revoke
     pub fn deactivate(did_tdw: String, did_log: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Self {
         let mut did_doc_state = DidDocumentState::from(did_log);
-        let tdw = TrustDidWeb::new_from_did(did_tdw.to_owned(), allow_http);
+        let tdw = TrustDidWebId::from_did(did_tdw.to_owned(), allow_http);
         let scid = tdw.get_scid();
-        let mut current_did_doc = did_doc_state.validate_with_scid(Some(scid.to_owned())).as_ref().clone();
+        let mut current_did_doc = did_doc_state.validate_with_scid(Some(scid)).as_ref().clone();
 
         // Mark did doc as deactivated and set did log parameters accordingly
         current_did_doc.deactivated = Some(true);
@@ -697,13 +746,27 @@ impl TrustDidWeb {
         let did_doc_str = serde_json::to_string(&current_did_doc).unwrap();
         Self {
             did: current_did_doc.id,
-            scid,
-            url: tdw.get_url(),
             did_log: did_doc_state.to_string(),
             did_doc: did_doc_str,
         }
     }
 }
+
+impl SSIDIDMethod for TrustDidWeb {
+    const DID_METHOD_NAME: &'static str = "tdw";
+}
+
+impl SSIDIDMethodResolver for TrustDidWeb {
+    async fn resolve_method_representation<'a>(
+        &'a self,
+        method_specific_id: &'a str,
+        options: SSIOptions,
+    ) -> Result<SSIOutput<Vec<u8>>, SSIResolutionError> {
+        // TODO Implement DIDMethodResolver for TrustDidWeb
+        todo!()
+    }
+}
+
 
 /// Generates an SCID (self certifying identifier) based on the initial DiDoC.
 /// This function is used as well in the initial generation as in the verification

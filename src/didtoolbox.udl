@@ -2,9 +2,14 @@
 namespace didtoolbox {
 };
 
-interface TrustDidWeb {
-    [Name=new_from_did]
+interface TrustDidWebId {
+    [Name=from_did]
     constructor(string did_tdw, boolean? allow_http);
+    string get_scid();
+    string get_url();
+};
+
+interface TrustDidWeb {
     [Name=create]
     constructor(string url, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
     [Name=read]
@@ -14,8 +19,6 @@ interface TrustDidWeb {
     [Name=deactivate]
     constructor(string did_tdw, string did_log, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
     string get_did();
-    string get_scid();
-    string get_url();
     string get_did_log();
     string get_did_doc();
 };

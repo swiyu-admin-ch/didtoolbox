@@ -13,10 +13,10 @@ if __name__ == "__main__":
         #print(str(did_doc_json["verificationMethod"][0]))
 
         did = created.get_did()
-        #tdw = toolbox.TrustDidWeb.new_from_did("did:xyz::127.0.0.1%3A8000:12345678", False) # "DID method `xyz` not supported"
-        #tdw = toolbox.TrustDidWeb.new_from_did("did:tdw:============:127.0.0.1%3A8000:12345678", False) # "invalid method specific identifier: did:tdw:============:127.0.0.1%3A8000:12345678"
-        tdw = toolbox.TrustDidWeb.new_from_did(did, False)
-        scid = tdw.get_scid()
+        #tdw_id = toolbox.TrustDidWebId.from_did("did:xyz::127.0.0.1%3A8000:12345678", False) # "DID method `xyz` not supported"
+        #tdw_id = toolbox.TrustDidWebId.from_did("did:tdw:============:127.0.0.1%3A8000:12345678", False) # "invalid method specific identifier: did:tdw:============:127.0.0.1%3A8000:12345678"
+        tdw_id = toolbox.TrustDidWebId.from_did(did, False)
+        scid = tdw_id.get_scid()
 
         #did_log_raw = toolbox.TrustDidWeb.read(scid, "") # "Invalid did log. No entries found"
         read = toolbox.TrustDidWeb.read(scid, did_log)
