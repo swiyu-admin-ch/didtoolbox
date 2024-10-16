@@ -554,7 +554,7 @@ impl TrustDidWebIdResolutionError {
 /// Resolution error kind.
 ///
 /// Each resolution [`TrustDidWebIdResolutionErrorKind`] has a kind provided by the [`TrustDidWebIdResolutionErrorKind::kind`] method.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, uniffi::Enum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TrustDidWebIdResolutionErrorKind {
     MethodNotSupported,
     InvalidMethodSpecificId,
@@ -645,7 +645,6 @@ impl TryFrom<(String, Option<bool>)> for TrustDidWebId {
         }
     }
 }
-
 
 /// TODO Doc comments missing
 pub struct TrustDidWeb {
