@@ -17,31 +17,39 @@ enum TrustDidWebIdResolutionError {
 /// "The did:tdw method-specific identifier contains both the self-certifying identifier (SCID) for the DID,
 /// and a fully qualified domain name (with an optional path) that is secured by a TLS/SSL certificate."
 interface TrustDidWebId {
-    [Name=new]
-    constructor();
-    /// Returns the SCID part from the supplied DID.
-    ///
-    /// CAUTION Calling this getter should take place after parse_did_tdw method is called, not earlier.
-    string get_scid();
-    /// Returns the url part from the supplied TDW DID.
-    ///
-    /// CAUTION Calling this getter should take place after parse_did_tdw method is called, not earlier.
-    string get_url();
-    /// The main method in charge of DID parsing.
+    /// The only (non-empty) constructor in charge of DID parsing.
     ///
     /// CAUTION Calling any of the available getters should take place after this method is called, not earlier.
-    [Throws=TrustDidWebIdResolutionError]
-    TrustDidWebId parse_did_tdw(string did_tdw, boolean? allow_http);
+    [Name=parse_did_tdw, Throws=TrustDidWebIdResolutionError]
+    constructor(string did_tdw, boolean? allow_http);
+    /// Returns the SCID part from the supplied DID.
+    string get_scid();
+    /// Returns the url part from the supplied TDW DID.
+    string get_url();
+};
+
+/// The error accompanying TrustDidWeb.
+/// It might occur while calling TrustDidWeb methods.
+[Error]
+enum TrustDidWebError {
+    /// DID method is not supported by this resolver.
+    "MethodNotSupported",
+    /// Invalid method-specific identifier.
+    "InvalidMethodSpecificId",
+    /// TODO Complete this docstring
+    "SerializationFailed",
+    /// The supplied did doc is invalid or contains an argument which isn't part of the did specification/recommendation.
+    "DeserializationFailed"
 };
 
 interface TrustDidWeb {
-    [Name=create]
+    [Name=create, Throws=TrustDidWebError]
     constructor(string url, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
-    [Name=read]
+    [Name=read, Throws=TrustDidWebError]
     constructor(string scid, string did_log_raw);
-    [Name=update]
+    [Name=update, Throws=TrustDidWebError]
     constructor(string did_tdw, string did_log, string did_doc, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
-    [Name=deactivate]
+    [Name=deactivate, Throws=TrustDidWebError]
     constructor(string did_tdw, string did_log, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
     string get_did();
     string get_did_log();

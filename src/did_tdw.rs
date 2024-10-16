@@ -551,9 +551,9 @@ impl TrustDidWebIdResolutionError {
     }
 }
 
-/// Resolution error kind.
+/// TrustDidWebIdResolutionError kind.
 ///
-/// Each resolution [`TrustDidWebIdResolutionErrorKind`] has a kind provided by the [`TrustDidWebIdResolutionErrorKind::kind`] method.
+/// Each [`TrustDidWebIdResolutionError`] has a kind provided by the [`TrustDidWebIdResolutionErrorKind::kind`] method.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TrustDidWebIdResolutionErrorKind {
     MethodNotSupported,
@@ -574,21 +574,13 @@ static HAS_PATH_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"([a-z]|[0
 static HAS_PORT_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\:[0-9]+").unwrap());
 
 impl TrustDidWebId {
-    /// Just for the sake of generating the default constructor by uniffi-bindgen.
-    pub const fn new() -> Self {
-        Self {
-            scid: String::new(),
-            url: String::new(),
-        }
-    }
-
     /// Yet another UniFFI-compliant method.
     ///
-    /// Otherwise, the idiomatic counterpart (try_from) should be used.
-    pub fn parse_did_tdw(&self, did_tdw: String, allow_http: Option<bool>) -> Result<Arc<Self>, TrustDidWebIdResolutionError> {
+    /// Otherwise, the idiomatic counterpart (try_from(value: (String, Option<bool>)) -> Result<Self, Self::Error>) may be used as well.
+    pub fn parse_did_tdw(did_tdw: String, allow_http: Option<bool>) -> Result<Self, TrustDidWebIdResolutionError> {
         match Self::try_from((did_tdw, allow_http)) {
             Ok(parsed) => {
-                Ok(Arc::new(parsed))
+                Ok(parsed)
             }
             Err(e) => Err(e),
         }
@@ -646,6 +638,48 @@ impl TryFrom<(String, Option<bool>)> for TrustDidWebId {
     }
 }
 
+/// Yet another UniFFI-compliant error.
+///
+/// Resembles ssi::dids::resolution::Error
+#[derive(Debug, thiserror::Error, PartialEq)]
+pub enum TrustDidWebError {
+    /// DID method is not supported by this resolver.
+    #[error("DID method `{0}` not supported")]
+    MethodNotSupported(String),
+    /// Invalid method-specific identifier.
+    #[error("invalid method specific identifier: {0}")]
+    InvalidMethodSpecificId(String),
+    /// TODO Complete the docstring
+    #[error("failed to serialize to JSON: {0}")]
+    SerializationFailed(String),
+    /// The supplied did doc is invalid or contains an argument which isn't part of the did specification/recommendation
+    #[error("The supplied did doc is invalid or contains an argument which isn't part of the did specification/recommendation: {0}")]
+    DeserializationFailed(String),
+}
+
+impl TrustDidWebError {
+    /// Returns the error kind.
+    pub fn kind(&self) -> TrustDidWebErrorKind {
+        match self {
+            Self::MethodNotSupported(_) => TrustDidWebErrorKind::MethodNotSupported,
+            Self::InvalidMethodSpecificId(_) => TrustDidWebErrorKind::InvalidMethodSpecificId,
+            Self::SerializationFailed(_) => TrustDidWebErrorKind::SerializationFailed,
+            Self::DeserializationFailed(_) => TrustDidWebErrorKind::DeserializationFailed,
+        }
+    }
+}
+
+/// TrustDidWebError kind.
+///
+/// Each [`TrustDidWebError`] has a kind provided by the [`TrustDidWebErrorKind::kind`] method.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TrustDidWebErrorKind {
+    MethodNotSupported,
+    InvalidMethodSpecificId,
+    SerializationFailed,
+    DeserializationFailed,
+}
+
 /// TODO Doc comments missing
 pub struct TrustDidWeb {
     did: String,
@@ -666,9 +700,9 @@ impl TrustDidWeb {
         self.did_doc.clone()
     }
 
-    pub fn create(url: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Self {
+    pub fn create(url: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Result<Self, TrustDidWebError> {
         // Check if domain is valid
-        let domain = get_tdw_domain_from_url(&url, allow_http);
+        let domain = get_tdw_domain_from_url(&url, allow_http); // may panic
 
         // Create verification method suffix so that it can be used as part of verification method id property
         let did_tdw = format!("did:tdw:{}:{}", utils::SCID_PLACEHOLDER, domain);
@@ -677,7 +711,10 @@ impl TrustDidWeb {
             "type": utils::EDDSA_VERIFICATION_KEY_TYPE,
             "publicKeyMultibase": key_pair.verifying_key.to_multibase(),
         });
-        let key_def_jcs = jcs_from_str(&key_def.to_string()).unwrap();
+        let key_def_jcs = match jcs_from_str(&key_def.to_string()) {
+            Ok(v) => v,
+            Err(e) => return Err(TrustDidWebError::DeserializationFailed(e.to_string()))
+        };
         let mut hasher = Sha256::new();
         hasher.update(key_def_jcs);
         let key_def_hash: String = hasher.finalize().encode_hex();
@@ -706,10 +743,15 @@ impl TrustDidWeb {
 
         // Generate SCID and replace placeholder in did doc
         let scid = generate_scid(&did_doc);
-        let did_doc_serialize = serde_json::to_string(&did_doc).unwrap();
+        let did_doc_serialize: String = match serde_json::to_string(&did_doc) {
+            Ok(v) => v,
+            Err(e) => return Err(TrustDidWebError::DeserializationFailed(e.to_string()))
+        };
         let did_doc_with_scid = str::replace(&did_doc_serialize, utils::SCID_PLACEHOLDER, &scid);
-        // let did_doc_with_scid = re.replace_all(&did_doc_serialize, &scid).to_string();
-        let genesis_did_doc: DidDoc = serde_json::from_str(&did_doc_with_scid).unwrap();
+        let genesis_did_doc: DidDoc = match serde_json::from_str(&did_doc_with_scid) {
+            Ok(v) => v,
+            Err(e) => return Err(TrustDidWebError::DeserializationFailed(e.to_string()))
+        };
 
         let log_without_proof_and_signature = DidLogEntry::of(
             scid.to_owned(),
@@ -719,38 +761,48 @@ impl TrustDidWeb {
 
         // Initialize did log with genesis did doc
         let mut did_log: DidDocumentState = DidDocumentState::new();
-        let controller = genesis_did_doc.controller.first().unwrap();
+        let controller: &String = match genesis_did_doc.controller.first() {
+            Some(v) => v,
+            _ => return Err(TrustDidWebError::DeserializationFailed("controller is empty".to_string()))
+        };
         did_log.update(log_without_proof_and_signature, &controller, key_pair);
-        let genesis_str = serde_json::to_string(&genesis_did_doc).unwrap();
-        Self {
+        let genesis_str = match serde_json::to_string(&genesis_did_doc) {
+            Ok(v) => v,
+            _ => return Err(TrustDidWebError::SerializationFailed("".to_string()))
+        };
+
+        Ok(Self {
             did: genesis_did_doc.id,
             did_log: did_log.to_string(),
             did_doc: genesis_str,
-        }
+        })
     }
 
-    pub fn read(scid: String, did_log_raw: String) -> Self {
+    pub fn read(scid: String, did_log_raw: String) -> Result<Self, TrustDidWebError> {
         let did_doc_state = DidDocumentState::from(did_log_raw);
         let did_doc_arc = did_doc_state.validate_with_scid(Some(scid.to_owned()));
         let did_doc = did_doc_arc.as_ref().clone();
-        let did_doc_str = serde_json::to_string(&did_doc).unwrap();
-        Self {
+        let did_doc_str = match serde_json::to_string(&did_doc) {
+            Ok(v) => v,
+            _ => return Err(TrustDidWebError::SerializationFailed("".to_string()))
+        };
+        Ok(Self {
             did: did_doc.id,
             did_log: did_doc_state.to_string(),
             did_doc: did_doc_str,
-        }
+        })
     }
 
-    pub fn update(did_tdw: String, did_log: String, did_doc: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Self {
+    pub fn update(did_tdw: String, did_log: String, did_doc: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Result<Self, TrustDidWebError> {
         let mut did_doc_state = DidDocumentState::from(did_log);
-        let scid = match TrustDidWebId::try_from((did_tdw.to_owned(), allow_http)) {
-            Ok(x) => { x.get_scid() }
-            Err(e) => panic!("{}", e.to_string()),
+        let scid = match TrustDidWebId::parse_did_tdw(did_tdw.to_owned(), allow_http) {
+            Ok(tdw_id) => { tdw_id.get_scid() }
+            Err(e) => return Err(TrustDidWebError::InvalidMethodSpecificId(e.to_string())),
         };
         let current_did_doc = did_doc_state.validate_with_scid(Some(scid));
         let update_did_doc: DidDoc = match serde_json::from_str(&did_doc) {
             Ok(doc) => doc,
-            Err(_) => panic!("The did doc you provided is invalid or contains an argument which isn't part of the did specification/recommendation"),
+            Err(e) => return Err(TrustDidWebError::DeserializationFailed(e.to_string()))
         };
 
         // TODO right now did can't be changed
@@ -766,20 +818,24 @@ impl TrustDidWeb {
             update_did_doc.clone(),
         );
         did_doc_state.update(update_entry, &did_tdw, key_pair);
-        let did_doc_str = serde_json::to_string(&update_did_doc).unwrap();
-        Self {
+        let did_doc_str = match serde_json::to_string(&update_did_doc) {
+            Ok(v) => v,
+            _ => return Err(TrustDidWebError::SerializationFailed("".to_string()))
+        };
+
+        Ok(Self {
             did: update_did_doc.id,
             did_log: did_doc_state.to_string(),
             did_doc: did_doc_str,
-        }
+        })
     }
 
     /// It  https://identity.foundation/trustdidweb/#deactivate-revoke
-    pub fn deactivate(did_tdw: String, did_log: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Self {
+    pub fn deactivate(did_tdw: String, did_log: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Result<Self, TrustDidWebError> {
         let mut did_doc_state = DidDocumentState::from(did_log);
-        let scid = match TrustDidWebId::try_from((did_tdw.to_owned(), allow_http)) {
-            Ok(x) => { x.get_scid() }
-            Err(e) => panic!("{}", e.to_string()),
+        let scid = match TrustDidWebId::parse_did_tdw(did_tdw.to_owned(), allow_http) {
+            Ok(tdw_id) => { tdw_id.get_scid() }
+            Err(e) => return Err(TrustDidWebError::InvalidMethodSpecificId(e.to_string())),
         };
         let mut current_did_doc = did_doc_state.validate_with_scid(Some(scid)).as_ref().clone();
 
@@ -792,12 +848,16 @@ impl TrustDidWeb {
             current_did_doc.clone(),
         );
         did_doc_state.update(update_entry, &did_tdw, key_pair);
-        let did_doc_str = serde_json::to_string(&current_did_doc).unwrap();
-        Self {
+        let did_doc_str = match serde_json::to_string(&current_did_doc) {
+            Ok(v) => v,
+            _ => return Err(TrustDidWebError::SerializationFailed("".to_string()))
+        };
+
+        Ok(Self {
             did: current_did_doc.id,
             did_log: did_doc_state.to_string(),
             did_doc: did_doc_str,
-        }
+        })
     }
 }
 

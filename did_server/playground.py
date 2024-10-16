@@ -14,9 +14,9 @@ if __name__ == "__main__":
 
         did = created.get_did()
 
-        #scid = toolbox.TrustDidWebId().parse_did_tdw("did:xyz::127.0.0.1%3A8000:12345678", False).get_scid() # "DID method `xyz` not supported"
-        #scid = toolbox.TrustDidWebId().parse_did_tdw("did:tdw:============:127.0.0.1%3A8000:12345678", False).get_scid() # "invalid method specific identifier: did:tdw:============:127.0.0.1%3A8000:12345678"
-        scid = toolbox.TrustDidWebId().parse_did_tdw(did, False).get_scid()
+        #scid = toolbox.TrustDidWebId.parse_did_tdw("did:xyz::127.0.0.1%3A8000:12345678", False).get_scid() # "DID method `xyz` not supported"
+        #scid = toolbox.TrustDidWebId.parse_did_tdw("did:tdw:============:127.0.0.1%3A8000:12345678", False).get_scid() # "invalid method specific identifier: did:tdw:============:127.0.0.1%3A8000:12345678"
+        scid = toolbox.TrustDidWebId.parse_did_tdw(did, False).get_scid()
         print(scid)
 
         #did_log_raw = toolbox.TrustDidWeb.read(scid, "") # "Invalid did log. No entries found"
@@ -31,6 +31,9 @@ if __name__ == "__main__":
         #update = toolbox.TrustDidWeb.update(scid, did, did_log_v1, did_doc_v1, key_pair, False)
         #did_log = update.get_did_log()
         #print(did_log)
+
+    except toolbox.TrustDidWebError as err:
+        print(f"{str(err)}")
 
     except toolbox.TrustDidWebIdResolutionError as err:
         # e.g. "DID method `xyz` not supported"
