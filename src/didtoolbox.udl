@@ -39,7 +39,9 @@ enum TrustDidWebError {
     /// TODO Complete this docstring
     "SerializationFailed",
     /// The supplied did doc is invalid or contains an argument which isn't part of the did specification/recommendation.
-    "DeserializationFailed"
+    "DeserializationFailed",
+    /// Invalid (or not yet supported) operation against DID doc.
+    "InvalidOperation"
 };
 
 interface TrustDidWeb {

@@ -224,8 +224,18 @@ mod test {
     #[case("http://sub.localhost/123/456", "sub.localhost:123:456")]
     #[case("http://sub.localhost", "sub.localhost")]
     fn test_url_to_tdw_domain(#[case] url: String, #[case] domain: String) {
-        let resolved_domain = get_tdw_domain_from_url(&url, Some(true));
+        let resolved_domain = get_tdw_domain_from_url(&url, Some(true)).unwrap();
         assert_eq!(domain, resolved_domain)
+    }
+
+    #[rstest]
+    #[case("not_really_an_http_url")]
+    #[case("http://sub.localhost/did.jsonl")]
+    fn test_url_to_tdw_domain_error(#[case] url: String) {
+        match get_tdw_domain_from_url(&url, Some(true)) {
+            Err(e) => assert_eq!(e.kind(), TrustDidWebErrorKind::InvalidMethodSpecificId),
+            _ => (),
+        }
     }
 
     #[rstest]

@@ -508,24 +508,24 @@ pub trait DidMethodOperation {
 }
 
 /// Convert domain into did:tdw:{method specific identifier} method specific identifier
-pub fn get_tdw_domain_from_url(url: &String, allow_http: Option<bool>) -> String {
+pub fn get_tdw_domain_from_url(url: &String, allow_http: Option<bool>) -> Result<String, TrustDidWebError> {
     let mut did = String::from("");
     if url.starts_with("https://") {
         did = url.replace("https://", "");
     } else if url.starts_with("http://localhost") || url.starts_with("http://127.0.0.1") || allow_http.unwrap_or(false) {
         did = url.replace("http://", "");
     } else {
-        panic!("Invalid url. Only https is supported")
+        return Err(TrustDidWebError::InvalidMethodSpecificId(String::from("Invalid url. Only https is supported")));
     }
 
     if did.contains(".well-known") {
-        panic!("Invalid url. Please remove .well-known from url")
+        return Err(TrustDidWebError::InvalidMethodSpecificId(String::from("Invalid url. Please remove .well-known from url")));
     }
     if did.contains("did.jsonl") {
-        panic!("Invalid url. Please remove did.json from url")
+        return Err(TrustDidWebError::InvalidMethodSpecificId(String::from("Invalid url. Please remove did.json from url")));
     }
     let url = did.replace(":", "%3A");
-    url.replace("/", ":")
+    Ok(url.replace("/", ":"))
 }
 
 /// Yet another UniFFI-compliant error.
@@ -643,10 +643,10 @@ impl TryFrom<(String, Option<bool>)> for TrustDidWebId {
 /// Resembles ssi::dids::resolution::Error
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum TrustDidWebError {
-    /// DID method is not supported by this resolver.
+    /// DID method is not supported by this resolver
     #[error("DID method `{0}` not supported")]
     MethodNotSupported(String),
-    /// Invalid method-specific identifier.
+    /// Invalid method-specific identifier
     #[error("invalid method specific identifier: {0}")]
     InvalidMethodSpecificId(String),
     /// TODO Complete the docstring
@@ -655,6 +655,9 @@ pub enum TrustDidWebError {
     /// The supplied did doc is invalid or contains an argument which isn't part of the did specification/recommendation
     #[error("The supplied did doc is invalid or contains an argument which isn't part of the did specification/recommendation: {0}")]
     DeserializationFailed(String),
+    /// Invalid (or not yet supported) operation against DID doc
+    #[error("Invalid (or not yet supported) operation against DID doc: {0}")]
+    InvalidOperation(String),
 }
 
 impl TrustDidWebError {
@@ -665,6 +668,7 @@ impl TrustDidWebError {
             Self::InvalidMethodSpecificId(_) => TrustDidWebErrorKind::InvalidMethodSpecificId,
             Self::SerializationFailed(_) => TrustDidWebErrorKind::SerializationFailed,
             Self::DeserializationFailed(_) => TrustDidWebErrorKind::DeserializationFailed,
+            Self::InvalidOperation(_) => TrustDidWebErrorKind::InvalidOperation,
         }
     }
 }
@@ -678,6 +682,7 @@ pub enum TrustDidWebErrorKind {
     InvalidMethodSpecificId,
     SerializationFailed,
     DeserializationFailed,
+    InvalidOperation,
 }
 
 /// TODO Doc comments missing
@@ -702,7 +707,7 @@ impl TrustDidWeb {
 
     pub fn create(url: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Result<Self, TrustDidWebError> {
         // Check if domain is valid
-        let domain = get_tdw_domain_from_url(&url, allow_http); // may panic
+        let domain = get_tdw_domain_from_url(&url, allow_http)?;
 
         // Create verification method suffix so that it can be used as part of verification method id property
         let did_tdw = format!("did:tdw:{}:{}", utils::SCID_PLACEHOLDER, domain);
@@ -745,7 +750,7 @@ impl TrustDidWeb {
         let scid = generate_scid(&did_doc);
         let did_doc_serialize: String = match serde_json::to_string(&did_doc) {
             Ok(v) => v,
-            Err(e) => return Err(TrustDidWebError::DeserializationFailed(e.to_string()))
+            Err(e) => return Err(TrustDidWebError::SerializationFailed(e.to_string()))
         };
         let did_doc_with_scid = str::replace(&did_doc_serialize, utils::SCID_PLACEHOLDER, &scid);
         let genesis_did_doc: DidDoc = match serde_json::from_str(&did_doc_with_scid) {
@@ -763,12 +768,12 @@ impl TrustDidWeb {
         let mut did_log: DidDocumentState = DidDocumentState::new();
         let controller: &String = match genesis_did_doc.controller.first() {
             Some(v) => v,
-            _ => return Err(TrustDidWebError::DeserializationFailed("controller is empty".to_string()))
+            _ => return Err(TrustDidWebError::DeserializationFailed("genesis did doc controller is empty".to_string()))
         };
         did_log.update(log_without_proof_and_signature, &controller, key_pair);
         let genesis_str = match serde_json::to_string(&genesis_did_doc) {
             Ok(v) => v,
-            _ => return Err(TrustDidWebError::SerializationFailed("".to_string()))
+            Err(e) => return Err(TrustDidWebError::SerializationFailed(e.to_string()))
         };
 
         Ok(Self {
@@ -784,7 +789,7 @@ impl TrustDidWeb {
         let did_doc = did_doc_arc.as_ref().clone();
         let did_doc_str = match serde_json::to_string(&did_doc) {
             Ok(v) => v,
-            _ => return Err(TrustDidWebError::SerializationFailed("".to_string()))
+            Err(e) => return Err(TrustDidWebError::SerializationFailed(e.to_string()))
         };
         Ok(Self {
             did: did_doc.id,
@@ -807,7 +812,7 @@ impl TrustDidWeb {
 
         // TODO right now did can't be changed
         if current_did_doc.id != update_did_doc.id {
-            panic!("Invalid did doc. The did doc id has to match the did_tdw")
+            return Err(TrustDidWebError::InvalidOperation("Invalid DID doc. The DID doc id has to match the did_tdw".to_string()));
         }
 
         let current_entry = did_doc_state.current();
@@ -820,7 +825,7 @@ impl TrustDidWeb {
         did_doc_state.update(update_entry, &did_tdw, key_pair);
         let did_doc_str = match serde_json::to_string(&update_did_doc) {
             Ok(v) => v,
-            _ => return Err(TrustDidWebError::SerializationFailed("".to_string()))
+            Err(e) => return Err(TrustDidWebError::SerializationFailed(e.to_string()))
         };
 
         Ok(Self {
@@ -850,7 +855,7 @@ impl TrustDidWeb {
         did_doc_state.update(update_entry, &did_tdw, key_pair);
         let did_doc_str = match serde_json::to_string(&current_did_doc) {
             Ok(v) => v,
-            _ => return Err(TrustDidWebError::SerializationFailed("".to_string()))
+            Err(e) => return Err(TrustDidWebError::SerializationFailed(e.to_string()))
         };
 
         Ok(Self {
