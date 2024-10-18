@@ -74,23 +74,6 @@ mod test {
                 Err(_) => panic!("Couldn't read from url"),
             }
         }
-        /*
-        fn write(&self, url: String, content: String) {
-            let mut request = ureq::post(&url);
-            match &self.api_key {
-                Some(api_key) => {
-                    request = request.set("X-API-KEY", api_key);
-                },
-                None => (),
-            };
-            match request.send_form(&[
-                ("file", &content)
-            ]) {
-                Ok(_) => (),
-                Err(e) => panic!("{}", e),
-            }
-        }
-        */
     }
 
     #[fixture]
@@ -125,31 +108,23 @@ mod test {
         server: Server,
     }
     impl TdwMock {
-        pub fn new(key_pair: &Ed25519KeyPair, // CAUTION cannot use 'ed25519_key_pair' fixture here ;)
+        pub fn new(key_pair: &Ed25519KeyPair, // CAUTION Unfortunately, the 'ed25519_key_pair' fixture cannot be used here ;)
         ) -> Self {
             let mut server = Server::new_with_opts(ServerOpts {
-                // CAUTION Setting a port explicitly would lead to "Address already in use (os error 48)" error
+                // CAUTION Setting a port explicitly would lead to "Address already in use (os error 48)" error!
                 ..Default::default()
             });
 
             let url = format!("{}/123456789", server.url());
 
-            // CAUTION Using an existing SUT method to setup a mock is not really deterministic
+            // CAUTION Using one of the existing SUT methods (TrustDidWeb::create(...)) to setup a mock is NOT really deterministic!
+            //         Alternatively, a raw test data should/could be loaded directly from the FS, e.g.:
+            //         let did_log = minify::json::minify(std::fs::read_to_string(std::Path::new(&did_log_raw_filepath)).unwrap().as_str());
+            //         However, in this particular setup, as port is always different (not explicitly set),
+            //         it is impossible to create such a JSON content.
+            //         So, the SUT method (TrustDidWeb::create(...)) should already be implemented "properly" 🤠
             let tdw = TrustDidWeb::create(url, key_pair, Some(false)).unwrap();
-
-            // assertion-relevant parsing
             let did_log = tdw.get_did_log();
-
-            /*
-            server.mock("POST", Matcher::Regex(format!(r"^/123456789/did.jsonl$")),
-            ).match_body(
-                //Matcher::Any
-                Matcher::Regex("^file=*".to_string())
-            ).with_status(201)
-                .with_header("content-type", "application/x-www-form-urlencoded")
-                .with_header("X-API-Key", "secret")
-                .create();
-            */
 
             // use newly created did_log (as json body) to setup the GET mock
             server.mock("GET", Matcher::Regex(r"/[a-z0-9=]+/did.jsonl$".to_string()))
