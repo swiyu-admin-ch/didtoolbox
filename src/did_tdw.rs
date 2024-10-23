@@ -24,7 +24,6 @@ use hex;
 use hex::ToHex;
 use regex;
 use regex::Regex;
-use ureq;
 use url_escape;
 use crate::utils;
 use crate::ed25519::*;
@@ -783,9 +782,13 @@ impl TrustDidWeb {
         })
     }
 
-    pub fn read(scid: String, did_log_raw: String) -> Result<Self, TrustDidWebError> {
-        let did_doc_state = DidDocumentState::from(did_log_raw);
-        let did_doc_arc = did_doc_state.validate_with_scid(Some(scid.to_owned()));
+    pub fn read(did_tdw: String, did_log: String, allow_http: Option<bool>) -> Result<Self, TrustDidWebError> {
+        let did_doc_state = DidDocumentState::from(did_log);
+        let scid = match TrustDidWebId::parse_did_tdw(did_tdw.to_owned(), allow_http) {
+            Ok(tdw_id) => { tdw_id.get_scid() }
+            Err(e) => return Err(TrustDidWebError::InvalidMethodSpecificId(e.to_string())),
+        };
+        let did_doc_arc = did_doc_state.validate_with_scid(Some(scid.to_owned())); // may panic
         let did_doc = did_doc_arc.as_ref().clone();
         let did_doc_str = match serde_json::to_string(&did_doc) {
             Ok(v) => v,

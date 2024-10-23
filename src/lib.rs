@@ -105,7 +105,7 @@ mod test {
     struct TdwMock {
         url: String,
         did: String,
-        server: Server,
+        server: Server, // CAUTION Must be in the struct, otherwise 501 (server) error status is returned
     }
     impl TdwMock {
         pub fn new(key_pair: &Ed25519KeyPair, // CAUTION Unfortunately, the 'ed25519_key_pair' fixture cannot be used here ;)
@@ -123,7 +123,7 @@ mod test {
             //         However, in this particular setup, as port is always different (not explicitly set),
             //         it is impossible to create such a JSON content.
             //         So, the SUT method (TrustDidWeb::create(...)) should already be implemented "properly" 🤠
-            let tdw = TrustDidWeb::create(url, key_pair, Some(false)).unwrap();
+            let tdw = TrustDidWeb::create(url.to_owned(), key_pair, Some(false)).unwrap();
             let did_log = tdw.get_did_log();
 
             // use newly created did_log (as json body) to setup the GET mock
@@ -132,8 +132,14 @@ mod test {
                 .with_header("X-API-Key", "secret")
                 .create();
 
+            // Smoke test
+            //let http_client = HttpClient { api_key: Some("secret".to_string()) };
+            let http_client = HttpClient { api_key: None }; // works as well, for some reason
+            let did_log = http_client.read(format!("{}/did.jsonl", url.to_owned())); // may panic
+            //println!("{did_log}");
+
             TdwMock {
-                url: format!("{}/123456789", server.url()),
+                url,
                 did: tdw.get_did(),
                 server, // in case additional mocks are required in a test function
             }
@@ -223,7 +229,7 @@ mod test {
         let did_log_raw = http_client.read(tdw_id.get_url());
 
         // The (new) interface (since EIDSYS-262).
-        let tdw = TrustDidWeb::read(tdw_id.get_scid(), did_log_raw).unwrap();
+        let tdw = TrustDidWeb::read(tdw_mock.get_did(), did_log_raw, Some(false)).unwrap();
         let did_doc = DidDoc::from_json(&tdw.get_did_doc());
 
         assert_eq!(did_doc.id, tdw.get_did());
@@ -260,13 +266,15 @@ mod test {
     fn test_read_did_tdw(tdw_mock: TdwMock, // fixture
                          http_client: &HttpClient, // fixture
     ) {
+        let did = tdw_mock.get_did();
+
         let tdw_id = TrustDidWebId::parse_did_tdw(tdw_mock.get_did(), Some(false)).unwrap();
 
         // As any client (since EIDSYS-262) would/should do (after parsing DID to extract url)...
         let did_log_raw = http_client.read(tdw_id.get_url());
 
         // Read the newly did doc
-        let did_doc_str_v1 = TrustDidWeb::read(tdw_id.get_scid(), did_log_raw).unwrap();
+        let did_doc_str_v1 = TrustDidWeb::read(did, did_log_raw, Some(false)).unwrap();
         let did_doc_v1: serde_json::Value = serde_json::from_str(&did_doc_str_v1.get_did_doc()).unwrap();
 
         assert!(!did_doc_v1["@context"].to_string().is_empty());
@@ -295,7 +303,7 @@ mod test {
         let mut did_log = http_client.read(tdw_id.get_url());
 
         // Read original did doc
-        let tdw_v1 = TrustDidWeb::read(tdw_id.get_scid(), did_log.clone()).unwrap();
+        let tdw_v1 = TrustDidWeb::read(did.to_owned(), did_log.clone(), Some(false)).unwrap();
         let did_doc_v1: Value = serde_json::from_str(&tdw_v1.get_did_doc()).unwrap();
 
         // Update did document by adding a new verification method
@@ -315,7 +323,7 @@ mod test {
 
         //let did_log_str_v1 = TrustDidWeb::read(scid, tdw.get_did_log()).get_did_log();
         let did_log_str_v1 = did_log.clone();
-        let updated = TrustDidWeb::update(did, did_log_str_v1, did_doc_v2.clone(), &ed25519_key_pair, Some(false)).unwrap();
+        let updated = TrustDidWeb::update(did.to_owned(), did_log_str_v1, did_doc_v2.clone(), &ed25519_key_pair, Some(false)).unwrap();
         let updated_did_log_json = json!(updated.get_did_log());
         server.mock("GET", Matcher::Regex(r"/[a-z0-9=]+/did.jsonl$".to_string())).with_body(updated_did_log_json.to_string()).create();
 
@@ -323,7 +331,7 @@ mod test {
         did_log = http_client.read(tdw_id.get_url());
 
         // Read updated did doc with new property
-        let tdw_v3 = TrustDidWeb::read(scid, did_log).unwrap();
+        let tdw_v3 = TrustDidWeb::read(did, did_log, Some(false)).unwrap();
         let did_doc_v3: serde_json::Value = serde_json::from_str(&tdw_v3.get_did_doc()).unwrap();
         match did_doc_v3["assertionMethod"][0]["id"] {
             serde_json::Value::String(ref s) => assert!(s.eq("did:jwk:123#type1")),
@@ -346,7 +354,7 @@ mod test {
         let did_log_raw = http_client.read(tdw_id.get_url());
 
         // Read the newly did doc
-        let tdw_v1 = TrustDidWeb::read(tdw_id.get_scid(), did_log_raw).unwrap();
+        let tdw_v1 = TrustDidWeb::read(did.to_owned(), did_log_raw, Some(false)).unwrap();
         let did_doc_v1: serde_json::Value = serde_json::from_str(&tdw_v1.get_did_doc()).unwrap();
 
         // Update did document by adding a new verification method
@@ -391,7 +399,7 @@ mod test {
         let did_log = http_client.read(tdw_id.get_url());
 
         // Read original did doc, and then try to update it...
-        let tdw_v1 = TrustDidWeb::read(tdw_id.get_scid(), did_log).unwrap();
+        let tdw_v1 = TrustDidWeb::read(did.to_owned(), did_log, Some(false)).unwrap();
         let did_doc_v1: serde_json::Value = serde_json::from_str(&tdw_v1.get_did_doc()).unwrap();
 
         // Update did document after it has been deactivated

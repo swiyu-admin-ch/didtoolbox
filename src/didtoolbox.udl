@@ -48,7 +48,7 @@ interface TrustDidWeb {
     [Name=create, Throws=TrustDidWebError]
     constructor(string url, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
     [Name=read, Throws=TrustDidWebError]
-    constructor(string scid, string did_log_raw);
+    constructor(string did_tdw, string did_log, boolean? allow_http);
     [Name=update, Throws=TrustDidWebError]
     constructor(string did_tdw, string did_log, string did_doc, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
     [Name=deactivate, Throws=TrustDidWebError]
