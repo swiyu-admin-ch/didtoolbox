@@ -1,28 +1,38 @@
 // SPDX-License-Identifier: MIT
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
 use chrono::serde::ts_seconds;
 use serde::{Deserialize, Serialize};
 use base64::{Engine as _};
-use base32::{decode as base32_decode, encode as base32_encode, Alphabet};
-use serde_jcs::{to_vec as jcs_from_str, to_string as jcs_to_string};
+use serde_jcs::{to_vec as jcs_from_str};
 use serde_json::json;
 use serde_json::Value::{String as JsonString, Object as JsonObject, Array as JsonArray};
 use sha2::{Sha256, Digest};
+use ssi::dids::{DIDMethod as SSIDIDMethod,
+                DIDBuf as SSIDIDBuf,
+                resolution::{
+                    Error as SSIResolutionError,
+                    DIDMethodResolver as SSIDIDMethodResolver,
+                    Options as SSIOptions,
+                    Output as SSIOutput,
+                },
+};
+use thiserror::Error;
 use hex;
 use hex::ToHex;
-use rand::{thread_rng, Rng};
 use regex;
-use ureq;
+use regex::Regex;
 use url_escape;
 use crate::utils;
 use crate::ed25519::*;
 use crate::vc_data_integrity::*;
 use crate::didtoolbox::*;
-/// Entry in an did log file as shown here
-/// https://bcgov.github.io/trustdidweb/#term:did-log-entry
+
+/// Entry in a did log file as shown here
+/// https://identity.foundation/trustdidweb/#term:did-log-entry
+/// See https://github.com.mcas.ms/decentralized-identity/trustdidweb/blob/63e21b69d84f7d9344f4e6ef4809e7823975c965/spec/specification.md
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DidLogEntry {
     pub entry_hash: String,
@@ -57,7 +67,7 @@ impl DidLogEntry {
             version_time: Utc::now(),
             parameters,
             did_doc,
-            proof: Some(proof)
+            proof: Some(proof),
         }
     }
 
@@ -69,7 +79,7 @@ impl DidLogEntry {
             version_time: Utc::now(),
             parameters,
             did_doc,
-            proof: None
+            proof: None,
         }
     }
 
@@ -81,7 +91,7 @@ impl DidLogEntry {
             version_time: self.version_time,
             parameters: self.parameters.clone(),
             did_doc: self.did_doc.clone(),
-            proof: None
+            proof: None,
         };
         let entry_hash = entry_without_proof.get_hash();
         if entry_hash != self.entry_hash {
@@ -113,14 +123,14 @@ impl DidLogEntry {
 
     fn get_hash(&self) -> String {
         let json = serde_json::to_string(&self.to_log_entry_line()).unwrap();
-        generate_jcs_hash(&json)
+        utils::generate_jcs_hash(&json)
     }
 
     fn get_controller_verifying_key(&self) -> HashMap<String, (String, Ed25519VerifyingKey)> {
         self.did_doc.verification_method.iter()
-            .filter(|entry| 
+            .filter(|entry|
                 self.did_doc.controller.iter()
-                .any(|controller| entry.id.starts_with(controller) && entry.verification_type == utils::EDDSA_VERIFICATION_KEY_TYPE))
+                    .any(|controller| entry.id.starts_with(controller) && entry.verification_type == utils::EDDSA_VERIFICATION_KEY_TYPE))
             .map(|entry| (
                 entry.id.split("#").collect::<Vec<&str>>().first().unwrap().to_string(),
                 (entry.id.clone(), Ed25519VerifyingKey::from_multibase(entry.public_key_multibase.as_ref().unwrap()))
@@ -134,7 +144,7 @@ impl DidLogEntry {
                 if public_key.1.to_multibase() != verifying_key.to_multibase() {
                     panic!("Invalid key pair. The provided key pair is not the one referenced in the did doc")
                 }
-            },
+            }
             None => panic!("Invalid did_tdw. The did_tdw is not a controller of the did doc")
         }
     }
@@ -183,6 +193,7 @@ impl DidLogEntry {
     }
 }
 
+// See https://identity.foundation/trustdidweb/#didtdw-did-method-parameters
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DidMethodParameters {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -244,7 +255,7 @@ impl DidMethodParameters {
             moved: Option::None,
             deactivated: Option::None,
             ttl: Option::None,
-            portable: Option::None
+            portable: Option::None,
         }
     }
 
@@ -259,7 +270,7 @@ impl DidMethodParameters {
             moved: Option::None,
             deactivated: Option::Some(true),
             ttl: Option::None,
-            portable: Option::None
+            portable: Option::None,
         }
     }
 }
@@ -283,34 +294,34 @@ impl DidDocumentState {
         }
         DidDocumentState {
             did_log_entries: unescaped.split("\n")
-            .filter(|line| line.len() > 0)
-            .map(|line| {
-                let entry: serde_json::Value = match serde_json::from_str(line) {
-                    Ok(entry) => entry,
-                    Err(e) => panic!("{}", e),
-                };
-                match entry {
-                    JsonArray(ref entry) => {
-                        if entry.len() < 5 {
-                            panic!("Invalid did log entry. Expected at least 5 elements but got {}", entry.len())
+                .filter(|line| line.len() > 0)
+                .map(|line| {
+                    let entry: serde_json::Value = match serde_json::from_str(line) {
+                        Ok(entry) => entry,
+                        Err(e) => panic!("{}", e),
+                    };
+                    match entry {
+                        JsonArray(ref entry) => {
+                            if entry.len() < 5 {
+                                panic!("Invalid did log entry. Expected at least 5 elements but got {}", entry.len())
+                            }
                         }
-                    },
-                    _ => panic!("Invalid did log entry. Expected array")
-                }
-                // TODO replace this with toString call of log entry
-                DidLogEntry::new(
-                    match entry[0] {
-                        JsonString(ref entry_hash) => entry_hash.clone(),
-                        _ => panic!("Invalid entry hash"),
-                    },
-                    entry[1].to_string().parse::<usize>().unwrap(),
-                    DateTime::parse_from_str(entry[2].as_str().unwrap(), utils::DATE_TIME_FORMAT).unwrap().to_utc(),
-                    serde_json::from_str(&entry[3].to_string()).unwrap(),
-                    serde_json::from_str(&entry[4]["value"].to_string()).unwrap(),
-                    DataIntegrityProof::from(entry[5].to_string())
-                )
-                // TODO continue here with fixing the parsing process
-            }).collect::<Vec<DidLogEntry>>()
+                        _ => panic!("Invalid did log entry. Expected array")
+                    }
+                    // TODO replace this with toString call of log entry
+                    DidLogEntry::new(
+                        match entry[0] {
+                            JsonString(ref entry_hash) => entry_hash.clone(),
+                            _ => panic!("Invalid entry hash"),
+                        },
+                        entry[1].to_string().parse::<usize>().unwrap(),
+                        DateTime::parse_from_str(entry[2].as_str().unwrap(), utils::DATE_TIME_FORMAT).unwrap().to_utc(),
+                        serde_json::from_str(&entry[3].to_string()).unwrap(),
+                        serde_json::from_str(&entry[4]["value"].to_string()).unwrap(),
+                        DataIntegrityProof::from(entry[5].to_string()),
+                    )
+                    // TODO continue here with fixing the parsing process
+                }).collect::<Vec<DidLogEntry>>()
         }
     }
 
@@ -326,7 +337,7 @@ impl DidDocumentState {
             match previous_entry {
                 Some(ref prev) => {
                     // Check if version has incremented
-                    if entry.version_id.unwrap() != prev.version_id.unwrap()+1 {
+                    if entry.version_id.unwrap() != prev.version_id.unwrap() + 1 {
                         panic!("Invalid did log for version {}. Version id has to be incremented", entry.version_id.unwrap())
                     }
                     // Verify data integrity proof
@@ -335,7 +346,7 @@ impl DidDocumentState {
                     // Verify the entryHash
                     entry.verify_entry_hash_integrity(&prev.entry_hash);
                     previous_entry = Some(entry.clone());
-                },
+                }
                 None => {
                     // First / genesis entry in did log
                     let genesis_entry = self.did_log_entries.first().unwrap();
@@ -406,12 +417,12 @@ impl DidDocumentState {
             }
 
             // Make sure only activated did docs can be updated
-            match previous_entry.did_doc.deactivated{
+            match previous_entry.did_doc.deactivated {
                 Some(deactivated) => {
                     if deactivated {
                         panic!("Invalid did doc. The did doc is already deactivated. For simplicity reasons we don't allow updates of dids")
                     }
-                },
+                }
                 None => (),
             }
 
@@ -424,13 +435,13 @@ impl DidDocumentState {
         }
 
         // Generate new hash and use it as entry_hash and integrity challenge
-        let doc_without_entry_hash = DidLogEntry{
+        let doc_without_entry_hash = DidLogEntry {
             version_id: Some(index),
             entry_hash: previous_hash,
             ..log_entry
         };
         let integrity_challenge = doc_without_entry_hash.get_hash();
-        let doc_without_proof = DidLogEntry{
+        let doc_without_proof = DidLogEntry {
             entry_hash: integrity_challenge.clone(),
             ..doc_without_entry_hash
         };
@@ -439,7 +450,7 @@ impl DidDocumentState {
         let suite_options = CryptoSuiteOptions::new(
             CryptoSuiteType::EddsaJcs2022,
             verification_method,
-            integrity_challenge
+            integrity_challenge,
         );
         let signing_key = key_pair.get_signing_key().to_multibase();
         let eddsa_suite = EddsaCryptosuite {
@@ -458,7 +469,7 @@ impl DidDocumentState {
             ..doc_without_proof
         };
         self.did_log_entries.push(doc);
-    }   
+    }
 }
 
 impl std::fmt::Display for DidDocumentState {
@@ -482,107 +493,198 @@ pub trait DidMethodOperationWrapper {
 }
 
 /// Basic user facing did method operations to handle a did
+/// See https://identity.foundation/trustdidweb/#did-method-operations
+/// CAUTION This trait assumes Ed25519 authorization key pair.
 pub trait DidMethodOperation {
+    /// See https://identity.foundation/trustdidweb/#create-register
     fn create(&self, url: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> String;
+    /// See https://identity.foundation/trustdidweb/#read-resolve
     fn read(&self, did_tdw: String, allow_http: Option<bool>) -> String;
+    /// See https://identity.foundation/trustdidweb/#update-rotate
     fn update(&self, did_tdw: String, did_doc: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> String;
+    /// See https://identity.foundation/trustdidweb/#deactivate-revoke
     fn deactivate(&self, did_tdw: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> String;
 }
 
-pub trait UrlResolver: Send + Sync {
-    fn read(&self, url: String) -> String;
-    fn write(&self, url: String, content: String);
-}
-pub struct HttpClientResolver {
-    pub api_key: Option<String>
-}
-impl UrlResolver for HttpClientResolver {
-    fn read(&self, url: String) -> String {
-        let mut request = ureq::get(&url);
-        match &self.api_key {
-            Some(api_key) => {
-                request = request.set("X-API-KEY", api_key);
-            },
-            None => (),
-        };
-        match request.call() {
-            Ok(response) => match response.into_string() {
-                Ok(body) => body,
-                Err(_) => panic!("Couldn't read from url"),
-            },
-            Err(_) => panic!("Couldn't read from url"),
-        }
-    }
-    fn write(&self, url: String, content: String) {
-        let mut request = ureq::post(&url);
-        match &self.api_key {
-            Some(api_key) => {
-                request = request.set("X-API-KEY", api_key);
-            },
-            None => (),
-        };
-        match request.send_form(&[
-            ("file", &content)
-        ]) {
-            Ok(_) => (),
-            Err(e) => panic!("{}", e),
-        }
-    }
-}
-
-
-/// Convert did:tdw:{method specific identifier} method specific identifier into resolvable url
-pub fn get_scid_and_url_from_tdw(did_tdw: &String, allow_http: Option<bool>) -> (String, String) {
-    if !did_tdw.starts_with("did:tdw:") {
-        panic!("Invalid did:twd string. It has to start with did:tdw:")
-    }
-    let did_tdw: String = did_tdw.replace("did:tdw:","");
-    let (scid,did_tdw_reduced) = did_tdw.split_once(":").unwrap();
-
-    let mut decoded_url = String::from("");
-    url_escape::decode_to_string(did_tdw_reduced.replace(":", "/"), &mut decoded_url);
-    let url = match String::from_utf8(decoded_url.into_bytes()) {
-        Ok(url) => {
-            if url.starts_with("localhost") || allow_http.unwrap_or(false) {
-                format!("http://{}", url)
-            } else {
-                format!("https://{}", url)
-            }
-        },
-        Err(_) => panic!("Couldn't convert did_tdw url to utf8 string"),
-    };
-    let has_path = regex::Regex::new(r"([a-z]|[0-9])\/([a-z]|[0-9])").unwrap();
-    let has_port = regex::Regex::new(r"\:[0-9]+").unwrap();
-    if has_path.captures(url.as_str()).is_some() || has_port.captures(url.as_str()).is_some() {
-        (scid.to_string(),format!("{}/did.jsonl", url))
-    } else{
-        (scid.to_string(), format!("{}/.well-known/did.jsonl", url))
-    }
-}
-
 /// Convert domain into did:tdw:{method specific identifier} method specific identifier
-pub fn get_tdw_domain_from_url(url: &String, allow_http: Option<bool>) -> String {
+pub fn get_tdw_domain_from_url(url: &String, allow_http: Option<bool>) -> Result<String, TrustDidWebError> {
     let mut did = String::from("");
     if url.starts_with("https://") {
         did = url.replace("https://", "");
-    } else if url.starts_with("http://localhost") || allow_http.unwrap_or(false) {
+    } else if url.starts_with("http://localhost") || url.starts_with("http://127.0.0.1") || allow_http.unwrap_or(false) {
         did = url.replace("http://", "");
     } else {
-        panic!("Invalid url. Only https is supported")
+        return Err(TrustDidWebError::InvalidMethodSpecificId(String::from("Invalid url. Only https is supported")));
     }
 
     if did.contains(".well-known") {
-        panic!("Invalid url. Please remove .well-known from url")
+        return Err(TrustDidWebError::InvalidMethodSpecificId(String::from("Invalid url. Please remove .well-known from url")));
     }
     if did.contains("did.jsonl") {
-        panic!("Invalid url. Please remove did.json from url")
+        return Err(TrustDidWebError::InvalidMethodSpecificId(String::from("Invalid url. Please remove did.json from url")));
     }
     let url = did.replace(":", "%3A");
-    url.replace("/", ":")
+    Ok(url.replace("/", ":"))
 }
 
+/// Yet another UniFFI-compliant error.
+///
+/// Resembles ssi::dids::resolution::Error
+#[derive(Debug, thiserror::Error, PartialEq)]
+pub enum TrustDidWebIdResolutionError {
+    /// DID method is not supported by this resolver.
+    #[error("DID method `{0}` not supported")]
+    MethodNotSupported(String),
+    /// Invalid method-specific identifier.
+    #[error("invalid method specific identifier: {0}")]
+    InvalidMethodSpecificId(String),
+}
 
+impl TrustDidWebIdResolutionError {
+    /// Returns the error kind.
+    pub fn kind(&self) -> TrustDidWebIdResolutionErrorKind {
+        match self {
+            Self::MethodNotSupported(_) => TrustDidWebIdResolutionErrorKind::MethodNotSupported,
+            Self::InvalidMethodSpecificId(_) => TrustDidWebIdResolutionErrorKind::InvalidMethodSpecificId,
+        }
+    }
+}
 
+/// TrustDidWebIdResolutionError kind.
+///
+/// Each [`TrustDidWebIdResolutionError`] has a kind provided by the [`TrustDidWebIdResolutionErrorKind::kind`] method.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TrustDidWebIdResolutionErrorKind {
+    MethodNotSupported,
+    InvalidMethodSpecificId,
+}
+
+/// As specified at https://identity.foundation/trustdidweb/#method-specific-identifier:
+///
+/// "The did:tdw method-specific identifier contains both the self-certifying identifier (SCID) for the DID,
+/// and a fully qualified domain name (with an optional path) that is secured by a TLS/SSL certificate."
+pub struct TrustDidWebId {
+    scid: String,
+    url: String,
+    // TODO path: Option<String>
+}
+
+static HAS_PATH_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"([a-z]|[0-9])\/([a-z]|[0-9])").unwrap());
+static HAS_PORT_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\:[0-9]+").unwrap());
+
+impl TrustDidWebId {
+    /// Yet another UniFFI-compliant method.
+    ///
+    /// Otherwise, the idiomatic counterpart (try_from(value: (String, Option<bool>)) -> Result<Self, Self::Error>) may be used as well.
+    pub fn parse_did_tdw(did_tdw: String, allow_http: Option<bool>) -> Result<Self, TrustDidWebIdResolutionError> {
+        match Self::try_from((did_tdw, allow_http)) {
+            Ok(parsed) => {
+                Ok(parsed)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    pub fn get_scid(&self) -> String {
+        self.scid.clone()
+    }
+
+    pub fn get_url(&self) -> String {
+        self.url.clone()
+    }
+}
+
+/// Implementation for a tuple denoting did_twd and allow_http.
+impl TryFrom<(String, Option<bool>)> for TrustDidWebId {
+    type Error = TrustDidWebIdResolutionError;
+
+    fn try_from(value: (String, Option<bool>)) -> Result<Self, Self::Error> {
+        let did_tdw = value.0;
+        let allow_http = value.1;
+
+        match SSIDIDBuf::try_from(did_tdw.to_owned()) {
+            Ok(buf) => {
+                if !buf.method_name().starts_with(TrustDidWeb::DID_METHOD_NAME) {
+                    return Err(TrustDidWebIdResolutionError::MethodNotSupported(buf.method_name().to_owned()));
+                };
+
+                match buf.method_specific_id().split_once(":") {
+                    Some((scid, did_tdw_reduced)) => {
+                        let mut decoded_url = String::from("");
+                        url_escape::decode_to_string(did_tdw_reduced.replace(":", "/"), &mut decoded_url);
+
+                        let url = match String::from_utf8(decoded_url.into_bytes()) {
+                            Ok(url) => {
+                                if url.starts_with("localhost") || url.starts_with("127.0.0.1") || allow_http.unwrap_or(false) {
+                                    format!("http://{}", url)
+                                } else {
+                                    format!("https://{}", url)
+                                }
+                            }
+                            Err(_) => return Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(did_tdw_reduced.to_string())),
+                        };
+                        if HAS_PATH_REGEX.captures(url.as_str()).is_some() || HAS_PORT_REGEX.captures(url.as_str()).is_some() {
+                            Ok(Self { scid: scid.to_string(), url: format!("{}/did.jsonl", url) })
+                        } else {
+                            Ok(Self { scid: scid.to_string(), url: format!("{}/.well-known/did.jsonl", url) })
+                        }
+                    }
+                    None => Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(buf.method_specific_id().to_owned())),
+                }
+            }
+            Err(_) => Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(did_tdw)),
+        }
+    }
+}
+
+/// Yet another UniFFI-compliant error.
+///
+/// Resembles ssi::dids::resolution::Error
+#[derive(Debug, thiserror::Error, PartialEq)]
+pub enum TrustDidWebError {
+    /// DID method is not supported by this resolver
+    #[error("DID method `{0}` not supported")]
+    MethodNotSupported(String),
+    /// Invalid method-specific identifier
+    #[error("invalid method specific identifier: {0}")]
+    InvalidMethodSpecificId(String),
+    /// TODO Complete the docstring
+    #[error("failed to serialize to JSON: {0}")]
+    SerializationFailed(String),
+    /// The supplied did doc is invalid or contains an argument which isn't part of the did specification/recommendation
+    #[error("The supplied did doc is invalid or contains an argument which isn't part of the did specification/recommendation: {0}")]
+    DeserializationFailed(String),
+    /// Invalid (or not yet supported) operation against DID doc
+    #[error("Invalid (or not yet supported) operation against DID doc: {0}")]
+    InvalidOperation(String),
+}
+
+impl TrustDidWebError {
+    /// Returns the error kind.
+    pub fn kind(&self) -> TrustDidWebErrorKind {
+        match self {
+            Self::MethodNotSupported(_) => TrustDidWebErrorKind::MethodNotSupported,
+            Self::InvalidMethodSpecificId(_) => TrustDidWebErrorKind::InvalidMethodSpecificId,
+            Self::SerializationFailed(_) => TrustDidWebErrorKind::SerializationFailed,
+            Self::DeserializationFailed(_) => TrustDidWebErrorKind::DeserializationFailed,
+            Self::InvalidOperation(_) => TrustDidWebErrorKind::InvalidOperation,
+        }
+    }
+}
+
+/// TrustDidWebError kind.
+///
+/// Each [`TrustDidWebError`] has a kind provided by the [`TrustDidWebErrorKind::kind`] method.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TrustDidWebErrorKind {
+    MethodNotSupported,
+    InvalidMethodSpecificId,
+    SerializationFailed,
+    DeserializationFailed,
+    InvalidOperation,
+}
+
+/// TODO Doc comments missing
 pub struct TrustDidWeb {
     did: String,
     did_log: String,
@@ -602,29 +704,33 @@ impl TrustDidWeb {
         self.did_doc.clone()
     }
 
-    pub fn create(url: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Self {
+    pub fn create(url: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Result<Self, TrustDidWebError> {
         // Check if domain is valid
-        let domain = get_tdw_domain_from_url(&url, allow_http);
+        let domain = get_tdw_domain_from_url(&url, allow_http)?;
 
         // Create verification method suffix so that it can be used as part of verification method id property
         let did_tdw = format!("did:tdw:{}:{}", utils::SCID_PLACEHOLDER, domain);
+
         let key_def = json!({
             "type": utils::EDDSA_VERIFICATION_KEY_TYPE,
             "publicKeyMultibase": key_pair.verifying_key.to_multibase(),
         });
-        let key_def_jcs = jcs_from_str(&key_def.to_string()).unwrap();
+        let key_def_jcs = match jcs_from_str(&key_def.to_string()) {
+            Ok(v) => v,
+            Err(e) => return Err(TrustDidWebError::DeserializationFailed(e.to_string()))
+        };
         let mut hasher = Sha256::new();
         hasher.update(key_def_jcs);
         let key_def_hash: String = hasher.finalize().encode_hex();
         let verification_method_suffix = URL_SAFE_NO_PAD.encode(key_def_hash.as_bytes());
-        
+
         // Create verification method for subject with placeholder
         let verification_method = VerificationMethod {
             id: format!("{}#{}", &did_tdw, verification_method_suffix),
             controller: did_tdw.clone(),
             verification_type: String::from(utils::EDDSA_VERIFICATION_KEY_TYPE),
             public_key_multibase: Some(key_pair.verifying_key.to_multibase()),
-            public_key_jwk: None
+            public_key_jwk: None,
         };
         // Create initial did doc with placeholder
         let did_doc = DidDoc {
@@ -641,58 +747,75 @@ impl TrustDidWeb {
 
         // Generate SCID and replace placeholder in did doc
         let scid = generate_scid(&did_doc);
-        let did_doc_serialize = serde_json::to_string(&did_doc).unwrap();
+        let did_doc_serialize: String = match serde_json::to_string(&did_doc) {
+            Ok(v) => v,
+            Err(e) => return Err(TrustDidWebError::SerializationFailed(e.to_string()))
+        };
         let did_doc_with_scid = str::replace(&did_doc_serialize, utils::SCID_PLACEHOLDER, &scid);
-        // let did_doc_with_scid = re.replace_all(&did_doc_serialize, &scid).to_string();
-        let genesis_did_doc: DidDoc = serde_json::from_str(&did_doc_with_scid).unwrap();
+        let genesis_did_doc: DidDoc = match serde_json::from_str(&did_doc_with_scid) {
+            Ok(v) => v,
+            Err(e) => return Err(TrustDidWebError::DeserializationFailed(e.to_string()))
+        };
 
         let log_without_proof_and_signature = DidLogEntry::of(
             scid.to_owned(),
             DidMethodParameters::for_genesis_did_doc(scid.to_owned()),
-            genesis_did_doc.clone()
+            genesis_did_doc.clone(),
         );
 
         // Initialize did log with genesis did doc
         let mut did_log: DidDocumentState = DidDocumentState::new();
-        let controller = genesis_did_doc.controller.first().unwrap();
-        did_log.update(log_without_proof_and_signature,&controller , key_pair);
-        let genesis_str = serde_json::to_string(&genesis_did_doc).unwrap();
-        Self {
+        let controller: &String = match genesis_did_doc.controller.first() {
+            Some(v) => v,
+            _ => return Err(TrustDidWebError::DeserializationFailed("genesis did doc controller is empty".to_string()))
+        };
+        did_log.update(log_without_proof_and_signature, &controller, key_pair);
+        let genesis_str = match serde_json::to_string(&genesis_did_doc) {
+            Ok(v) => v,
+            Err(e) => return Err(TrustDidWebError::SerializationFailed(e.to_string()))
+        };
+
+        Ok(Self {
             did: genesis_did_doc.id,
             did_log: did_log.to_string(),
-            did_doc: genesis_str
-        }
+            did_doc: genesis_str,
+        })
     }
 
-    pub fn read(did_tdw: String, allow_http: Option<bool>) -> Self {
-        let (scid, url) = get_scid_and_url_from_tdw(&did_tdw, allow_http);
-        let resolver = HttpClientResolver {
-            api_key: Option::None,
+    pub fn read(did_tdw: String, did_log: String, allow_http: Option<bool>) -> Result<Self, TrustDidWebError> {
+        let did_doc_state = DidDocumentState::from(did_log);
+        let scid = match TrustDidWebId::parse_did_tdw(did_tdw.to_owned(), allow_http) {
+            Ok(tdw_id) => { tdw_id.get_scid() }
+            Err(e) => return Err(TrustDidWebError::InvalidMethodSpecificId(e.to_string())),
         };
-        let did_log_raw = resolver.read(url);
-        let did_doc_state = DidDocumentState::from(did_log_raw);
-        let did_doc_arc = did_doc_state.validate_with_scid(Some(scid));
+        let did_doc_arc = did_doc_state.validate_with_scid(Some(scid.to_owned())); // may panic
         let did_doc = did_doc_arc.as_ref().clone();
-        let did_doc_str = serde_json::to_string(&did_doc).unwrap();
-        Self {
+        let did_doc_str = match serde_json::to_string(&did_doc) {
+            Ok(v) => v,
+            Err(e) => return Err(TrustDidWebError::SerializationFailed(e.to_string()))
+        };
+        Ok(Self {
             did: did_doc.id,
             did_log: did_doc_state.to_string(),
-            did_doc: did_doc_str
-        }
+            did_doc: did_doc_str,
+        })
     }
 
-    pub fn update(did_tdw: String, did_log: String, did_doc: String,  key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Self {
+    pub fn update(did_tdw: String, did_log: String, did_doc: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Result<Self, TrustDidWebError> {
         let mut did_doc_state = DidDocumentState::from(did_log);
-        let (scid, _) = get_scid_and_url_from_tdw(&did_tdw, allow_http);
+        let scid = match TrustDidWebId::parse_did_tdw(did_tdw.to_owned(), allow_http) {
+            Ok(tdw_id) => { tdw_id.get_scid() }
+            Err(e) => return Err(TrustDidWebError::InvalidMethodSpecificId(e.to_string())),
+        };
         let current_did_doc = did_doc_state.validate_with_scid(Some(scid));
         let update_did_doc: DidDoc = match serde_json::from_str(&did_doc) {
             Ok(doc) => doc,
-            Err(_) => panic!("The did doc you provided is invalid or contains an argument which isn't part of the did specification/recommendation"),
+            Err(e) => return Err(TrustDidWebError::DeserializationFailed(e.to_string()))
         };
 
         // TODO right now did can't be changed
         if current_did_doc.id != update_did_doc.id {
-            panic!("Invalid did doc. The did doc id has to match the did_tdw")
+            return Err(TrustDidWebError::InvalidOperation("Invalid DID doc. The DID doc id has to match the did_tdw".to_string()));
         }
 
         let current_entry = did_doc_state.current();
@@ -700,93 +823,67 @@ impl TrustDidWeb {
             current_entry.entry_hash.clone(),
             // TODO make parameters configurable
             DidMethodParameters::empty(),
-            update_did_doc.clone()
+            update_did_doc.clone(),
         );
         did_doc_state.update(update_entry, &did_tdw, key_pair);
-        let did_doc_str = serde_json::to_string(&update_did_doc).unwrap();
-        Self {
+        let did_doc_str = match serde_json::to_string(&update_did_doc) {
+            Ok(v) => v,
+            Err(e) => return Err(TrustDidWebError::SerializationFailed(e.to_string()))
+        };
+
+        Ok(Self {
             did: update_did_doc.id,
             did_log: did_doc_state.to_string(),
-            did_doc: did_doc_str
-        }
+            did_doc: did_doc_str,
+        })
     }
 
-    pub fn deactivate(did_tdw: String, did_log: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Self {
+    /// It  https://identity.foundation/trustdidweb/#deactivate-revoke
+    pub fn deactivate(did_tdw: String, did_log: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Result<Self, TrustDidWebError> {
         let mut did_doc_state = DidDocumentState::from(did_log);
-        let (scid,_) = get_scid_and_url_from_tdw(&did_tdw, allow_http);
+        let scid = match TrustDidWebId::parse_did_tdw(did_tdw.to_owned(), allow_http) {
+            Ok(tdw_id) => { tdw_id.get_scid() }
+            Err(e) => return Err(TrustDidWebError::InvalidMethodSpecificId(e.to_string())),
+        };
         let mut current_did_doc = did_doc_state.validate_with_scid(Some(scid)).as_ref().clone();
-        
+
         // Mark did doc as deactivated and set did log parameters accordingly
         current_did_doc.deactivated = Some(true);
         let current_entry = did_doc_state.current();
         let update_entry = DidLogEntry::of(
             current_entry.entry_hash.clone(),
             DidMethodParameters::deactivate(),
-            current_did_doc.clone()
+            current_did_doc.clone(),
         );
         did_doc_state.update(update_entry, &did_tdw, key_pair);
-        let did_doc_str = serde_json::to_string(&current_did_doc).unwrap();
-        Self {
+        let did_doc_str = match serde_json::to_string(&current_did_doc) {
+            Ok(v) => v,
+            Err(e) => return Err(TrustDidWebError::SerializationFailed(e.to_string()))
+        };
+
+        Ok(Self {
             did: current_did_doc.id,
             did_log: did_doc_state.to_string(),
-            did_doc: did_doc_str
-        }
+            did_doc: did_doc_str,
+        })
     }
 }
 
-pub struct TrustDidWebProcessor {
-    resolver: Box<dyn UrlResolver>,
+impl SSIDIDMethod for TrustDidWeb {
+    const DID_METHOD_NAME: &'static str = "tdw";
 }
 
-impl DidMethodOperation for TrustDidWebProcessor {
-
-    fn create(&self, url: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> String {
-        let tdw = TrustDidWeb::create(url, key_pair, allow_http);
-        self.resolver.write(get_scid_and_url_from_tdw(&tdw.did, allow_http).1, tdw.did_log);
-        tdw.did
-    }
-
-    fn read(&self, did_tdw: String, allow_http: Option<bool>) -> String {
-        let (scid, url) = get_scid_and_url_from_tdw(&did_tdw, allow_http);
-        let did_log_raw = self.resolver.read(url);
-        let did_doc_state = DidDocumentState::from(did_log_raw);
-        let did_doc = did_doc_state.validate_with_scid(Some(scid));
-        serde_json::to_string(&did_doc.as_ref()).unwrap()
-    }
-
-    fn update(&self, did_tdw: String, did_doc: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> String {
-        let (_, url) = get_scid_and_url_from_tdw(&did_tdw, allow_http);
-        let did_log_raw = self.resolver.read(url);
-        let tdw = TrustDidWeb::update(did_tdw.clone(),did_log_raw, did_doc, key_pair, allow_http);
-        self.resolver.write(get_scid_and_url_from_tdw(&did_tdw, allow_http).1, tdw.did_log);
-        tdw.did_doc
-    }
-
-    fn deactivate(&self, did_tdw: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> String {
-        let (_, url) = get_scid_and_url_from_tdw(&did_tdw, allow_http);
-        let did_log_raw = self.resolver.read(url);
-        let tdw = TrustDidWeb::deactivate(did_tdw.clone(), did_log_raw, key_pair, allow_http);
-        self.resolver.write(get_scid_and_url_from_tdw(&did_tdw, allow_http).1, tdw.did_log);
-        tdw.did_doc
+impl SSIDIDMethodResolver for TrustDidWeb {
+    async fn resolve_method_representation<'a>(
+        &'a self,
+        method_specific_id: &'a str,
+        options: SSIOptions,
+    ) -> Result<SSIOutput<Vec<u8>>, SSIResolutionError> {
+        // TODO Implement DIDMethodResolver for TrustDidWeb
+        todo!()
     }
 }
 
-
-fn generate_jcs_hash(json: &str) -> String {
-    match jcs_to_string(&json) {
-        Ok(jcs) => {
-            let mut hasher = Sha256::new();
-            hasher.update(jcs.as_bytes());
-            let hash: String = hasher.finalize().encode_hex();
-            let b32_encoded = base32_encode(Alphabet::Rfc4648Lower { padding: true }, hash.as_bytes());
-            if b32_encoded.len() < utils::SCID_MIN_LENGTH {
-                panic!("Invalid scid length. A minimum of {} is required", utils::SCID_MIN_LENGTH);
-            }
-            return b32_encoded;
-        },
-        Err(_) => panic!("Invalid json couldn't canonicalize"),
-    }
-}
 
 /// Generates an SCID (self certifying identifier) based on the initial DiDoC.
 /// This function is used as well in the initial generation as in the verification
@@ -796,20 +893,5 @@ fn generate_scid(did_doc: &DidDoc) -> String {
         panic!("Invalid did:tdw document. SCID placeholder not found");
     }
     let json = serde_json::to_string(did_doc).unwrap();
-    generate_jcs_hash(&json)
-}
-
-impl TrustDidWebProcessor {
-    
-    pub fn new_with_api_key(api_key: String) -> Self {
-        TrustDidWebProcessor {
-            resolver: Box::new(HttpClientResolver{api_key: Some(api_key)})
-        }
-    }
-
-    pub fn new() -> Self {
-        TrustDidWebProcessor {
-            resolver: Box::new(HttpClientResolver{api_key: None})
-        }
-    }
+    utils::generate_jcs_hash(&json)
 }

@@ -2,24 +2,56 @@
 namespace didtoolbox {
 };
 
-interface TrustDidWebProcessor {
-    constructor();
-    [Name=new_with_api_key]
-    constructor(string api_key);
-    string create(string url, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
-    string read(string did_tdw, boolean? allow_http);
-    string update(string did_tdw, string did_doc, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
-    string deactivate(string did_tdw, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
+/// The error accompanying TrustDidWebId.
+/// It might occur while calling TrustDidWebId methods.
+[Error]
+enum TrustDidWebIdResolutionError {
+    /// DID method is not supported by this resolver.
+    "MethodNotSupported",
+    /// Invalid method-specific identifier.
+    "InvalidMethodSpecificId"
+};
+
+/// Represents a TDW DID, as specified at https://identity.foundation/trustdidweb/#method-specific-identifier:
+///
+/// "The did:tdw method-specific identifier contains both the self-certifying identifier (SCID) for the DID,
+/// and a fully qualified domain name (with an optional path) that is secured by a TLS/SSL certificate."
+interface TrustDidWebId {
+    /// The only (non-empty) constructor in charge of DID parsing.
+    ///
+    /// CAUTION Calling any of the available getters should take place after this method is called, not earlier.
+    [Name=parse_did_tdw, Throws=TrustDidWebIdResolutionError]
+    constructor(string did_tdw, boolean? allow_http);
+    /// Returns the SCID part from the supplied DID.
+    string get_scid();
+    /// Returns the url part from the supplied TDW DID.
+    string get_url();
+};
+
+/// The error accompanying TrustDidWeb.
+/// It might occur while calling TrustDidWeb methods.
+[Error]
+enum TrustDidWebError {
+    /// DID method is not supported by this resolver.
+    "MethodNotSupported",
+    /// Invalid method-specific identifier.
+    "InvalidMethodSpecificId",
+    /// TODO Complete this docstring
+    "SerializationFailed",
+    /// The supplied did doc is invalid or contains an argument which isn't part of the did specification/recommendation.
+    "DeserializationFailed",
+    /// Invalid (or not yet supported) operation against DID doc.
+    "InvalidOperation"
 };
 
 interface TrustDidWeb {
-    [Name=create]
+    [Name=create, Throws=TrustDidWebError]
     constructor(string url, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
-    [Name=read]
-    constructor(string did_tdw, boolean? allow_http);
-    [Name=update]
+    [Name=read, Throws=TrustDidWebError]
+    constructor(string did_tdw, string did_log, boolean? allow_http);
+    [Name=update, Throws=TrustDidWebError]
     constructor(string did_tdw, string did_log, string did_doc, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
-    [Name=deactivate]
+    [Name=deactivate, Throws=TrustDidWebError]
     constructor(string did_tdw, string did_log, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
     string get_did();
     string get_did_log();
@@ -29,7 +61,7 @@ interface TrustDidWeb {
 interface Ed25519Signature {
     [Name=from_multibase]
     constructor([ByRef] string multibase);
-    string to_multibase();  
+    string to_multibase();
 };
 
 interface Ed25519SigningKey {
