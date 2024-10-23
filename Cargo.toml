@@ -1,10 +1,10 @@
 [package]
 name = "didtoolbox"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
 license = "MIT"
 description = "Toolbox containtin did:tdw"
-authors = ["Frithjof Hoppe"]
+authors = ["Frithjof Hoppe", "Vladica Stojic"]
 homepage = "https://github.com/e-id-admin"
 readme = "README.md"
 include = [
@@ -16,28 +16,34 @@ include = [
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-uniffi = { version = "0.26.1", features = ["cli"] }
-serde = {version = "1.0.202", features = ["derive"]}
-serde_json = {version = "1.0.117", features = ["preserve_order"]}
+uniffi = { version = "0.28.2", features = ["cli"] }
+serde = { version = "1.0.213", features = ["derive"] }
+serde_json = { version = "1.0.132", features = ["preserve_order"] }
 serde_jcs = "0.1.0"
-chrono = {version = "0.4.38", features = ["serde"]}
+chrono = { version = "0.4.38", features = ["serde"] }
 ed25519-dalek = { version = "2.1.1", features = ["rand_core"] }
 rand = "0.8.5"
 base64 = "0.22.1"
-rstest = "0.19.0"
 sha2 = "0.10.8"
 hex-literal = "0.4.1"
 hex = "0.4.3"
 base32 = "0.5.0"
 regex = "1.10.4"
-ureq = "2.9.7"
 url-escape = "0.1.1"
+bs58 = { version = "0.5.1", features = ["check", "cb58"] }
+ssi = { version = "0.9.0", features = ["example", "http-did"] }
+thiserror = "1.0.65"
 
 [build-dependencies]
-uniffi = { version = "0.26.1", features = ["build"] }
+uniffi = { version = "0.28.2", features = ["build"] }
+
+[dev-dependencies]
+rstest = "0.23.0"
+mockito = "1.5.0"
+ureq = "2.10.1"
 
 [lib]
-crate-type = ["lib","cdylib","staticlib"]
+crate-type = ["lib", "cdylib", "staticlib"]
 name = "didtoolbox"
 
 [[bin]]

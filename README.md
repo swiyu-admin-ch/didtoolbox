@@ -41,7 +41,7 @@ fn main() {
         base_url,
         &key_pair,
         Some(false)
-    );
+    ).unwrap();
 
     // Updating the did document by adding a new verification method
     let did_doc_v1_str = tdw_v1.get_did_doc();
@@ -58,7 +58,7 @@ fn main() {
         "publicKeyMultibase": "<some fancy multibase encoded public key>"
     }));
     let did_doc_v2_str = did_doc_v1.to_string();
-    let tdw_v2 = TrustDidWeb::update(tdw_v1.get_did(),tdw_v1.get_did_log(), did_doc_v2_str, &key_pair);
+    let tdw_v2 = TrustDidWeb::update(tdw_v1.get_did(),tdw_v1.get_did_log(), did_doc_v2_str, &key_pair).unwrap();
     println!("DID Doc v2: {}", tdw_v2.get_did_doc());
 }
 
