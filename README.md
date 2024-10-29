@@ -64,5 +64,10 @@ fn main() {
 
 ```
 
+## Changelog
+| Version | Description                                                                                                                                                                                               |
+|---------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 0.0.3   | **BREAKING CHANGE** `TrustDidWebProcessor` discontinued. <br/>Signature of the `read` method now also requires a DID log (as string).<br/> All `TrustDidWeb` methods may now throw new `TrustDidWebError` |
+
 ## License
 This project is licensed under the terms of the MIT license. See the [LICENSE](LICENSE.md) file for details.
