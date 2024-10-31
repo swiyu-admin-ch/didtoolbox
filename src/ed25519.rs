@@ -20,7 +20,7 @@ impl Base64MultiBaseConverter for Ed25519Signature {
 
     fn from_multibase(multibase: &str) -> Self {
         let mut signature_bytes: [u8; SIGNATURE_LENGTH] = [0; SIGNATURE_LENGTH];
-        utils::convert_from_multibase_base64(multibase, &mut signature_bytes);
+        utils::convert_from_multibase_base64(multibase, &mut signature_bytes); // may panic
         Ed25519Signature {
             signature: Signature::from_bytes(&signature_bytes),
         }
@@ -40,7 +40,7 @@ impl Base64MultiBaseConverter for Ed25519SigningKey {
 
     fn from_multibase(multibase: &str) -> Self {
         let mut public_key_bytes: [u8; SECRET_KEY_LENGTH] = [0; SECRET_KEY_LENGTH];
-        utils::convert_from_multibase_base64(multibase, &mut public_key_bytes);
+        utils::convert_from_multibase_base64(multibase, &mut public_key_bytes); // may panic
         Ed25519SigningKey {
             signing_key: SigningKey::from_bytes(&mut public_key_bytes),
         }
@@ -119,7 +119,7 @@ impl Ed25519KeyPair {
 
     pub fn from(signing_key_multibase: &str) -> Self {
         let mut signing_key_bytes: [u8; SECRET_KEY_LENGTH] = [0; SECRET_KEY_LENGTH];
-        utils::convert_from_multibase_base64(signing_key_multibase, &mut signing_key_bytes);
+        utils::convert_from_multibase_base64(signing_key_multibase, &mut signing_key_bytes); // may panic
         let signing_key = SigningKey::from_bytes(&mut signing_key_bytes);
         Ed25519KeyPair {
             verifying_key: Ed25519VerifyingKey::new(signing_key.verifying_key()),

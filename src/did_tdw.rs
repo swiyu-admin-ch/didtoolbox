@@ -102,7 +102,7 @@ impl DidLogEntry {
     /// Check wether the integrity proof matches the content of the did document of this log entry
     pub fn verify_data_integrity_proof(&self) {
         // Verify data integrity proof 
-        let verifying_key = self.get_data_integrity_verifying_key();
+        let verifying_key = self.get_data_integrity_verifying_key(); // may panic
 
         // Check if verifying key is actually a controller and therefore allowed to update the doc => valid key to create the proof
         let controller_keys = self.get_controller_verifying_key();
@@ -341,10 +341,10 @@ impl DidDocumentState {
                         panic!("Invalid did log for version {}. Version id has to be incremented", entry.version_id.unwrap())
                     }
                     // Verify data integrity proof
-                    entry.verify_data_integrity_proof();
+                    entry.verify_data_integrity_proof(); // may panic
 
                     // Verify the entryHash
-                    entry.verify_entry_hash_integrity(&prev.entry_hash);
+                    entry.verify_entry_hash_integrity(&prev.entry_hash); // may panic
                     previous_entry = Some(entry.clone());
                 }
                 None => {
@@ -354,9 +354,9 @@ impl DidDocumentState {
                         panic!("Invalid did log. First entry has to have version id 1")
                     }
                     // Verify data integrity proof
-                    genesis_entry.verify_data_integrity_proof();
+                    genesis_entry.verify_data_integrity_proof(); // may panic
                     // Verify the entryHash
-                    genesis_entry.verify_entry_hash_integrity(genesis_entry.parameters.scid.as_ref().unwrap());
+                    genesis_entry.verify_entry_hash_integrity(genesis_entry.parameters.scid.as_ref().unwrap()); // may panic
                     // Verify that the SCID is correct
                     let doc_string = serde_json::to_string(&genesis_entry.did_doc).unwrap();
                     let scid = genesis_entry.parameters.scid.clone().unwrap();
@@ -383,7 +383,7 @@ impl DidDocumentState {
 
     /// Checks if all entries in the did log are valid (data integrity, versioning etc.)
     pub fn validate(&self) -> Arc<DidDoc> {
-        self.validate_with_scid(None)
+        self.validate_with_scid(None) // may panic
     }
 
     /// Add a new entry to the did log file
@@ -403,7 +403,7 @@ impl DidDocumentState {
             if log_entry.entry_hash.len() == 0 {
                 panic!("For the initial log entry the SCID/previous hash has to be provided")
             }
-            log_entry.check_if_verification_method_match_public_key(did_tdw, key_pair.get_verifying_key().as_ref());
+            log_entry.check_if_verification_method_match_public_key(did_tdw, key_pair.get_verifying_key().as_ref()); // may panic
             verification_method = log_entry.get_controller_verifying_key().get(did_tdw).unwrap().0.clone();
         } else {
             // Subsequent entry (Update)
@@ -430,7 +430,7 @@ impl DidDocumentState {
             index = previous_entry.version_id.unwrap() + 1;
             // Get last version hash
             previous_hash = previous_entry.entry_hash.clone();
-            previous_entry.check_if_verification_method_match_public_key(did_tdw, key_pair.get_verifying_key().as_ref());
+            previous_entry.check_if_verification_method_match_public_key(did_tdw, key_pair.get_verifying_key().as_ref()); // may panic
             verification_method = log_entry.get_controller_verifying_key().get(did_tdw).unwrap().0.clone();
         }
 
@@ -769,7 +769,7 @@ impl TrustDidWeb {
             Some(v) => v,
             _ => return Err(TrustDidWebError::DeserializationFailed("genesis did doc controller is empty".to_string()))
         };
-        did_log.update(log_without_proof_and_signature, &controller, key_pair);
+        did_log.update(log_without_proof_and_signature, &controller, key_pair); // may panic
         let genesis_str = match serde_json::to_string(&genesis_did_doc) {
             Ok(v) => v,
             Err(e) => return Err(TrustDidWebError::SerializationFailed(e.to_string()))
@@ -783,7 +783,7 @@ impl TrustDidWeb {
     }
 
     pub fn read(did_tdw: String, did_log: String, allow_http: Option<bool>) -> Result<Self, TrustDidWebError> {
-        let did_doc_state = DidDocumentState::from(did_log);
+        let did_doc_state = DidDocumentState::from(did_log); // may panic
         let scid = match TrustDidWebId::parse_did_tdw(did_tdw.to_owned(), allow_http) {
             Ok(tdw_id) => { tdw_id.get_scid() }
             Err(e) => return Err(TrustDidWebError::InvalidMethodSpecificId(e.to_string())),
@@ -802,12 +802,12 @@ impl TrustDidWeb {
     }
 
     pub fn update(did_tdw: String, did_log: String, did_doc: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Result<Self, TrustDidWebError> {
-        let mut did_doc_state = DidDocumentState::from(did_log);
+        let mut did_doc_state = DidDocumentState::from(did_log); // may panic
         let scid = match TrustDidWebId::parse_did_tdw(did_tdw.to_owned(), allow_http) {
             Ok(tdw_id) => { tdw_id.get_scid() }
             Err(e) => return Err(TrustDidWebError::InvalidMethodSpecificId(e.to_string())),
         };
-        let current_did_doc = did_doc_state.validate_with_scid(Some(scid));
+        let current_did_doc = did_doc_state.validate_with_scid(Some(scid)); // may panic
         let update_did_doc: DidDoc = match serde_json::from_str(&did_doc) {
             Ok(doc) => doc,
             Err(e) => return Err(TrustDidWebError::DeserializationFailed(e.to_string()))
@@ -825,7 +825,7 @@ impl TrustDidWeb {
             DidMethodParameters::empty(),
             update_did_doc.clone(),
         );
-        did_doc_state.update(update_entry, &did_tdw, key_pair);
+        did_doc_state.update(update_entry, &did_tdw, key_pair); // may panic
         let did_doc_str = match serde_json::to_string(&update_did_doc) {
             Ok(v) => v,
             Err(e) => return Err(TrustDidWebError::SerializationFailed(e.to_string()))
@@ -840,12 +840,12 @@ impl TrustDidWeb {
 
     /// It  https://identity.foundation/trustdidweb/#deactivate-revoke
     pub fn deactivate(did_tdw: String, did_log: String, key_pair: &Ed25519KeyPair, allow_http: Option<bool>) -> Result<Self, TrustDidWebError> {
-        let mut did_doc_state = DidDocumentState::from(did_log);
+        let mut did_doc_state = DidDocumentState::from(did_log); // may panic
         let scid = match TrustDidWebId::parse_did_tdw(did_tdw.to_owned(), allow_http) {
             Ok(tdw_id) => { tdw_id.get_scid() }
             Err(e) => return Err(TrustDidWebError::InvalidMethodSpecificId(e.to_string())),
         };
-        let mut current_did_doc = did_doc_state.validate_with_scid(Some(scid)).as_ref().clone();
+        let mut current_did_doc = did_doc_state.validate_with_scid(Some(scid)).as_ref().clone(); // may panic
 
         // Mark did doc as deactivated and set did log parameters accordingly
         current_did_doc.deactivated = Some(true);
@@ -855,7 +855,7 @@ impl TrustDidWeb {
             DidMethodParameters::deactivate(),
             current_did_doc.clone(),
         );
-        did_doc_state.update(update_entry, &did_tdw, key_pair);
+        did_doc_state.update(update_entry, &did_tdw, key_pair); // may panic
         let did_doc_str = match serde_json::to_string(&current_did_doc) {
             Ok(v) => v,
             Err(e) => return Err(TrustDidWebError::SerializationFailed(e.to_string()))

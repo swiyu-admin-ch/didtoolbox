@@ -230,7 +230,7 @@ mod test {
 
         // The (new) interface (since EIDSYS-262).
         let tdw = TrustDidWeb::read(tdw_mock.get_did(), did_log_raw, Some(false)).unwrap();
-        let did_doc = DidDoc::from_json(&tdw.get_did_doc());
+        let did_doc = DidDoc::from_json(&tdw.get_did_doc()); // may panic
 
         assert_eq!(did_doc.id, tdw.get_did());
         assert!(!did_doc.verification_method.is_empty());
