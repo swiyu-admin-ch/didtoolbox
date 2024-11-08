@@ -692,6 +692,18 @@ pub struct TrustDidWeb {
 }
 
 impl TrustDidWeb {
+
+    /// NOT UniFFI-compliant constructor.
+    pub fn new(did: String,
+               did_log: String,
+               did_doc: String) -> Self {
+        Self {
+            did: did,
+            did_log: did_log,
+            did_doc: did_doc
+        }
+    }
+
     pub fn get_did(&self) -> String {
         self.did.clone()
     }
@@ -888,7 +900,7 @@ impl SSIDIDMethodResolver for TrustDidWeb {
 /// Generates an SCID (self certifying identifier) based on the initial DiDoC.
 /// This function is used as well in the initial generation as in the verification
 /// process of the DidDoc log file
-fn generate_scid(did_doc: &DidDoc) -> String {
+pub fn generate_scid(did_doc: &DidDoc) -> String {
     if !did_doc.id.contains(utils::SCID_PLACEHOLDER) {
         panic!("Invalid did:tdw document. SCID placeholder not found");
     }

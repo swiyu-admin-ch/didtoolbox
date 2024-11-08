@@ -8,6 +8,7 @@ pub mod did_tdw;
 use crate::didtoolbox::*;
 use crate::ed25519::*;
 use crate::did_tdw::*;
+use crate::utils::*;
 use rand::{Rng}; // 0.8
 
 uniffi::include_scaffolding!("didtoolbox");
@@ -27,6 +28,7 @@ mod test {
     use super::didtoolbox::*;
     use super::ed25519::*;
     use super::did_tdw::*;
+    use super::utils::*;
     use rstest::{fixture, rstest};
     use serde_json::{json, Value};
     use sha2::{Sha256, Digest};
@@ -217,6 +219,46 @@ mod test {
             Err(e) => assert_eq!(e.kind(), TrustDidWebErrorKind::InvalidMethodSpecificId),
             _ => (),
         }
+    }
+
+    #[rstest]
+    fn test_generate_scid() {
+        let did_doc = DidDoc {
+            //context: vec![DID_CONTEXT.to_string(), MKEY_CONTEXT.to_string()],
+            context: vec![],
+            id: String::from(SCID_PLACEHOLDER),
+            verification_method: vec![],
+            authentication: vec![],
+            capability_invocation: vec![],
+            capability_delegation: vec![],
+            assertion_method: vec![],
+            //controller: vec![format!("did:tdw:{}:{}", SCID_PLACEHOLDER, "domain")],
+            controller: vec![],
+            deactivated: None,
+        };
+
+        let scid = generate_scid(&did_doc);
+        //let scid_str = scid.as_str();
+        assert_eq!(scid.len(), 93);
+        assert_eq!(scid, "7xbXB9W593YjYbJ7Fwo6mkwVhZrWa4bz1sSvq56zVL9oXoCsCJpmQg6PqHUiB4JU6CW1kQA7QehEE52CFFzpkYSBGVDPH")
+    }
+
+    #[rstest]
+    #[should_panic(expected = "Invalid did:tdw document. SCID placeholder not found")]
+    fn test_generate_scid_panic() {
+        let did_doc = DidDoc {
+            context: vec![DID_CONTEXT.to_string(), MKEY_CONTEXT.to_string()],
+            id: String::from(""),
+            verification_method: vec![],
+            authentication: vec![],
+            capability_invocation: vec![],
+            capability_delegation: vec![],
+            assertion_method: vec![],
+            controller: vec![format!("did:tdw:{}:{}", SCID_PLACEHOLDER, "domain")],
+            deactivated: None,
+        };
+
+        generate_scid(&did_doc);
     }
 
     #[rstest]
