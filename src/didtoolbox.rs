@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 /// Entry in an did log file as shown here
@@ -55,11 +54,10 @@ impl Clone for VerificationMethod {
             controller: self.controller.clone(),
             verification_type: self.verification_type.clone(),
             public_key_multibase: self.public_key_multibase.clone(),
-            public_key_jwk: self.public_key_jwk.clone()
+            public_key_jwk: self.public_key_jwk.clone(),
         }
     }
 }
-
 
 // See      https://www.w3.org/TR/did-core/#dfn-did-documents
 // Examples https://www.w3.org/TR/did-core/#did-documents
@@ -137,7 +135,10 @@ impl DidDoc {
         let did_doc: DidDoc = match serde_json::from_str(json_content) {
             Ok(did_doc) => did_doc,
             Err(e) => {
-                panic!("Error parsing DID Document. Make sure the content is correct -> {}", e);
+                panic!(
+                    "Error parsing DID Document. Make sure the content is correct -> {}",
+                    e
+                );
             }
         };
         did_doc

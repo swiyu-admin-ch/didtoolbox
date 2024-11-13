@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 
+use crate::utils;
 use base32::{decode as base32_decode, encode as base32_encode, Alphabet};
 use bs58::{decode as base58_decode, encode as base58_encode, Alphabet as Alphabet58};
 use hex;
 use hex::ToHex;
-use serde_jcs::{to_vec as jcs_from_str, to_string as jcs_to_string};
+use serde_jcs::{to_string as jcs_to_string, to_vec as jcs_from_str};
 use sha2::{Digest, Sha256};
-use crate::utils;
 
 pub const DID_CONTEXT: &str = "https://www.w3.org/ns/did/v1";
 pub const MKEY_CONTEXT: &str = "https://w3id.org/security/multikey/v1";
@@ -58,10 +58,13 @@ pub fn generate_jcs_hash(json: &str) -> String {
                 .as_cb58(None)
                 .into_string();
             if encoded.len() < utils::SCID_MIN_LENGTH {
-                panic!("Invalid scid length. A minimum of {} is required", utils::SCID_MIN_LENGTH);
+                panic!(
+                    "Invalid scid length. A minimum of {} is required",
+                    utils::SCID_MIN_LENGTH
+                );
             }
             return encoded;
-        },
+        }
         Err(_) => panic!("Invalid json couldn't canonicalize"),
     }
 }
