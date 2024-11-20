@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MIT
 use std::sync::Arc;
 
-use ed25519_dalek::{SigningKey, Signature, Signer, Verifier, VerifyingKey, SECRET_KEY_LENGTH, PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
-use rand::rngs::OsRng;
 use crate::utils;
+use ed25519_dalek::{
+    Signature, Signer, SigningKey, Verifier, VerifyingKey, PUBLIC_KEY_LENGTH, SECRET_KEY_LENGTH,
+    SIGNATURE_LENGTH,
+};
+use rand::rngs::OsRng;
 pub trait Base64MultiBaseConverter {
     fn to_multibase(&self) -> String;
     fn from_multibase(multibase: &str) -> Self;
@@ -47,17 +50,13 @@ impl Base64MultiBaseConverter for Ed25519SigningKey {
     }
 }
 impl Ed25519SigningKey {
-    pub fn new (signing_key: SigningKey) -> Self {
-        Ed25519SigningKey {
-            signing_key,
-        }
+    pub fn new(signing_key: SigningKey) -> Self {
+        Ed25519SigningKey { signing_key }
     }
 
     pub fn sign(&self, message: String) -> Arc<Ed25519Signature> {
         let signature = self.signing_key.sign(message.as_bytes());
-        Ed25519Signature {
-            signature,
-        }.into()
+        Ed25519Signature { signature }.into()
     }
 }
 
@@ -81,7 +80,7 @@ impl Base64MultiBaseConverter for Ed25519VerifyingKey {
         // therefore "+2" is added to the length of the multibase public key
         let mut public_key_with_prefix: [u8; PUBLIC_KEY_LENGTH + 2] = [0; PUBLIC_KEY_LENGTH + 2];
         utils::convert_from_multibase_base64(multibase, &mut public_key_with_prefix);
-        
+
         let mut public_key: [u8; PUBLIC_KEY_LENGTH] = [0; PUBLIC_KEY_LENGTH];
         public_key.copy_from_slice(&public_key_with_prefix[2..]);
 
@@ -95,9 +94,7 @@ impl Base64MultiBaseConverter for Ed25519VerifyingKey {
 }
 impl Ed25519VerifyingKey {
     pub fn new(verifying_key: VerifyingKey) -> Self {
-        Ed25519VerifyingKey {
-            verifying_key,
-        }
+        Ed25519VerifyingKey { verifying_key }
     }
 }
 
@@ -123,7 +120,7 @@ impl Ed25519KeyPair {
         let signing_key = SigningKey::from_bytes(&mut signing_key_bytes);
         Ed25519KeyPair {
             verifying_key: Ed25519VerifyingKey::new(signing_key.verifying_key()),
-            signing_key: Ed25519SigningKey::new(signing_key)
+            signing_key: Ed25519SigningKey::new(signing_key),
         }
     }
 
@@ -138,5 +135,4 @@ impl Ed25519KeyPair {
     pub fn sign(&self, message: String) -> Arc<Ed25519Signature> {
         self.signing_key.sign(message)
     }
-
 }

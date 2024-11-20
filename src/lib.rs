@@ -1,36 +1,38 @@
 // SPDX-License-Identifier: MIT
+pub mod did_tdw;
 pub mod didtoolbox;
+pub mod ed25519;
 pub mod utils;
 pub mod vc_data_integrity;
-pub mod ed25519;
-pub mod did_tdw;
 
+use crate::did_tdw::*;
 use crate::didtoolbox::*;
 use crate::ed25519::*;
-use crate::did_tdw::*;
-use rand::{Rng}; // 0.8
+use crate::utils::*;
+use rand::Rng; // 0.8
 
 uniffi::include_scaffolding!("didtoolbox");
 
 #[cfg(test)]
 mod test {
-    use std::borrow::BorrowMut;
-    use std::borrow::Borrow;
-    use base64::{Engine as _};
-    use core::panic;
-    use hex::ToHex;
-    use std::ops::Index;
-    use std::vec;
-    use mockito::{Server, ServerOpts, Matcher};
-    use rand::distributions::Alphanumeric;
-    use rand::Rng;
+    use super::did_tdw::*;
     use super::didtoolbox::*;
     use super::ed25519::*;
-    use super::did_tdw::*;
+    use super::utils::*;
+    use base64::Engine as _;
+    use core::panic;
+    use hex::ToHex;
+    use mockito::{Matcher, Server, ServerOpts};
+    use rand::distributions::Alphanumeric;
+    use rand::Rng;
     use rstest::{fixture, rstest};
     use serde_json::{json, Value};
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
     use ssi::json_ld::syntax::BorrowUnordered;
+    use std::borrow::Borrow;
+    use std::borrow::BorrowMut;
+    use std::ops::Index;
+    use std::vec;
 
     //
     // INFO: To run tests in this module, it is NO NEED to start the 'did_server'
@@ -108,7 +110,8 @@ mod test {
         server: Server, // CAUTION Must be in the struct, otherwise 501 (server) error status is returned
     }
     impl TdwMock {
-        pub fn new(key_pair: &Ed25519KeyPair, // CAUTION Unfortunately, the 'ed25519_key_pair' fixture cannot be used here ;)
+        pub fn new(
+            key_pair: &Ed25519KeyPair, // CAUTION Unfortunately, the 'ed25519_key_pair' fixture cannot be used here ;)
         ) -> Self {
             let mut server = Server::new_with_opts(ServerOpts {
                 // CAUTION Setting a port explicitly would lead to "Address already in use (os error 48)" error!
@@ -127,7 +130,8 @@ mod test {
             let did_log = tdw.get_did_log();
 
             // use newly created did_log (as json body) to setup the GET mock
-            server.mock("GET", Matcher::Regex(r"/[a-z0-9=]+/did.jsonl$".to_string()))
+            server
+                .mock("GET", Matcher::Regex(r"/[a-z0-9=]+/did.jsonl$".to_string()))
                 .with_body(did_log)
                 .with_header("X-API-Key", "secret")
                 .create();
@@ -136,7 +140,7 @@ mod test {
             //let http_client = HttpClient { api_key: Some("secret".to_string()) };
             let http_client = HttpClient { api_key: None }; // works as well, for some reason
             let did_log = http_client.read(format!("{}/did.jsonl", url.to_owned())); // may panic
-            //println!("{did_log}");
+                                                                                     //println!("{did_log}");
 
             TdwMock {
                 url,
@@ -165,14 +169,25 @@ mod test {
     }
 
     #[rstest]
-    #[case("did:tdw:myScid:localhost%3A8000:123:456", "http://localhost:8000/123/456/did.jsonl")]
+    #[case(
+        "did:tdw:myScid:localhost%3A8000:123:456",
+        "http://localhost:8000/123/456/did.jsonl"
+    )]
     #[case("did:tdw:myScid:localhost%3A8000", "http://localhost:8000/did.jsonl")]
     #[case("did:tdw:myScid:localhost", "http://localhost/.well-known/did.jsonl")]
-    #[case("did:tdw:myScid:admin.ch%3A8000:123:456", "http://admin.ch:8000/123/456/did.jsonl")]
+    #[case(
+        "did:tdw:myScid:admin.ch%3A8000:123:456",
+        "http://admin.ch:8000/123/456/did.jsonl"
+    )]
     #[case("did:tdw:myScid:admin.ch%3A8000", "http://admin.ch:8000/did.jsonl")]
     #[case("did:tdw:myScid:admin.ch", "http://admin.ch/.well-known/did.jsonl")]
-    #[case("did:tdw:myScid:sub.admin.ch", "http://sub.admin.ch/.well-known/did.jsonl")]
-    #[case("did:tdw:myScid:sub.admin.ch:mypath:mytrala", "http://sub.admin.ch/mypath/mytrala/did.jsonl"
+    #[case(
+        "did:tdw:myScid:sub.admin.ch",
+        "http://sub.admin.ch/.well-known/did.jsonl"
+    )]
+    #[case(
+        "did:tdw:myScid:sub.admin.ch:mypath:mytrala",
+        "http://sub.admin.ch/mypath/mytrala/did.jsonl"
     )]
     fn test_tdw_to_url_conversion(#[case] tdw: String, #[case] url: String) {
         let tdw = TrustDidWebId::parse_did_tdw(tdw, Some(true)).unwrap();
@@ -184,7 +199,10 @@ mod test {
     #[case("did:xyz:myScid:localhost%3A8000:123:456")]
     fn test_tdw_to_url_conversion_error_kind_method_not_supported(#[case] tdw: String) {
         match TrustDidWebId::parse_did_tdw(tdw, Some(true)) {
-            Err(e) => assert_eq!(e.kind(), TrustDidWebIdResolutionErrorKind::MethodNotSupported),
+            Err(e) => assert_eq!(
+                e.kind(),
+                TrustDidWebIdResolutionErrorKind::MethodNotSupported
+            ),
             _ => (),
         }
     }
@@ -193,7 +211,10 @@ mod test {
     #[case("did:tdw:")]
     fn test_tdw_to_url_conversion_error_kind_invalid_method_specific_id(#[case] tdw: String) {
         match TrustDidWebId::parse_did_tdw(tdw, Some(true)) {
-            Err(e) => assert_eq!(e.kind(), TrustDidWebIdResolutionErrorKind::InvalidMethodSpecificId),
+            Err(e) => assert_eq!(
+                e.kind(),
+                TrustDidWebIdResolutionErrorKind::InvalidMethodSpecificId
+            ),
             _ => (),
         }
     }
@@ -220,8 +241,49 @@ mod test {
     }
 
     #[rstest]
-    fn test_did_wrapping(tdw_mock: TdwMock, // fixture
-                         http_client: &HttpClient, // fixture
+    fn test_generate_scid() {
+        let did_doc = DidDoc {
+            //context: vec![DID_CONTEXT.to_string(), MKEY_CONTEXT.to_string()],
+            context: vec![],
+            id: String::from(SCID_PLACEHOLDER),
+            verification_method: vec![],
+            authentication: vec![],
+            capability_invocation: vec![],
+            capability_delegation: vec![],
+            assertion_method: vec![],
+            //controller: vec![format!("did:tdw:{}:{}", SCID_PLACEHOLDER, "domain")],
+            controller: vec![],
+            deactivated: None,
+        };
+
+        let scid = generate_scid(&did_doc);
+        //let scid_str = scid.as_str();
+        assert_eq!(scid.len(), 93);
+        assert_eq!(scid, "7xbXB9W593YjYbJ7Fwo6mkwVhZrWa4bz1sSvq56zVL9oXoCsCJpmQg6PqHUiB4JU6CW1kQA7QehEE52CFFzpkYSBGVDPH")
+    }
+
+    #[rstest]
+    #[should_panic(expected = "Invalid did:tdw document. SCID placeholder not found")]
+    fn test_generate_scid_panic() {
+        let did_doc = DidDoc {
+            context: vec![DID_CONTEXT.to_string(), MKEY_CONTEXT.to_string()],
+            id: String::from(""),
+            verification_method: vec![],
+            authentication: vec![],
+            capability_invocation: vec![],
+            capability_delegation: vec![],
+            assertion_method: vec![],
+            controller: vec![format!("did:tdw:{}:{}", SCID_PLACEHOLDER, "domain")],
+            deactivated: None,
+        };
+
+        generate_scid(&did_doc);
+    }
+
+    #[rstest]
+    fn test_did_wrapping(
+        tdw_mock: TdwMock,        // fixture
+        http_client: &HttpClient, // fixture
     ) {
         let tdw_id = TrustDidWebId::parse_did_tdw(tdw_mock.get_did(), Some(false)).unwrap();
 
@@ -239,7 +301,7 @@ mod test {
     }
 
     #[rstest]
-    fn test_key_creation(ed25519_key_pair: &Ed25519KeyPair // fixture
+    fn test_key_creation(ed25519_key_pair: &Ed25519KeyPair, // fixture
     ) {
         let original_private = ed25519_key_pair.get_signing_key();
         let original_public = ed25519_key_pair.get_verifying_key();
@@ -252,8 +314,9 @@ mod test {
     }
 
     #[rstest]
-    fn test_create_did(tdw_mock: TdwMock, // fixture
-                       ed25519_key_pair: &Ed25519KeyPair, // fixture
+    fn test_create_did(
+        tdw_mock: TdwMock,                 // fixture
+        ed25519_key_pair: &Ed25519KeyPair, // fixture
     ) {
         let url = tdw_mock.get_url();
 
@@ -263,8 +326,9 @@ mod test {
     }
 
     #[rstest]
-    fn test_read_did_tdw(tdw_mock: TdwMock, // fixture
-                         http_client: &HttpClient, // fixture
+    fn test_read_did_tdw(
+        tdw_mock: TdwMock,        // fixture
+        http_client: &HttpClient, // fixture
     ) {
         let did = tdw_mock.get_did();
 
@@ -275,7 +339,8 @@ mod test {
 
         // Read the newly did doc
         let did_doc_str_v1 = TrustDidWeb::read(did, did_log_raw, Some(false)).unwrap();
-        let did_doc_v1: serde_json::Value = serde_json::from_str(&did_doc_str_v1.get_did_doc()).unwrap();
+        let did_doc_v1: serde_json::Value =
+            serde_json::from_str(&did_doc_str_v1.get_did_doc()).unwrap();
 
         assert!(!did_doc_v1["@context"].to_string().is_empty());
         match did_doc_v1["id"] {
@@ -290,9 +355,10 @@ mod test {
     }
 
     #[rstest]
-    fn test_update_did_tdw(tdw_mock: TdwMock, // fixture
-                           ed25519_key_pair: &Ed25519KeyPair, // fixture
-                           http_client: &HttpClient, // fixture
+    fn test_update_did_tdw(
+        tdw_mock: TdwMock,                 // fixture
+        ed25519_key_pair: &Ed25519KeyPair, // fixture
+        http_client: &HttpClient,          // fixture
     ) {
         let did = tdw_mock.get_did();
         let mut server = tdw_mock.get_server();
@@ -315,7 +381,8 @@ mod test {
             public_key_multibase: Some(String::from("SomeKey")),
             public_key_jwk: None,
         };
-        did_doc_v2["assertionMethod"] = json!(vec![serde_json::to_value(&verification_method).unwrap()]);
+        did_doc_v2["assertionMethod"] =
+            json!(vec![serde_json::to_value(&verification_method).unwrap()]);
         let did_doc_v2 = did_doc_v2.to_string();
 
         // use updated DID log (as json body) to setup the GET mock
@@ -323,9 +390,19 @@ mod test {
 
         //let did_log_str_v1 = TrustDidWeb::read(scid, tdw.get_did_log()).get_did_log();
         let did_log_str_v1 = did_log.clone();
-        let updated = TrustDidWeb::update(did.to_owned(), did_log_str_v1, did_doc_v2.clone(), &ed25519_key_pair, Some(false)).unwrap();
+        let updated = TrustDidWeb::update(
+            did.to_owned(),
+            did_log_str_v1,
+            did_doc_v2.clone(),
+            &ed25519_key_pair,
+            Some(false),
+        )
+        .unwrap();
         let updated_did_log_json = json!(updated.get_did_log());
-        server.mock("GET", Matcher::Regex(r"/[a-z0-9=]+/did.jsonl$".to_string())).with_body(updated_did_log_json.to_string()).create();
+        server
+            .mock("GET", Matcher::Regex(r"/[a-z0-9=]+/did.jsonl$".to_string()))
+            .with_body(updated_did_log_json.to_string())
+            .create();
 
         // As any client (since EIDSYS-262) would/should do (after parsing DID to extract url)...
         did_log = http_client.read(tdw_id.get_url());
@@ -343,8 +420,9 @@ mod test {
     #[should_panic(
         expected = "Invalid key pair. The provided key pair is not the one referenced in the did doc"
     )]
-    fn test_update_did_tdw_with_non_controller_did(tdw_mock: TdwMock, // fixture
-                                                   http_client: &HttpClient, // fixture
+    fn test_update_did_tdw_with_non_controller_did(
+        tdw_mock: TdwMock,        // fixture
+        http_client: &HttpClient, // fixture
     ) {
         let did = tdw_mock.get_did();
 
@@ -366,21 +444,30 @@ mod test {
             public_key_multibase: Some(String::from("SomeKey")),
             public_key_jwk: None,
         };
-        did_doc_v2["assertionMethod"] = json!(vec![serde_json::to_value(&verification_method).unwrap()]);
+        did_doc_v2["assertionMethod"] =
+            json!(vec![serde_json::to_value(&verification_method).unwrap()]);
         let did_doc_v2 = did_doc_v2.to_string();
 
         // Now, try using a whole another (and therefore invalid) key to update the DID
         let unauthorized_key_pair = Ed25519KeyPair::generate();
-        TrustDidWeb::update(did, tdw_v1.get_did_log(), did_doc_v2, &unauthorized_key_pair, Some(false)).unwrap();
+        TrustDidWeb::update(
+            did,
+            tdw_v1.get_did_log(),
+            did_doc_v2,
+            &unauthorized_key_pair,
+            Some(false),
+        )
+        .unwrap();
     }
 
     #[rstest]
     #[should_panic(
         expected = "Invalid did doc. The did doc is already deactivated. For simplicity reasons we don't allow updates of dids"
     )]
-    fn test_deactivate_did_tdw(tdw_mock: TdwMock, // fixture
-                               ed25519_key_pair: &Ed25519KeyPair, // fixture
-                               http_client: &HttpClient, // fixture
+    fn test_deactivate_did_tdw(
+        tdw_mock: TdwMock,                 // fixture
+        ed25519_key_pair: &Ed25519KeyPair, // fixture
+        http_client: &HttpClient,          // fixture
     ) {
         let did = tdw_mock.get_did();
         let mut server = tdw_mock.get_server();
@@ -391,9 +478,18 @@ mod test {
         let did_log = http_client.read(tdw_id.get_url());
 
         // Deactivate DID and use its log (as json body) to setup the GET mock
-        let deactivated = TrustDidWeb::deactivate(did.to_owned(), did_log.clone(), ed25519_key_pair, Some(false)).unwrap();
+        let deactivated = TrustDidWeb::deactivate(
+            did.to_owned(),
+            did_log.clone(),
+            ed25519_key_pair,
+            Some(false),
+        )
+        .unwrap();
         let deactivated_did_log_json = json!(deactivated.get_did_log());
-        server.mock("GET", Matcher::Regex(r"/[a-z0-9=]+/did.jsonl$".to_string())).with_body(deactivated_did_log_json.to_string()).create();
+        server
+            .mock("GET", Matcher::Regex(r"/[a-z0-9=]+/did.jsonl$".to_string()))
+            .with_body(deactivated_did_log_json.to_string())
+            .create();
 
         // As any client (since EIDSYS-262) would/should do (after parsing DID to extract url)...
         let did_log = http_client.read(tdw_id.get_url());
@@ -411,9 +507,17 @@ mod test {
             public_key_multibase: Some(String::from("SomeKey")),
             public_key_jwk: None,
         };
-        did_doc_v2["assertionMethod"] = json!(vec![serde_json::to_value(&verification_method).unwrap()]);
+        did_doc_v2["assertionMethod"] =
+            json!(vec![serde_json::to_value(&verification_method).unwrap()]);
 
         let did_doc_v2 = did_doc_v2.to_string();
-        TrustDidWeb::update(did, tdw_v1.get_did_log(), did_doc_v2, ed25519_key_pair, Some(false)).unwrap();
+        TrustDidWeb::update(
+            did,
+            tdw_v1.get_did_log(),
+            did_doc_v2,
+            ed25519_key_pair,
+            Some(false),
+        )
+        .unwrap();
     }
 }
