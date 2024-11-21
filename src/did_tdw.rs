@@ -203,7 +203,7 @@ impl DidLogEntry {
             .unwrap()
             .to_owned();
 
-        // Make sure the the verification method is part of the authentication section
+        // Make sure the verification method is part of the authentication section
         if !self
             .did_doc
             .authentication
@@ -225,8 +225,9 @@ impl DidLogEntry {
     pub fn to_log_entry_line(&self) -> serde_json::Value {
         match &self.proof {
             Some(proof) => serde_json::json!([
-                self.entry_hash,
-                self.version_id,
+                // Since v0.2 (see https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
+                //            The new versionId takes the form <version number>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.
+                format!("{}-{}", self.version_id.unwrap(), self.entry_hash),
                 self.version_time.to_owned().format(utils::DATE_TIME_FORMAT).to_string(),
                 self.parameters,
                 {
@@ -235,8 +236,9 @@ impl DidLogEntry {
                 proof.to_value()
             ]),
             None => serde_json::json!([
-                self.entry_hash,
-                self.version_id,
+                // Since v0.2 (see https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
+                //            The new versionId takes the form <version number>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.
+                format!("{}-{}", self.version_id.unwrap(), self.entry_hash),
                 self.version_time.to_owned().format(utils::DATE_TIME_FORMAT).to_string(),
                 self.parameters,
                 {
@@ -259,9 +261,13 @@ pub struct DidMethodParameters {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub hash: Option<String>,
+    // Since v0.3 (https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
+    //            Removes the cryptosuite parameter, moving it to implied based on the method parameter.
+    /*
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub cryptosuite: Option<String>,
+     */
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub prerotation: Option<bool>,
@@ -285,10 +291,14 @@ pub struct DidMethodParameters {
 impl DidMethodParameters {
     pub fn for_genesis_did_doc(scid: String) -> Self {
         DidMethodParameters {
-            method: Option::Some(String::from("tid:tdw:1")),
+            method: Option::Some(String::from("did:tdw:0.3")),
             scid: Option::Some(scid),
             hash: Option::None,
+            // Since v0.3 (https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
+            //            Removes the cryptosuite parameter, moving it to implied based on the method parameter.
+            /*
             cryptosuite: Option::None,
+             */
             prerotation: Option::None,
             next_keys: Option::None,
             moved: Option::None,
@@ -303,7 +313,11 @@ impl DidMethodParameters {
             method: Option::None,
             scid: Option::None,
             hash: Option::None,
+            // Since v0.3 (https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
+            //            Removes the cryptosuite parameter, moving it to implied based on the method parameter.
+            /*
             cryptosuite: Option::None,
+             */
             prerotation: Option::None,
             next_keys: Option::None,
             moved: Option::None,
@@ -318,7 +332,11 @@ impl DidMethodParameters {
             method: Option::None,
             scid: Option::None,
             hash: Option::None,
+            // Since v0.3 (https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
+            //            Removes the cryptosuite parameter, moving it to implied based on the method parameter.
+            /*
             cryptosuite: Option::None,
+             */
             prerotation: Option::None,
             next_keys: Option::None,
             moved: Option::None,
@@ -362,17 +380,28 @@ impl DidDocumentState {
                         }
                         _ => panic!("Invalid did log entry. Expected array")
                     }
+
+                    let version_id_and_entry_hash = match entry[0] {
+                        JsonString(ref entry_hash) => entry_hash.clone(),
+                        _ => panic!("Invalid entry hash"),
+                    };
+                    // Since v0.2 (see https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
+                    //            The new versionId takes the form <version number>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.
+                    let version_id_and_entry_hash_splitted = version_id_and_entry_hash.split("-").collect::<Vec<&str>>();
+                    if version_id_and_entry_hash_splitted.len() != 2 {
+                        panic!("Invalid entry hash")
+                    }
+                    let version_id = version_id_and_entry_hash_splitted[0];
+                    let entry_hash = version_id_and_entry_hash_splitted[1];
+
                     // TODO replace this with toString call of log entry
                     DidLogEntry::new(
-                        match entry[0] {
-                            JsonString(ref entry_hash) => entry_hash.clone(),
-                            _ => panic!("Invalid entry hash"),
-                        },
-                        entry[1].to_string().parse::<usize>().unwrap(),
-                        DateTime::parse_from_str(entry[2].as_str().unwrap(), utils::DATE_TIME_FORMAT).unwrap().to_utc(),
-                        serde_json::from_str(&entry[3].to_string()).unwrap(),
-                        serde_json::from_str(&entry[4]["value"].to_string()).unwrap(),
-                        DataIntegrityProof::from(entry[5].to_string()),
+                        String::from(entry_hash),
+                        version_id.parse::<usize>().unwrap(),
+                        DateTime::parse_from_str(entry[1].as_str().unwrap(), utils::DATE_TIME_FORMAT).unwrap().to_utc(),
+                        serde_json::from_str(&entry[2].to_string()).unwrap(),
+                        serde_json::from_str(&entry[3]["value"].to_string()).unwrap(),
+                        DataIntegrityProof::from(entry[4].to_string()),
                     )
                     // TODO continue here with fixing the parsing process
                 }).collect::<Vec<DidLogEntry>>()
@@ -412,11 +441,11 @@ impl DidDocumentState {
                     }
                     // Verify data integrity proof
                     genesis_entry.verify_data_integrity_proof(); // may panic
-                                                                 // Verify the entryHash
+                    // Verify the entryHash
                     genesis_entry.verify_entry_hash_integrity(
                         genesis_entry.parameters.scid.as_ref().unwrap(),
                     ); // may panic
-                       // Verify that the SCID is correct
+                    // Verify that the SCID is correct
                     let doc_string = serde_json::to_string(&genesis_entry.did_doc).unwrap();
                     let scid = genesis_entry.parameters.scid.clone().unwrap();
                     if let Some(res) = &scid_to_validate {
@@ -778,7 +807,8 @@ pub enum TrustDidWebError {
     #[error("failed to serialize to JSON: {0}")]
     SerializationFailed(String),
     /// The supplied did doc is invalid or contains an argument which isn't part of the did specification/recommendation
-    #[error("The supplied did doc is invalid or contains an argument which isn't part of the did specification/recommendation: {0}")]
+    #[error("The supplied did doc is invalid or contains an argument which isn't part of the did specification/recommendation: {0}"
+    )]
     DeserializationFailed(String),
     /// Invalid (or not yet supported) operation against DID doc
     #[error("Invalid (or not yet supported) operation against DID doc: {0}")]
@@ -1051,7 +1081,7 @@ impl SSIDIDMethodResolver for TrustDidWeb {
     }
 }
 
-/// Generates an SCID (self certifying identifier) based on the initial DiDoC.
+/// Generates an SCID (self certifying identifier) based on the initial DIDDoc.
 /// This function is used as well in the initial generation as in the verification
 /// process of the DidDoc log file
 pub fn generate_scid(did_doc: &DidDoc) -> String {
@@ -1059,5 +1089,9 @@ pub fn generate_scid(did_doc: &DidDoc) -> String {
         panic!("Invalid did:tdw document. SCID placeholder not found");
     }
     let json = serde_json::to_string(did_doc).unwrap();
-    utils::generate_jcs_hash(&json)
+
+    // According to https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog:
+    //              Use multihash in the SCID to differentiate the different hash function outputs.
+    //              See https://www.ietf.org/archive/id/draft-multiformats-multibase-08.html#name-base-58-bitcoin-encoding
+    format!("z{}", utils::generate_jcs_hash(&json))
 }

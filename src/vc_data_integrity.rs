@@ -65,8 +65,12 @@ impl CryptoSuiteOptions {
 pub struct DataIntegrityProof {
     #[serde(rename = "type")]
     pub proof_type: String,
+    // Since v0.3 (https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
+    //            Removes the cryptosuite parameter, moving it to implied based on the method parameter.
+    /*
     #[serde(rename = "cryptoSuite")]
     pub crypto_suite: String,
+     */
     #[serde(with = "ts_seconds")]
     pub created: DateTime<Utc>,
     #[serde(rename = "verificationMethod")]
@@ -85,10 +89,14 @@ impl DataIntegrityProof {
                 serde_json::Value::String(ref s) => s.to_string(),
                 _ => String::from(""),
             },
+            // Since v0.3 (https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
+            //            Removes the cryptosuite parameter, moving it to implied based on the method parameter.
+            /*
             crypto_suite: match value["cryptoSuite"] {
                 serde_json::Value::String(ref s) => s.to_string(),
                 _ => String::from(""),
             },
+             */
             created: match value["created"] {
                 serde_json::Value::String(ref s) => DateTime::parse_from_str(s, DATE_TIME_FORMAT)
                     .unwrap()
@@ -181,7 +189,11 @@ impl VCDataIntegrity for EddsaCryptosuite {
         // 3.1.3 Transformation of doc and options
         let mut proof = json!({
             "type": options.proof_type,
+            // Since v0.3 (https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
+            //            Removes the cryptosuite parameter, moving it to implied based on the method parameter.
+            /*
             "cryptoSuite": options.crypto_suite.to_string(),
+             */
             "created": Utc::now().format(DATE_TIME_FORMAT).to_string(),
             "verificationMethod": options.verification_method,
             "proofPurpose": options.proof_purpose,
@@ -214,7 +226,11 @@ impl VCDataIntegrity for EddsaCryptosuite {
         let original_proof = secured_document["proof"].clone();
         let proof = json!({
             "type": original_proof["type"],
+            // Since v0.3 (https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
+            //            Removes the cryptosuite parameter, moving it to implied based on the method parameter.
+            /*
             "cryptoSuite": original_proof["cryptoSuite"],
+             */
             "created": original_proof["created"],
             "verificationMethod": original_proof["verificationMethod"],
             "proofPurpose": original_proof["proofPurpose"],
@@ -236,7 +252,7 @@ impl VCDataIntegrity for EddsaCryptosuite {
                     Ok(_) => true,
                     Err(_) => false,
                 }
-            },
+            }
             None => panic!("Invalid eddsa cryptosuite. Verifying key is missing but required for proof verification"),
         }
     }

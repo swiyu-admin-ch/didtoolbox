@@ -140,7 +140,7 @@ mod test {
             //let http_client = HttpClient { api_key: Some("secret".to_string()) };
             let http_client = HttpClient { api_key: None }; // works as well, for some reason
             let did_log = http_client.read(format!("{}/did.jsonl", url.to_owned())); // may panic
-                                                                                     //println!("{did_log}");
+            //println!("{did_log}");
 
             TdwMock {
                 url,
@@ -258,8 +258,8 @@ mod test {
 
         let scid = generate_scid(&did_doc);
         //let scid_str = scid.as_str();
-        assert_eq!(scid.len(), 93);
-        assert_eq!(scid, "7xbXB9W593YjYbJ7Fwo6mkwVhZrWa4bz1sSvq56zVL9oXoCsCJpmQg6PqHUiB4JU6CW1kQA7QehEE52CFFzpkYSBGVDPH")
+        assert_eq!(scid.len(), 94);
+        assert_eq!(scid, "z7xbXB9W593YjYbJ7Fwo6mkwVhZrWa4bz1sSvq56zVL9oXoCsCJpmQg6PqHUiB4JU6CW1kQA7QehEE52CFFzpkYSBGVDPH")
     }
 
     #[rstest]
@@ -321,6 +321,7 @@ mod test {
         let url = tdw_mock.get_url();
 
         let tdw = TrustDidWeb::create(url, &ed25519_key_pair, Some(false)).unwrap();
+        println!("{}", tdw.get_did_log());
         assert!(tdw.get_did().len() > 0);
         assert!(tdw.get_did().starts_with("did:tdw:"))
     }
@@ -368,6 +369,8 @@ mod test {
         // As any client (since EIDSYS-262) would/should do (after parsing DID to extract url)...
         let mut did_log = http_client.read(tdw_id.get_url());
 
+        println!("{}", did_log);
+
         // Read original did doc
         let tdw_v1 = TrustDidWeb::read(did.to_owned(), did_log.clone(), Some(false)).unwrap();
         let did_doc_v1: Value = serde_json::from_str(&tdw_v1.get_did_doc()).unwrap();
@@ -397,7 +400,7 @@ mod test {
             &ed25519_key_pair,
             Some(false),
         )
-        .unwrap();
+            .unwrap();
         let updated_did_log_json = json!(updated.get_did_log());
         server
             .mock("GET", Matcher::Regex(r"/[a-z0-9=]+/did.jsonl$".to_string()))
@@ -406,6 +409,8 @@ mod test {
 
         // As any client (since EIDSYS-262) would/should do (after parsing DID to extract url)...
         did_log = http_client.read(tdw_id.get_url());
+
+        println!("{}", did_log);
 
         // Read updated did doc with new property
         let tdw_v3 = TrustDidWeb::read(did, did_log, Some(false)).unwrap();
@@ -457,7 +462,7 @@ mod test {
             &unauthorized_key_pair,
             Some(false),
         )
-        .unwrap();
+            .unwrap();
     }
 
     #[rstest]
@@ -484,7 +489,7 @@ mod test {
             ed25519_key_pair,
             Some(false),
         )
-        .unwrap();
+            .unwrap();
         let deactivated_did_log_json = json!(deactivated.get_did_log());
         server
             .mock("GET", Matcher::Regex(r"/[a-z0-9=]+/did.jsonl$".to_string()))
@@ -518,6 +523,6 @@ mod test {
             ed25519_key_pair,
             Some(false),
         )
-        .unwrap();
+            .unwrap();
     }
 }
