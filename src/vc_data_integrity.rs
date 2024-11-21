@@ -248,10 +248,7 @@ impl VCDataIntegrity for EddsaCryptosuite {
         };
         match self.verifying_key {
             Some(ref verifying_key) => {
-                match verifying_key.verifying_key.verify_strict(hash_data.as_bytes(), &signature.signature) {
-                    Ok(_) => true,
-                    Err(_) => false,
-                }
+                verifying_key.verifying_key.verify_strict(hash_data.as_bytes(), &signature.signature).is_ok()
             }
             None => panic!("Invalid eddsa cryptosuite. Verifying key is missing but required for proof verification"),
         }

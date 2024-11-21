@@ -8,7 +8,6 @@ pub mod vc_data_integrity;
 use crate::did_tdw::*;
 use crate::didtoolbox::*;
 use crate::ed25519::*;
-use crate::utils::*;
 use rand::Rng; // 0.8
 
 uniffi::include_scaffolding!("didtoolbox");
@@ -19,19 +18,12 @@ mod test {
     use super::didtoolbox::*;
     use super::ed25519::*;
     use super::utils::*;
-    use base64::Engine as _;
     use core::panic;
-    use hex::ToHex;
     use mockito::{Matcher, Server, ServerOpts};
     use rand::distributions::Alphanumeric;
     use rand::Rng;
     use rstest::{fixture, rstest};
     use serde_json::{json, Value};
-    use sha2::{Digest, Sha256};
-    use ssi::json_ld::syntax::BorrowUnordered;
-    use std::borrow::Borrow;
-    use std::borrow::BorrowMut;
-    use std::ops::Index;
     use std::vec;
 
     //
@@ -139,8 +131,7 @@ mod test {
             // Smoke test
             //let http_client = HttpClient { api_key: Some("secret".to_string()) };
             let http_client = HttpClient { api_key: None }; // works as well, for some reason
-            let did_log = http_client.read(format!("{}/did.jsonl", url.to_owned())); // may panic
-            //println!("{did_log}");
+            http_client.read(format!("{}/did.jsonl", url.to_owned())); // may panic
 
             TdwMock {
                 url,
@@ -321,7 +312,7 @@ mod test {
         let url = tdw_mock.get_url();
 
         let tdw = TrustDidWeb::create(url, &ed25519_key_pair, Some(false)).unwrap();
-        assert!(tdw.get_did().len() > 0);
+        assert!(!tdw.get_did().is_empty());
         assert!(tdw.get_did().starts_with("did:tdw:"))
     }
 
@@ -386,7 +377,7 @@ mod test {
         let did_doc_v2 = did_doc_v2.to_string();
 
         // use updated DID log (as json body) to setup the GET mock
-        let scid = tdw_id.get_scid();
+        //let scid = tdw_id.get_scid();
 
         //let did_log_str_v1 = TrustDidWeb::read(scid, tdw.get_did_log()).get_did_log();
         let did_log_str_v1 = did_log.clone();
@@ -397,7 +388,7 @@ mod test {
             &ed25519_key_pair,
             Some(false),
         )
-            .unwrap();
+        .unwrap();
         let updated_did_log_json = json!(updated.get_did_log());
         server
             .mock("GET", Matcher::Regex(r"/[a-z0-9=]+/did.jsonl$".to_string()))
@@ -457,7 +448,7 @@ mod test {
             &unauthorized_key_pair,
             Some(false),
         )
-            .unwrap();
+        .unwrap();
     }
 
     #[rstest]
@@ -484,7 +475,7 @@ mod test {
             ed25519_key_pair,
             Some(false),
         )
-            .unwrap();
+        .unwrap();
         let deactivated_did_log_json = json!(deactivated.get_did_log());
         server
             .mock("GET", Matcher::Regex(r"/[a-z0-9=]+/did.jsonl$".to_string()))
@@ -518,6 +509,6 @@ mod test {
             ed25519_key_pair,
             Some(false),
         )
-            .unwrap();
+        .unwrap();
     }
 }

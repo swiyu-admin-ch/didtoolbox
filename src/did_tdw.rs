@@ -14,8 +14,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_jcs::to_vec as jcs_from_str;
 use serde_json::json;
-use serde_json::ser::PrettyFormatter;
-use serde_json::Value::{Array as JsonArray, Object as JsonObject, String as JsonString};
+use serde_json::Value::{Array as JsonArray, String as JsonString};
 use sha2::{Digest, Sha256};
 use ssi::dids::{
     resolution::{
@@ -26,7 +25,6 @@ use ssi::dids::{
 };
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
-use thiserror::Error;
 use url_escape;
 
 /// Entry in a did log file as shown here
@@ -119,7 +117,7 @@ impl DidLogEntry {
         let controller_keys = self.get_controller_verifying_key();
         if !controller_keys
             .values()
-            .any(|(id, key)| key.to_multibase() == verifying_key.to_multibase())
+            .any(|(_, key)| key.to_multibase() == verifying_key.to_multibase())
         {
             panic!(
                 "Invalid key pair. The provided key pair is not the one referenced in the did doc"
@@ -366,7 +364,7 @@ impl DidDocumentState {
         }
         DidDocumentState {
             did_log_entries: unescaped.split("\n")
-                .filter(|line| line.len() > 0)
+                .filter(|line| !line.is_empty())
                 .map(|line| {
                     let entry: serde_json::Value = match serde_json::from_str(line) {
                         Ok(entry) => entry,
@@ -441,11 +439,11 @@ impl DidDocumentState {
                     }
                     // Verify data integrity proof
                     genesis_entry.verify_data_integrity_proof(); // may panic
-                    // Verify the entryHash
+                                                                 // Verify the entryHash
                     genesis_entry.verify_entry_hash_integrity(
                         genesis_entry.parameters.scid.as_ref().unwrap(),
                     ); // may panic
-                    // Verify that the SCID is correct
+                       // Verify that the SCID is correct
                     let doc_string = serde_json::to_string(&genesis_entry.did_doc).unwrap();
                     let scid = genesis_entry.parameters.scid.clone().unwrap();
                     if let Some(res) = &scid_to_validate {
@@ -485,10 +483,10 @@ impl DidDocumentState {
 
         // Make sure only activated did docs can be updated
 
-        if self.did_log_entries.len() == 0 {
+        if self.did_log_entries.is_empty() {
             // Genesis entry (Create)
             // Check if version hash is present
-            if log_entry.entry_hash.len() == 0 {
+            if log_entry.entry_hash.is_empty() {
                 panic!("For the initial log entry the SCID/previous hash has to be provided")
             }
             log_entry.check_if_verification_method_match_public_key(
@@ -851,9 +849,9 @@ impl TrustDidWeb {
     /// NOT UniFFI-compliant constructor.
     pub fn new(did: String, did_log: String, did_doc: String) -> Self {
         Self {
-            did: did,
-            did_log: did_log,
-            did_doc: did_doc,
+            did,
+            did_log,
+            did_doc,
         }
     }
 

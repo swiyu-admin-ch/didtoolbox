@@ -39,8 +39,8 @@ pub struct VerificationMethod {
 impl VerificationMethod {
     pub fn new(id: String, controller: String, public_key_multibase: String) -> Self {
         VerificationMethod {
-            id: id,
-            controller: controller,
+            id,
+            controller,
             verification_type: String::from("Multikey"),
             public_key_multibase: Some(public_key_multibase),
             public_key_jwk: None,

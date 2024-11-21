@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::utils;
 use ed25519_dalek::{
-    Signature, Signer, SigningKey, Verifier, VerifyingKey, PUBLIC_KEY_LENGTH, SECRET_KEY_LENGTH,
+    Signature, Signer, SigningKey, VerifyingKey, PUBLIC_KEY_LENGTH, SECRET_KEY_LENGTH,
     SIGNATURE_LENGTH,
 };
 use rand::rngs::OsRng;
@@ -45,7 +45,7 @@ impl Base64MultiBaseConverter for Ed25519SigningKey {
         let mut public_key_bytes: [u8; SECRET_KEY_LENGTH] = [0; SECRET_KEY_LENGTH];
         utils::convert_from_multibase_base64(multibase, &mut public_key_bytes); // may panic
         Ed25519SigningKey {
-            signing_key: SigningKey::from_bytes(&mut public_key_bytes),
+            signing_key: SigningKey::from_bytes(&public_key_bytes),
         }
     }
 }
@@ -85,9 +85,7 @@ impl Base64MultiBaseConverter for Ed25519VerifyingKey {
         public_key.copy_from_slice(&public_key_with_prefix[2..]);
 
         match VerifyingKey::from_bytes(&public_key) {
-            Ok(verifying_key) => Ed25519VerifyingKey {
-                verifying_key: verifying_key,
-            },
+            Ok(verifying_key) => Ed25519VerifyingKey { verifying_key },
             Err(_) => panic!("{} is an invalid ed25519 public key", multibase),
         }
     }
@@ -117,7 +115,7 @@ impl Ed25519KeyPair {
     pub fn from(signing_key_multibase: &str) -> Self {
         let mut signing_key_bytes: [u8; SECRET_KEY_LENGTH] = [0; SECRET_KEY_LENGTH];
         utils::convert_from_multibase_base64(signing_key_multibase, &mut signing_key_bytes); // may panic
-        let signing_key = SigningKey::from_bytes(&mut signing_key_bytes);
+        let signing_key = SigningKey::from_bytes(&signing_key_bytes);
         Ed25519KeyPair {
             verifying_key: Ed25519VerifyingKey::new(signing_key.verifying_key()),
             signing_key: Ed25519SigningKey::new(signing_key),
