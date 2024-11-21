@@ -288,6 +288,9 @@ pub struct DidMethodParameters {
 
 impl DidMethodParameters {
     pub fn for_genesis_did_doc(scid: String) -> Self {
+        if !scid.starts_with("z") {
+            panic!("Invalid multibase format for SCID. base58btc identifier expected");
+        }
         DidMethodParameters {
             method: Option::Some(String::from("did:tdw:0.3")),
             scid: Option::Some(scid),
@@ -385,12 +388,15 @@ impl DidDocumentState {
                     };
                     // Since v0.2 (see https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
                     //            The new versionId takes the form <version number>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.
-                    let version_id_and_entry_hash_splitted = version_id_and_entry_hash.split("-").collect::<Vec<&str>>();
-                    if version_id_and_entry_hash_splitted.len() != 2 {
-                        panic!("Invalid entry hash")
+                    let version_id: &str;
+                    let entry_hash: &str;
+                    match version_id_and_entry_hash.split_once("-") {
+                        Some((id, hash)) => {
+                            version_id = id;
+                            entry_hash = hash;
+                        }
+                        None => panic!("Invalid entry hash format. The valid format is <version number>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.")
                     }
-                    let version_id = version_id_and_entry_hash_splitted[0];
-                    let entry_hash = version_id_and_entry_hash_splitted[1];
 
                     // TODO replace this with toString call of log entry
                     DidLogEntry::new(
@@ -439,11 +445,12 @@ impl DidDocumentState {
                     }
                     // Verify data integrity proof
                     genesis_entry.verify_data_integrity_proof(); // may panic
-                                                                 // Verify the entryHash
+                    
+                    // Verify the entryHash
                     genesis_entry.verify_entry_hash_integrity(
                         genesis_entry.parameters.scid.as_ref().unwrap(),
                     ); // may panic
-                       // Verify that the SCID is correct
+                    // Verify that the SCID is correct
                     let doc_string = serde_json::to_string(&genesis_entry.did_doc).unwrap();
                     let scid = genesis_entry.parameters.scid.clone().unwrap();
                     if let Some(res) = &scid_to_validate {
@@ -741,6 +748,11 @@ impl TryFrom<(String, Option<bool>)> for TrustDidWebId {
 
                 match buf.method_specific_id().split_once(":") {
                     Some((scid, did_tdw_reduced)) => {
+                        if !scid.starts_with("z") {
+                            panic!(
+                                "Invalid multibase format for SCID. base58btc identifier expected"
+                            );
+                        }
                         let mut decoded_url = String::from("");
                         url_escape::decode_to_string(
                             did_tdw_reduced.replace(":", "/"),

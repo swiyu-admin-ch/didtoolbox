@@ -161,23 +161,23 @@ mod test {
 
     #[rstest]
     #[case(
-        "did:tdw:myScid:localhost%3A8000:123:456",
+        "did:tdw:zMySCID:localhost%3A8000:123:456",
         "http://localhost:8000/123/456/did.jsonl"
     )]
-    #[case("did:tdw:myScid:localhost%3A8000", "http://localhost:8000/did.jsonl")]
-    #[case("did:tdw:myScid:localhost", "http://localhost/.well-known/did.jsonl")]
+    #[case("did:tdw:zMySCID:localhost%3A8000", "http://localhost:8000/did.jsonl")]
+    #[case("did:tdw:zMySCID:localhost", "http://localhost/.well-known/did.jsonl")]
     #[case(
-        "did:tdw:myScid:admin.ch%3A8000:123:456",
+        "did:tdw:zMySCID:admin.ch%3A8000:123:456",
         "http://admin.ch:8000/123/456/did.jsonl"
     )]
-    #[case("did:tdw:myScid:admin.ch%3A8000", "http://admin.ch:8000/did.jsonl")]
-    #[case("did:tdw:myScid:admin.ch", "http://admin.ch/.well-known/did.jsonl")]
+    #[case("did:tdw:zMySCID:admin.ch%3A8000", "http://admin.ch:8000/did.jsonl")]
+    #[case("did:tdw:zMySCID:admin.ch", "http://admin.ch/.well-known/did.jsonl")]
     #[case(
-        "did:tdw:myScid:sub.admin.ch",
+        "did:tdw:zMySCID:sub.admin.ch",
         "http://sub.admin.ch/.well-known/did.jsonl"
     )]
     #[case(
-        "did:tdw:myScid:sub.admin.ch:mypath:mytrala",
+        "did:tdw:zMySCID:sub.admin.ch:mypath:mytrala",
         "http://sub.admin.ch/mypath/mytrala/did.jsonl"
     )]
     fn test_tdw_to_url_conversion(#[case] tdw: String, #[case] url: String) {
@@ -388,7 +388,7 @@ mod test {
             &ed25519_key_pair,
             Some(false),
         )
-        .unwrap();
+            .unwrap();
         let updated_did_log_json = json!(updated.get_did_log());
         server
             .mock("GET", Matcher::Regex(r"/[a-z0-9=]+/did.jsonl$".to_string()))
@@ -448,7 +448,7 @@ mod test {
             &unauthorized_key_pair,
             Some(false),
         )
-        .unwrap();
+            .unwrap();
     }
 
     #[rstest]
@@ -475,7 +475,7 @@ mod test {
             ed25519_key_pair,
             Some(false),
         )
-        .unwrap();
+            .unwrap();
         let deactivated_did_log_json = json!(deactivated.get_did_log());
         server
             .mock("GET", Matcher::Regex(r"/[a-z0-9=]+/did.jsonl$".to_string()))
@@ -509,6 +509,6 @@ mod test {
             ed25519_key_pair,
             Some(false),
         )
-        .unwrap();
+            .unwrap();
     }
 }
