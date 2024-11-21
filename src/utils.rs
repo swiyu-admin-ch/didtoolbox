@@ -49,12 +49,13 @@ pub fn generate_jcs_hash(json: &str) -> String {
             hasher.update(jcs.as_bytes());
             let hash: String = hasher.finalize().encode_hex();
             //
-            // According to https://github.com.mcas.ms/decentralized-identity/trustdidweb/blob/63e21b69d84f7d9344f4e6ef4809e7823975c965/spec/specification.md#generate-scid:
-            // To generate the required [[ref: SCID]] for a did:tdw DID, the DID Controller MUST execute the following function:
-            //    base58btc(multihash(JCS(preliminary log entry with placeholders), <hash algorithm>))
-            //
+            // Since v0.3 (https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
+            //            Change base32 encoding with base58btc, as it offers a better expansion rate.
+            // More here: https://identity.foundation/trustdidweb/v0.3/#generate-scid
+            //            To generate the required [[ref: SCID]] for a did:tdw DID, the DID Controller MUST execute the following function:
+            //            base58btc(multihash(JCS(preliminary log entry with placeholders), <hash algorithm>))
             let encoded = base58_encode(hash)
-                //.with_alphabet(Alphabet58::BITCOIN) // default
+                .with_alphabet(Alphabet58::BITCOIN) // it is the default alphabet, but still (to ensure spec conformity)
                 .as_cb58(None)
                 .into_string();
             if encoded.len() < utils::SCID_MIN_LENGTH {
