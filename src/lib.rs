@@ -321,7 +321,6 @@ mod test {
         let url = tdw_mock.get_url();
 
         let tdw = TrustDidWeb::create(url, &ed25519_key_pair, Some(false)).unwrap();
-        println!("{}", tdw.get_did_log());
         assert!(tdw.get_did().len() > 0);
         assert!(tdw.get_did().starts_with("did:tdw:"))
     }
