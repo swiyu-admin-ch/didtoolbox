@@ -123,7 +123,7 @@ impl DataIntegrityProof {
     }
 
     pub fn to_value(&self) -> serde_json::Value {
-        let mut value = serde_json::to_value(&self).unwrap();
+        let mut value = serde_json::to_value(self).unwrap();
         value["created"] =
             serde_json::Value::String(self.created.format(DATE_TIME_FORMAT).to_string());
         value

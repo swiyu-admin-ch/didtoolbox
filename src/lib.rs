@@ -8,7 +8,6 @@ pub mod vc_data_integrity;
 use crate::did_tdw::*;
 use crate::didtoolbox::*;
 use crate::ed25519::*;
-use rand::Rng; // 0.8
 
 uniffi::include_scaffolding!("didtoolbox");
 
@@ -187,7 +186,7 @@ mod test {
     }
 
     #[rstest]
-    #[case("did:xyz:myScid:localhost%3A8000:123:456")]
+    #[case("did:xyz:zMySCID:localhost%3A8000:123:456")]
     fn test_tdw_to_url_conversion_error_kind_method_not_supported(#[case] tdw: String) {
         match TrustDidWebId::parse_did_tdw(tdw, Some(true)) {
             Err(e) => assert_eq!(
@@ -196,6 +195,13 @@ mod test {
             ),
             _ => (),
         }
+    }
+
+    #[rstest]
+    #[case("did:tdw:MySCID:localhost%3A8000:123:456")]
+    #[should_panic(expected = "Invalid multibase format for SCID. base58btc identifier expected")]
+    fn test_tdw_to_url_conversion_error_invalid_scid_multibase(#[case] tdw: String) {
+        TrustDidWebId::parse_did_tdw(tdw, Some(true)).unwrap();
     }
 
     #[rstest]
@@ -311,7 +317,7 @@ mod test {
     ) {
         let url = tdw_mock.get_url();
 
-        let tdw = TrustDidWeb::create(url, &ed25519_key_pair, Some(false)).unwrap();
+        let tdw = TrustDidWeb::create(url, ed25519_key_pair, Some(false)).unwrap();
         assert!(!tdw.get_did().is_empty());
         assert!(tdw.get_did().starts_with("did:tdw:"))
     }
@@ -385,7 +391,7 @@ mod test {
             did.to_owned(),
             did_log_str_v1,
             did_doc_v2.clone(),
-            &ed25519_key_pair,
+            ed25519_key_pair,
             Some(false),
         )
             .unwrap();

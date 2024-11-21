@@ -445,7 +445,7 @@ impl DidDocumentState {
                     }
                     // Verify data integrity proof
                     genesis_entry.verify_data_integrity_proof(); // may panic
-                    
+
                     // Verify the entryHash
                     genesis_entry.verify_entry_hash_integrity(
                         genesis_entry.parameters.scid.as_ref().unwrap(),
@@ -518,13 +518,8 @@ impl DidDocumentState {
             }
 
             // Make sure only activated did docs can be updated
-            match previous_entry.did_doc.deactivated {
-                Some(deactivated) => {
-                    if deactivated {
-                        panic!("Invalid did doc. The did doc is already deactivated. For simplicity reasons we don't allow updates of dids")
-                    }
-                }
-                None => (),
+            if let Some(true) = previous_entry.did_doc.deactivated {
+                panic!("Invalid did doc. The did doc is already deactivated. For simplicity reasons we don't allow updates of dids")
             }
 
             // Get new version index
@@ -956,7 +951,7 @@ impl TrustDidWeb {
                 ))
             }
         };
-        did_log.update(log_without_proof_and_signature, &controller, key_pair); // may panic
+        did_log.update(log_without_proof_and_signature, controller, key_pair); // may panic
         let genesis_str = match serde_json::to_string(&genesis_did_doc) {
             Ok(v) => v,
             Err(e) => return Err(TrustDidWebError::SerializationFailed(e.to_string())),
