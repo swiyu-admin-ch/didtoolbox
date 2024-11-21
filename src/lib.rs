@@ -369,8 +369,6 @@ mod test {
         // As any client (since EIDSYS-262) would/should do (after parsing DID to extract url)...
         let mut did_log = http_client.read(tdw_id.get_url());
 
-        println!("{}", did_log);
-
         // Read original did doc
         let tdw_v1 = TrustDidWeb::read(did.to_owned(), did_log.clone(), Some(false)).unwrap();
         let did_doc_v1: Value = serde_json::from_str(&tdw_v1.get_did_doc()).unwrap();
@@ -409,8 +407,6 @@ mod test {
 
         // As any client (since EIDSYS-262) would/should do (after parsing DID to extract url)...
         did_log = http_client.read(tdw_id.get_url());
-
-        println!("{}", did_log);
 
         // Read updated did doc with new property
         let tdw_v3 = TrustDidWeb::read(did, did_log, Some(false)).unwrap();
