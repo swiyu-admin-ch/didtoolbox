@@ -160,23 +160,23 @@ mod test {
 
     #[rstest]
     #[case(
-        "did:tdw:zMySCID:localhost%3A8000:123:456",
+        "did:tdw:QMySCID:localhost%3A8000:123:456",
         "http://localhost:8000/123/456/did.jsonl"
     )]
-    #[case("did:tdw:zMySCID:localhost%3A8000", "http://localhost:8000/did.jsonl")]
-    #[case("did:tdw:zMySCID:localhost", "http://localhost/.well-known/did.jsonl")]
+    #[case("did:tdw:QMySCID:localhost%3A8000", "http://localhost:8000/did.jsonl")]
+    #[case("did:tdw:QMySCID:localhost", "http://localhost/.well-known/did.jsonl")]
     #[case(
-        "did:tdw:zMySCID:admin.ch%3A8000:123:456",
+        "did:tdw:QMySCID:admin.ch%3A8000:123:456",
         "http://admin.ch:8000/123/456/did.jsonl"
     )]
-    #[case("did:tdw:zMySCID:admin.ch%3A8000", "http://admin.ch:8000/did.jsonl")]
-    #[case("did:tdw:zMySCID:admin.ch", "http://admin.ch/.well-known/did.jsonl")]
+    #[case("did:tdw:QMySCID:admin.ch%3A8000", "http://admin.ch:8000/did.jsonl")]
+    #[case("did:tdw:QMySCID:admin.ch", "http://admin.ch/.well-known/did.jsonl")]
     #[case(
-        "did:tdw:zMySCID:sub.admin.ch",
+        "did:tdw:QMySCID:sub.admin.ch",
         "http://sub.admin.ch/.well-known/did.jsonl"
     )]
     #[case(
-        "did:tdw:zMySCID:sub.admin.ch:mypath:mytrala",
+        "did:tdw:QMySCID:sub.admin.ch:mypath:mytrala",
         "http://sub.admin.ch/mypath/mytrala/did.jsonl"
     )]
     fn test_tdw_to_url_conversion(#[case] tdw: String, #[case] url: String) {
@@ -186,7 +186,7 @@ mod test {
     }
 
     #[rstest]
-    #[case("did:xyz:zMySCID:localhost%3A8000:123:456")]
+    #[case("did:xyz:QMySCID:localhost%3A8000:123:456")]
     fn test_tdw_to_url_conversion_error_kind_method_not_supported(#[case] tdw: String) {
         match TrustDidWebId::parse_did_tdw(tdw, Some(true)) {
             Err(e) => assert_eq!(
@@ -256,7 +256,7 @@ mod test {
         let scid = generate_scid(&did_doc);
         //let scid_str = scid.as_str();
         assert_eq!(scid.len(), 94);
-        assert_eq!(scid, "z7xbXB9W593YjYbJ7Fwo6mkwVhZrWa4bz1sSvq56zVL9oXoCsCJpmQg6PqHUiB4JU6CW1kQA7QehEE52CFFzpkYSBGVDPH")
+        assert_eq!(scid, "Q7xbXB9W593YjYbJ7Fwo6mkwVhZrWa4bz1sSvq56zVL9oXoCsCJpmQg6PqHUiB4JU6CW1kQA7QehEE52CFFzpkYSBGVDPH")
     }
 
     #[rstest]
