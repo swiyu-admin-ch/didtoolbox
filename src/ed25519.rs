@@ -7,23 +7,25 @@ use ed25519_dalek::{
     SIGNATURE_LENGTH,
 };
 use rand::rngs::OsRng;
-pub trait Base64MultiBaseConverter {
+
+pub trait MultiBaseConverter {
     fn to_multibase(&self) -> String;
     fn from_multibase(multibase: &str) -> Self;
 }
+
 #[derive(Clone)]
 pub struct Ed25519Signature {
     pub signature: Signature,
 }
-impl Base64MultiBaseConverter for Ed25519Signature {
+impl MultiBaseConverter for Ed25519Signature {
     fn to_multibase(&self) -> String {
         let signature_bytes = self.signature.to_bytes();
-        utils::convert_to_multibase_base64(&signature_bytes)
+        utils::convert_to_multibase_base58btc(&signature_bytes)
     }
 
     fn from_multibase(multibase: &str) -> Self {
         let mut signature_bytes: [u8; SIGNATURE_LENGTH] = [0; SIGNATURE_LENGTH];
-        utils::convert_from_multibase_base64(multibase, &mut signature_bytes); // may panic
+        utils::convert_from_multibase_base58btc(multibase, &mut signature_bytes); // may panic
         Ed25519Signature {
             signature: Signature::from_bytes(&signature_bytes),
         }
@@ -35,15 +37,15 @@ pub struct Ed25519SigningKey {
     signing_key: SigningKey,
 }
 
-impl Base64MultiBaseConverter for Ed25519SigningKey {
+impl MultiBaseConverter for Ed25519SigningKey {
     fn to_multibase(&self) -> String {
         let public_key_bytes = self.signing_key.to_bytes();
-        utils::convert_to_multibase_base64(&public_key_bytes)
+        utils::convert_to_multibase_base58btc(&public_key_bytes)
     }
 
     fn from_multibase(multibase: &str) -> Self {
         let mut public_key_bytes: [u8; SECRET_KEY_LENGTH] = [0; SECRET_KEY_LENGTH];
-        utils::convert_from_multibase_base64(multibase, &mut public_key_bytes); // may panic
+        utils::convert_from_multibase_base58btc(multibase, &mut public_key_bytes); // may panic
         Ed25519SigningKey {
             signing_key: SigningKey::from_bytes(&public_key_bytes),
         }
@@ -64,14 +66,14 @@ impl Ed25519SigningKey {
 pub struct Ed25519VerifyingKey {
     pub verifying_key: VerifyingKey,
 }
-impl Base64MultiBaseConverter for Ed25519VerifyingKey {
+impl MultiBaseConverter for Ed25519VerifyingKey {
     fn to_multibase(&self) -> String {
         let public_key_without_prefix = self.verifying_key.to_bytes();
         let mut public_key_with_prefix: [u8; PUBLIC_KEY_LENGTH + 2] = [0; PUBLIC_KEY_LENGTH + 2];
         public_key_with_prefix[0] = 0xed;
         public_key_with_prefix[1] = 0x01;
         public_key_with_prefix[2..].copy_from_slice(&public_key_without_prefix);
-        utils::convert_to_multibase_base64(&public_key_with_prefix)
+        utils::convert_to_multibase_base58btc(&public_key_with_prefix)
     }
 
     fn from_multibase(multibase: &str) -> Self {
@@ -79,7 +81,7 @@ impl Base64MultiBaseConverter for Ed25519VerifyingKey {
         // the public key has a **two** byte prefix of 0xed01, which is not part of the public key instance itself
         // therefore "+2" is added to the length of the multibase public key
         let mut public_key_with_prefix: [u8; PUBLIC_KEY_LENGTH + 2] = [0; PUBLIC_KEY_LENGTH + 2];
-        utils::convert_from_multibase_base64(multibase, &mut public_key_with_prefix);
+        utils::convert_from_multibase_base58btc(multibase, &mut public_key_with_prefix);
 
         let mut public_key: [u8; PUBLIC_KEY_LENGTH] = [0; PUBLIC_KEY_LENGTH];
         public_key.copy_from_slice(&public_key_with_prefix[2..]);
@@ -114,7 +116,7 @@ impl Ed25519KeyPair {
 
     pub fn from(signing_key_multibase: &str) -> Self {
         let mut signing_key_bytes: [u8; SECRET_KEY_LENGTH] = [0; SECRET_KEY_LENGTH];
-        utils::convert_from_multibase_base64(signing_key_multibase, &mut signing_key_bytes); // may panic
+        utils::convert_from_multibase_base58btc(signing_key_multibase, &mut signing_key_bytes); // may panic
         let signing_key = SigningKey::from_bytes(&signing_key_bytes);
         Ed25519KeyPair {
             verifying_key: Ed25519VerifyingKey::new(signing_key.verifying_key()),

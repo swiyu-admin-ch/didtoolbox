@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 
 use crate::utils;
-use bs58::{encode as base58_encode, Alphabet as Alphabet58};
+use bs58::{decode as base58_decode, encode as base58_encode, Alphabet as Alphabet58};
 use hex;
 use hex::ToHex;
 use serde_jcs::{to_string as jcs_to_string, to_vec as jcs_from_str};
@@ -16,19 +15,26 @@ pub const DATE_TIME_FORMAT: &str = "%Y-%m-%dT%H:%M:%S%.3f%z";
 // See https://www.w3.org/TR/vc-di-eddsa/#ed25519verificationkey2020
 pub const EDDSA_VERIFICATION_KEY_TYPE: &str = "Ed25519VerificationKey2020";
 
-pub fn convert_to_multibase_base64(data: &[u8]) -> String {
-    let b64 = URL_SAFE_NO_PAD.encode(data);
-    format!("u{}", b64)
+pub fn convert_to_multibase_base58btc(data: &[u8]) -> String {
+    let encoded = base58_encode(data)
+        .with_alphabet(Alphabet58::BITCOIN) // it is the default alphabet, but still (to ensure spec conformity)
+        .into_string();
+    // See https://www.ietf.org/archive/id/draft-multiformats-multibase-08.html#name-base-58-bitcoin-encoding
+    format!("z{}", encoded)
 }
 
-pub fn convert_from_multibase_base64(multibase: &str, result: &mut [u8]) {
-    if !multibase.starts_with("u") {
-        panic!("Invalid multibase format");
+pub fn convert_from_multibase_base58btc(multibase: &str, result: &mut [u8]) {
+    if !multibase.starts_with("z") {
+        panic!("Invalid multibase format for base58btc");
     }
-    let raw = multibase.chars().skip(1).collect::<String>();
-    match URL_SAFE_NO_PAD.decode_slice(raw, result) {
+    let raw = multibase.chars().skip(1).collect::<String>(); // get rid of the multibase code
+    match base58_decode(raw)
+        .with_alphabet(bs58::Alphabet::BITCOIN) // it is the default alphabet, but still (to ensure spec conformity)
+        .onto(result) // decode into the given buffer
+    {
         Ok(_) => (),
-        Err(_) => panic!("Entered base 64 content {} is invalid", multibase),
+        // e.g. "buffer provided to decode base58 encoded string into was too small"
+        Err(e) => panic!("Entered base58btc content is invalid: {}", e.to_string()),
     }
 }
 
@@ -55,7 +61,6 @@ pub fn generate_jcs_hash(json: &str) -> String {
             //            base58btc(multihash(JCS(preliminary log entry with placeholders), <hash algorithm>))
             let encoded = base58_encode(hash)
                 .with_alphabet(Alphabet58::BITCOIN) // it is the default alphabet, but still (to ensure spec conformity)
-                .as_cb58(None)
                 .into_string();
             if encoded.len() < utils::SCID_MIN_LENGTH {
                 panic!(

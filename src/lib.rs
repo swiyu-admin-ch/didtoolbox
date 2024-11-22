@@ -24,7 +24,6 @@ mod test {
     use rstest::{fixture, rstest};
     use serde_json::{json, Value};
     use std::vec;
-
     //
     // INFO: To run tests in this module, it is NO NEED to start the 'did_server'
     //       located in the folder with the same name anymore!!!
@@ -255,8 +254,8 @@ mod test {
 
         let scid = generate_scid(&did_doc);
         //let scid_str = scid.as_str();
-        assert_eq!(scid.len(), 94);
-        assert_eq!(scid, "Q7xbXB9W593YjYbJ7Fwo6mkwVhZrWa4bz1sSvq56zVL9oXoCsCJpmQg6PqHUiB4JU6CW1kQA7QehEE52CFFzpkYSBGVDPH")
+        assert_eq!(scid.len(), 89);
+        assert_eq!(scid, "Q24gHnKdYN3XhZJJoqmd1Ppq2zXQ4DSF46mqcVaBzwT5Agu9nM7AgV8n99rhireSZNBrLC4nibYXunM34nxbRa4Cg")
     }
 
     #[rstest]
@@ -295,6 +294,17 @@ mod test {
         assert!(!did_doc.verification_method.is_empty());
         assert!(!did_doc.authentication.is_empty());
         assert!(!did_doc.controller.is_empty());
+    }
+
+    #[rstest]
+    fn test_multibase_base58btc_conversion() {
+        let encoded = convert_to_multibase_base58btc("helloworld".as_bytes()); // zfP1vxkpyLWnH9dD6BQA
+        //let mut buff: [u8; 16] = [0; 16];
+        let mut buff = vec![0; 16];
+        convert_from_multibase_base58btc(encoded.as_str(), &mut buff);
+        let decoded = String::from_utf8_lossy(&buff).to_string();
+        assert!(decoded.starts_with("helloworld"));
+        //assert_eq!(decoded, "helloworld");
     }
 
     #[rstest]

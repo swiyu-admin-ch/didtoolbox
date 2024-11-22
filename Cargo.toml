@@ -27,7 +27,6 @@ base64 = "0.22.1"
 sha2 = "0.10.8"
 hex-literal = "0.4.1"
 hex = "0.4.3"
-base32 = "0.5.0"
 regex = "1.11.1"
 url-escape = "0.1.1"
 bs58 = { version = "0.5.1", features = ["check", "cb58"] }
