@@ -68,7 +68,14 @@ pub fn generate_jcs_hash(json: &str) -> String {
                     utils::SCID_MIN_LENGTH
                 );
             }
-            encoded
+
+            // According to https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog:
+            //              Use multihash in the SCID to differentiate the different hash function outputs.
+            //              See https://www.ietf.org/archive/id/draft-multiformats-multibase-08.html#name-base-58-bitcoin-encoding
+            //
+            // According to https://github.com/multiformats/multibase/blob/master/README.md#reserved-terms:
+            //              Q (U+0051) - Base58-encoded sha2-256 multihashes used by libp2p/ipfs for peer IDs and CIDv0.
+            format!("Q{}", encoded)
         }
         Err(_) => panic!("Invalid json couldn't canonicalize"),
     }
