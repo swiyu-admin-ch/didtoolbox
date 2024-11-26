@@ -23,7 +23,6 @@ serde_jcs = "0.1.0"
 chrono = { version = "0.4.38", features = ["serde"] }
 ed25519-dalek = { version = "2.1.1", features = ["rand_core"] }
 rand = "0.8.5"
-base64 = "0.22.1"
 sha2 = "0.10.8"
 hex-literal = "0.4.1"
 hex = "0.4.3"
@@ -44,6 +43,7 @@ ureq = "2.10.1"
 [lib]
 crate-type = ["lib", "cdylib", "staticlib"]
 name = "didtoolbox"
+#path = "src/lib.rs" # `cargo readme` command insist on it
 
 [[bin]]
 name = "uniffi-bindgen"

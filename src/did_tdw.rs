@@ -3,8 +3,6 @@ use crate::didtoolbox::*;
 use crate::ed25519::*;
 use crate::utils;
 use crate::vc_data_integrity::*;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use base64::Engine as _;
 use chrono::serde::ts_seconds;
 use chrono::{DateTime, Utc};
 use hex;
@@ -896,7 +894,8 @@ impl TrustDidWeb {
         let mut hasher = Sha256::new();
         hasher.update(key_def_jcs);
         let key_def_hash: String = hasher.finalize().encode_hex();
-        let verification_method_suffix = URL_SAFE_NO_PAD.encode(key_def_hash.as_bytes());
+        let verification_method_suffix =
+            utils::convert_to_multibase_base58btc(key_def_hash.as_bytes());
 
         // Create verification method for subject with placeholder
         let verification_method = VerificationMethod {

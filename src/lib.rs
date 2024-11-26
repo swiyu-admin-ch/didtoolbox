@@ -1,4 +1,11 @@
 // SPDX-License-Identifier: MIT
+
+//! This project implements the following things:
+//!
+//! - General util structs reused by other libraries of e-id-admin
+//! - Trust did web according to the specification [trust-did-web](https://bcgov.github.io/trustdidweb/)
+//!
+
 pub mod did_tdw;
 pub mod didtoolbox;
 pub mod ed25519;
