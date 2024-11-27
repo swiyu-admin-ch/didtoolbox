@@ -138,7 +138,16 @@ impl DidLogEntry {
 
     fn get_hash(&self) -> String {
         let json = serde_json::to_string(&self.to_log_entry_line()).unwrap();
-        utils::generate_jcs_hash(&json)
+        //utils::generate_jcs_hash(&json)
+        // Since v0.2 (see https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
+        //            The new versionId takes the form <version number>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.
+        // Also see https://identity.foundation/trustdidweb/v0.3/#the-did-log-file:
+        //            A Data Integrity Proof across the entry, signed by a DID authorized to update the DIDDoc, using the versionId as the challenge.
+        format!(
+            "{}-{}",
+            self.version_id.unwrap(),
+            utils::generate_jcs_hash(&json)
+        )
     }
 
     fn get_controller_verifying_key(&self) -> HashMap<String, (String, Ed25519VerifyingKey)> {
@@ -221,9 +230,7 @@ impl DidLogEntry {
     pub fn to_log_entry_line(&self) -> serde_json::Value {
         match &self.proof {
             Some(proof) => serde_json::json!([
-                // Since v0.2 (see https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
-                //            The new versionId takes the form <version number>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.
-                format!("{}-{}", self.version_id.unwrap(), self.entry_hash),
+                self.entry_hash,
                 self.version_time.to_owned().format(utils::DATE_TIME_FORMAT).to_string(),
                 self.parameters,
                 {
@@ -232,9 +239,7 @@ impl DidLogEntry {
                 proof.to_value()
             ]),
             None => serde_json::json!([
-                // Since v0.2 (see https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
-                //            The new versionId takes the form <version number>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.
-                format!("{}-{}", self.version_id.unwrap(), self.entry_hash),
+                self.entry_hash,
                 self.version_time.to_owned().format(utils::DATE_TIME_FORMAT).to_string(),
                 self.parameters,
                 {
@@ -398,7 +403,7 @@ impl DidDocumentState {
 
                     // TODO replace this with toString call of log entry
                     DidLogEntry::new(
-                        String::from(entry_hash),
+                        String::from(version_id_and_entry_hash.clone()),
                         version_id.parse::<usize>().unwrap(),
                         DateTime::parse_from_str(entry[1].as_str().unwrap(), utils::DATE_TIME_FORMAT).unwrap().to_utc(),
                         serde_json::from_str(&entry[2].to_string()).unwrap(),
