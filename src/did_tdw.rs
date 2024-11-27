@@ -30,9 +30,11 @@ use url_escape;
 /// See https://github.com.mcas.ms/decentralized-identity/trustdidweb/blob/63e21b69d84f7d9344f4e6ef4809e7823975c965/spec/specification.md
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DidLogEntry {
-    pub entry_hash: String,
+    /// Since v0.2 (see https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
+    ///            The new versionId takes the form <version number>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.
+    pub version_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub version_id: Option<usize>,
+    pub version_index: Option<usize>,
     #[serde(with = "ts_seconds")]
     pub version_time: DateTime<Utc>,
     pub parameters: DidMethodParameters,
@@ -44,16 +46,16 @@ pub struct DidLogEntry {
 impl DidLogEntry {
     /// Import of existing log entry
     pub fn new(
-        entry_hash: String,
-        version_id: usize,
+        version_id: String,
+        version_index: usize,
         version_time: DateTime<Utc>,
         parameters: DidMethodParameters,
         did_doc: DidDoc,
         proof: DataIntegrityProof,
     ) -> Self {
         DidLogEntry {
-            entry_hash,
-            version_id: Some(version_id),
+            version_id,
+            version_index: Some(version_index),
             version_time,
             parameters,
             did_doc,
@@ -63,14 +65,14 @@ impl DidLogEntry {
 
     /// Creation of new log entry (without integrity proof)
     pub fn of_with_proof(
-        entry_hash: String,
+        version_id: String,
         parameters: DidMethodParameters,
         did_doc: DidDoc,
         proof: DataIntegrityProof,
     ) -> Self {
         DidLogEntry {
-            entry_hash,
-            version_id: Option::None,
+            version_id,
+            version_index: Option::None,
             version_time: Utc::now(),
             parameters,
             did_doc,
@@ -79,10 +81,10 @@ impl DidLogEntry {
     }
 
     /// Creation of new log entry (without known version_id)
-    pub fn of(entry_hash: String, parameters: DidMethodParameters, did_doc: DidDoc) -> Self {
+    pub fn of(version_id: String, parameters: DidMethodParameters, did_doc: DidDoc) -> Self {
         DidLogEntry {
-            entry_hash,
-            version_id: Option::None,
+            version_id: version_id,
+            version_index: Option::None,
             version_time: Utc::now(),
             parameters,
             did_doc,
@@ -90,23 +92,23 @@ impl DidLogEntry {
         }
     }
 
-    /// Check wether the entry_hash of this log entry is based on the previous entry_hash
-    pub fn verify_entry_hash_integrity(&self, previous_entry_hash: &str) {
+    /// Check whether the versionId of this log entry is based on the previous versionId
+    pub fn verify_version_id_integrity(&self, previous_version_id: &str) {
         let entry_without_proof = DidLogEntry {
-            entry_hash: previous_entry_hash.to_string(),
-            version_id: self.version_id,
+            version_id: previous_version_id.to_string(),
+            version_index: self.version_index,
             version_time: self.version_time,
             parameters: self.parameters.clone(),
             did_doc: self.did_doc.clone(),
             proof: None,
         };
-        let entry_hash = entry_without_proof.get_hash();
-        if entry_hash != self.entry_hash {
+        let version_id = entry_without_proof.build_version_id();
+        if version_id != self.version_id {
             panic!("Invalid did log. Genesis entry has invalid entry hash")
         }
     }
 
-    /// Check wether the integrity proof matches the content of the did document of this log entry
+    /// Check whether the integrity proof matches the content of the did document of this log entry
     pub fn verify_data_integrity_proof(&self) {
         // Verify data integrity proof
         let verifying_key = self.get_data_integrity_verifying_key(); // may panic
@@ -131,21 +133,21 @@ impl DidLogEntry {
         if !eddsa_suite.verify_proof(&did_doc_value) {
             panic!(
                 "Invalid did log. Entry of version {} has invalid data integrity proof",
-                self.version_id.unwrap()
+                self.version_index.unwrap()
             )
         }
     }
 
-    fn get_hash(&self) -> String {
+    /// The new versionId takes the form <version number>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.
+    fn build_version_id(&self) -> String {
         let json = serde_json::to_string(&self.to_log_entry_line()).unwrap();
-        //utils::generate_jcs_hash(&json)
         // Since v0.2 (see https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
         //            The new versionId takes the form <version number>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.
         // Also see https://identity.foundation/trustdidweb/v0.3/#the-did-log-file:
         //            A Data Integrity Proof across the entry, signed by a DID authorized to update the DIDDoc, using the versionId as the challenge.
         format!(
             "{}-{}",
-            self.version_id.unwrap(),
+            self.version_index.unwrap(),
             utils::generate_jcs_hash(&json)
         )
     }
@@ -215,7 +217,7 @@ impl DidLogEntry {
             .iter()
             .any(|authentication_method| authentication_method.id == verification_method.id)
         {
-            panic!("Invalid integrity proof for log with id {}. The verification method used for the integrity proof is not part of the authentication section", self.version_id.unwrap())
+            panic!("Invalid integrity proof for log with id {}. The verification method used for the integrity proof is not part of the authentication section", self.version_index.unwrap())
         }
 
         if verification_method.verification_type != utils::EDDSA_VERIFICATION_KEY_TYPE {
@@ -230,7 +232,7 @@ impl DidLogEntry {
     pub fn to_log_entry_line(&self) -> serde_json::Value {
         match &self.proof {
             Some(proof) => serde_json::json!([
-                self.entry_hash,
+                self.version_id,
                 self.version_time.to_owned().format(utils::DATE_TIME_FORMAT).to_string(),
                 self.parameters,
                 {
@@ -239,7 +241,7 @@ impl DidLogEntry {
                 proof.to_value()
             ]),
             None => serde_json::json!([
-                self.entry_hash,
+                self.version_id,
                 self.version_time.to_owned().format(utils::DATE_TIME_FORMAT).to_string(),
                 self.parameters,
                 {
@@ -385,17 +387,17 @@ impl DidDocumentState {
                         _ => panic!("Invalid did log entry. Expected array")
                     }
 
-                    let version_id_and_entry_hash = match entry[0] {
-                        JsonString(ref entry_hash) => entry_hash.clone(),
+                    let version_id = match entry[0] {
+                        JsonString(ref id) => id.clone(),
                         _ => panic!("Invalid entry hash"),
                     };
                     // Since v0.2 (see https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
                     //            The new versionId takes the form <version number>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.
-                    let version_id: &str;
+                    let version_index_as_str: &str;
                     let entry_hash: &str;
-                    match version_id_and_entry_hash.split_once("-") {
-                        Some((id, hash)) => {
-                            version_id = id;
+                    match version_id.split_once("-") {
+                        Some((index, hash)) => {
+                            version_index_as_str = index;
                             entry_hash = hash;
                         }
                         None => panic!("Invalid entry hash format. The valid format is <version number>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.")
@@ -403,8 +405,8 @@ impl DidDocumentState {
 
                     // TODO replace this with toString call of log entry
                     DidLogEntry::new(
-                        String::from(version_id_and_entry_hash.clone()),
-                        version_id.parse::<usize>().unwrap(),
+                        String::from(version_id.clone()),
+                        version_index_as_str.parse::<usize>().unwrap(),
                         DateTime::parse_from_str(entry[1].as_str().unwrap(), utils::DATE_TIME_FORMAT).unwrap().to_utc(),
                         serde_json::from_str(&entry[2].to_string()).unwrap(),
                         serde_json::from_str(&entry[3]["value"].to_string()).unwrap(),
@@ -427,30 +429,30 @@ impl DidDocumentState {
             match previous_entry {
                 Some(ref prev) => {
                     // Check if version has incremented
-                    if entry.version_id.unwrap() != prev.version_id.unwrap() + 1 {
+                    if entry.version_index.unwrap() != prev.version_index.unwrap() + 1 {
                         panic!(
                             "Invalid did log for version {}. Version id has to be incremented",
-                            entry.version_id.unwrap()
+                            entry.version_index.unwrap()
                         )
                     }
                     // Verify data integrity proof
                     entry.verify_data_integrity_proof(); // may panic
 
                     // Verify the entryHash
-                    entry.verify_entry_hash_integrity(&prev.entry_hash); // may panic
+                    entry.verify_version_id_integrity(&prev.version_id); // may panic
                     previous_entry = Some(entry.clone());
                 }
                 None => {
                     // First / genesis entry in did log
                     let genesis_entry = self.did_log_entries.first().unwrap();
-                    if genesis_entry.version_id.unwrap() != 1 {
+                    if genesis_entry.version_index.unwrap() != 1 {
                         panic!("Invalid did log. First entry has to have version id 1")
                     }
                     // Verify data integrity proof
                     genesis_entry.verify_data_integrity_proof(); // may panic
 
                     // Verify the entryHash
-                    genesis_entry.verify_entry_hash_integrity(
+                    genesis_entry.verify_version_id_integrity(
                         genesis_entry.parameters.scid.as_ref().unwrap(),
                     ); // may panic
                     // Verify that the SCID is correct
@@ -488,7 +490,7 @@ impl DidDocumentState {
     pub fn update(&mut self, log_entry: DidLogEntry, did_tdw: &str, key_pair: &Ed25519KeyPair) {
         // Identify version id
         let mut index: usize = 1;
-        let mut previous_hash = log_entry.entry_hash.clone();
+        let mut previous_version_id = log_entry.version_id.clone();
         let mut verification_method = String::new();
 
         // Make sure only activated did docs can be updated
@@ -496,7 +498,7 @@ impl DidDocumentState {
         if self.did_log_entries.is_empty() {
             // Genesis entry (Create)
             // Check if version hash is present
-            if log_entry.entry_hash.is_empty() {
+            if log_entry.version_id.is_empty() {
                 panic!("For the initial log entry the SCID/previous hash has to be provided")
             }
             log_entry.check_if_verification_method_match_public_key(
@@ -526,9 +528,9 @@ impl DidDocumentState {
             }
 
             // Get new version index
-            index = previous_entry.version_id.unwrap() + 1;
+            index = previous_entry.version_index.unwrap() + 1;
             // Get last version hash
-            previous_hash = previous_entry.entry_hash.clone();
+            previous_version_id = previous_entry.version_id.clone();
             previous_entry.check_if_verification_method_match_public_key(
                 did_tdw,
                 key_pair.get_verifying_key().as_ref(),
@@ -541,16 +543,16 @@ impl DidDocumentState {
                 .clone();
         }
 
-        // Generate new hash and use it as entry_hash and integrity challenge
-        let doc_without_entry_hash = DidLogEntry {
-            version_id: Some(index),
-            entry_hash: previous_hash,
+        // Generate new hash and use it as versionId and integrity challenge
+        let doc_without_version_id = DidLogEntry {
+            version_index: Some(index),
+            version_id: previous_version_id,
             ..log_entry
         };
-        let integrity_challenge = doc_without_entry_hash.get_hash();
+        let integrity_challenge = doc_without_version_id.build_version_id();
         let doc_without_proof = DidLogEntry {
-            entry_hash: integrity_challenge.clone(),
-            ..doc_without_entry_hash
+            version_id: integrity_challenge.clone(),
+            ..doc_without_version_id
         };
 
         // Generate data integrity proof for new entry
@@ -1018,7 +1020,7 @@ impl TrustDidWeb {
 
         let current_entry = did_doc_state.current();
         let update_entry = DidLogEntry::of(
-            current_entry.entry_hash.clone(),
+            current_entry.version_id.clone(),
             // TODO make parameters configurable
             DidMethodParameters::empty(),
             update_did_doc.clone(),
@@ -1057,7 +1059,7 @@ impl TrustDidWeb {
         current_did_doc.deactivated = Some(true);
         let current_entry = did_doc_state.current();
         let update_entry = DidLogEntry::of(
-            current_entry.entry_hash.clone(),
+            current_entry.version_id.clone(),
             DidMethodParameters::deactivate(),
             current_did_doc.clone(),
         );
