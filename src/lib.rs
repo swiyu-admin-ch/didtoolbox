@@ -315,6 +315,27 @@ mod test {
     }
 
     #[rstest]
+    #[should_panic(expected = "Invalid multibase format for base58btc")]
+    fn test_multibase_base58btc_conversion_invalid_multibase() {
+        let encoded = convert_to_multibase_base58btc("helloworld".as_bytes()); // zfP1vxkpyLWnH9dD6BQA
+        let encoded_without_multibase = encoded.chars().skip(1).collect::<String>(); // get rid of the multibase code (prefix char 'z')
+        //let mut buff: [u8; 16] = [0; 16];
+        let mut buff = vec![0; 16];
+        convert_from_multibase_base58btc(encoded_without_multibase.as_str(), &mut buff);
+    }
+
+    #[rstest]
+    #[should_panic(
+        expected = "Entered base58btc content is invalid: buffer provided to decode base58 encoded string into was too small"
+    )]
+    fn test_multibase_base58btc_conversion_buffer_too_small() {
+        let encoded = convert_to_multibase_base58btc("helloworld".as_bytes()); // zfP1vxkpyLWnH9dD6BQA
+        //let mut buff: [u8; 16] = [0; 16];
+        let mut buff = vec![0; 8]; // empirical size for "helloworld" (encoded)
+        convert_from_multibase_base58btc(encoded.as_str(), &mut buff);
+    }
+
+    #[rstest]
     fn test_key_creation(ed25519_key_pair: &Ed25519KeyPair, // fixture
     ) {
         let original_private = ed25519_key_pair.get_signing_key();
@@ -424,8 +445,21 @@ mod test {
         // Read updated did doc with new property
         let tdw_v3 = TrustDidWeb::read(did, did_log, Some(false)).unwrap();
         let did_doc_v3: serde_json::Value = serde_json::from_str(&tdw_v3.get_did_doc()).unwrap();
+
         match did_doc_v3["assertionMethod"][0]["id"] {
             serde_json::Value::String(ref s) => assert!(s.eq("did:jwk:123#type1")),
+            _ => panic!("Invalid did doc"),
+        };
+        match did_doc_v3["assertionMethod"][0]["controller"] {
+            serde_json::Value::String(ref s) => assert!(s.eq("did:jwk:123")),
+            _ => panic!("Invalid did doc"),
+        };
+        match did_doc_v3["assertionMethod"][0]["type"] {
+            serde_json::Value::String(ref s) => assert!(s.eq("TestKey")),
+            _ => panic!("Invalid did doc"),
+        };
+        match did_doc_v3["assertionMethod"][0]["publicKeyMultibase"] {
+            serde_json::Value::String(ref s) => assert!(s.eq("SomeKey")),
             _ => panic!("Invalid did doc"),
         };
     }

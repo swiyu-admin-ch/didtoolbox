@@ -34,7 +34,7 @@ pub fn convert_from_multibase_base58btc(multibase: &str, result: &mut [u8]) {
     {
         Ok(_) => (),
         // e.g. "buffer provided to decode base58 encoded string into was too small"
-        Err(e) => panic!("Entered base58btc content is invalid: {}", e.to_string()),
+        Err(err) => panic!("Entered base58btc content is invalid: {err}"),
     }
 }
 
