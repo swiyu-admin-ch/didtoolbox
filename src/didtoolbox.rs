@@ -39,8 +39,8 @@ pub struct VerificationMethod {
 impl VerificationMethod {
     pub fn new(id: String, controller: String, public_key_multibase: String) -> Self {
         VerificationMethod {
-            id: id,
-            controller: controller,
+            id,
+            controller,
             verification_type: String::from("Multikey"),
             public_key_multibase: Some(public_key_multibase),
             public_key_jwk: None,
@@ -131,7 +131,7 @@ impl DidDoc {
         self.deactivated.unwrap_or(false)
     }
 
-    pub fn from_json(json_content: &String) -> Self {
+    pub fn from_json(json_content: &str) -> Self {
         let did_doc: DidDoc = match serde_json::from_str(json_content) {
             Ok(did_doc) => did_doc,
             Err(e) => {

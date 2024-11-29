@@ -1,4 +1,11 @@
 // SPDX-License-Identifier: MIT
+
+//! This project implements the following things:
+//!
+//! - General util structs reused by other libraries of e-id-admin
+//! - Trust did web according to the specification [trust-did-web](https://bcgov.github.io/trustdidweb/)
+//!
+
 pub mod did_tdw;
 pub mod didtoolbox;
 pub mod ed25519;
@@ -8,8 +15,6 @@ pub mod vc_data_integrity;
 use crate::did_tdw::*;
 use crate::didtoolbox::*;
 use crate::ed25519::*;
-use crate::utils::*;
-use rand::Rng; // 0.8
 
 uniffi::include_scaffolding!("didtoolbox");
 
@@ -19,21 +24,13 @@ mod test {
     use super::didtoolbox::*;
     use super::ed25519::*;
     use super::utils::*;
-    use base64::Engine as _;
     use core::panic;
-    use hex::ToHex;
     use mockito::{Matcher, Server, ServerOpts};
     use rand::distributions::Alphanumeric;
     use rand::Rng;
     use rstest::{fixture, rstest};
     use serde_json::{json, Value};
-    use sha2::{Digest, Sha256};
-    use ssi::json_ld::syntax::BorrowUnordered;
-    use std::borrow::Borrow;
-    use std::borrow::BorrowMut;
-    use std::ops::Index;
     use std::vec;
-
     //
     // INFO: To run tests in this module, it is NO NEED to start the 'did_server'
     //       located in the folder with the same name anymore!!!
@@ -139,8 +136,7 @@ mod test {
             // Smoke test
             //let http_client = HttpClient { api_key: Some("secret".to_string()) };
             let http_client = HttpClient { api_key: None }; // works as well, for some reason
-            let did_log = http_client.read(format!("{}/did.jsonl", url.to_owned())); // may panic
-                                                                                     //println!("{did_log}");
+            http_client.read(format!("{}/did.jsonl", url.to_owned())); // may panic
 
             TdwMock {
                 url,
@@ -170,23 +166,23 @@ mod test {
 
     #[rstest]
     #[case(
-        "did:tdw:myScid:localhost%3A8000:123:456",
+        "did:tdw:QMySCID:localhost%3A8000:123:456",
         "http://localhost:8000/123/456/did.jsonl"
     )]
-    #[case("did:tdw:myScid:localhost%3A8000", "http://localhost:8000/did.jsonl")]
-    #[case("did:tdw:myScid:localhost", "http://localhost/.well-known/did.jsonl")]
+    #[case("did:tdw:QMySCID:localhost%3A8000", "http://localhost:8000/did.jsonl")]
+    #[case("did:tdw:QMySCID:localhost", "http://localhost/.well-known/did.jsonl")]
     #[case(
-        "did:tdw:myScid:admin.ch%3A8000:123:456",
+        "did:tdw:QMySCID:admin.ch%3A8000:123:456",
         "http://admin.ch:8000/123/456/did.jsonl"
     )]
-    #[case("did:tdw:myScid:admin.ch%3A8000", "http://admin.ch:8000/did.jsonl")]
-    #[case("did:tdw:myScid:admin.ch", "http://admin.ch/.well-known/did.jsonl")]
+    #[case("did:tdw:QMySCID:admin.ch%3A8000", "http://admin.ch:8000/did.jsonl")]
+    #[case("did:tdw:QMySCID:admin.ch", "http://admin.ch/.well-known/did.jsonl")]
     #[case(
-        "did:tdw:myScid:sub.admin.ch",
+        "did:tdw:QMySCID:sub.admin.ch",
         "http://sub.admin.ch/.well-known/did.jsonl"
     )]
     #[case(
-        "did:tdw:myScid:sub.admin.ch:mypath:mytrala",
+        "did:tdw:QMySCID:sub.admin.ch:mypath:mytrala",
         "http://sub.admin.ch/mypath/mytrala/did.jsonl"
     )]
     fn test_tdw_to_url_conversion(#[case] tdw: String, #[case] url: String) {
@@ -196,7 +192,7 @@ mod test {
     }
 
     #[rstest]
-    #[case("did:xyz:myScid:localhost%3A8000:123:456")]
+    #[case("did:xyz:QMySCID:localhost%3A8000:123:456")]
     fn test_tdw_to_url_conversion_error_kind_method_not_supported(#[case] tdw: String) {
         match TrustDidWebId::parse_did_tdw(tdw, Some(true)) {
             Err(e) => assert_eq!(
@@ -205,6 +201,13 @@ mod test {
             ),
             _ => (),
         }
+    }
+
+    #[rstest]
+    #[case("did:tdw:MySCID:localhost%3A8000:123:456")]
+    #[should_panic(expected = "Invalid multibase format for SCID. base58btc identifier expected")]
+    fn test_tdw_to_url_conversion_error_invalid_scid_multibase(#[case] tdw: String) {
+        TrustDidWebId::parse_did_tdw(tdw, Some(true)).unwrap();
     }
 
     #[rstest]
@@ -258,8 +261,8 @@ mod test {
 
         let scid = generate_scid(&did_doc);
         //let scid_str = scid.as_str();
-        assert_eq!(scid.len(), 93);
-        assert_eq!(scid, "7xbXB9W593YjYbJ7Fwo6mkwVhZrWa4bz1sSvq56zVL9oXoCsCJpmQg6PqHUiB4JU6CW1kQA7QehEE52CFFzpkYSBGVDPH")
+        assert_eq!(scid.len(), 89);
+        assert_eq!(scid, "Q24gHnKdYN3XhZJJoqmd1Ppq2zXQ4DSF46mqcVaBzwT5Agu9nM7AgV8n99rhireSZNBrLC4nibYXunM34nxbRa4Cg")
     }
 
     #[rstest]
@@ -301,6 +304,38 @@ mod test {
     }
 
     #[rstest]
+    fn test_multibase_base58btc_conversion() {
+        let encoded = convert_to_multibase_base58btc("helloworld".as_bytes()); // zfP1vxkpyLWnH9dD6BQA
+        //let mut buff: [u8; 16] = [0; 16];
+        let mut buff = vec![0; 16];
+        convert_from_multibase_base58btc(encoded.as_str(), &mut buff);
+        let decoded = String::from_utf8_lossy(&buff).to_string();
+        assert!(decoded.starts_with("helloworld"));
+        //assert_eq!(decoded, "helloworld");
+    }
+
+    #[rstest]
+    #[should_panic(expected = "Invalid multibase format for base58btc")]
+    fn test_multibase_base58btc_conversion_invalid_multibase() {
+        let encoded = convert_to_multibase_base58btc("helloworld".as_bytes()); // zfP1vxkpyLWnH9dD6BQA
+        let encoded_without_multibase = encoded.chars().skip(1).collect::<String>(); // get rid of the multibase code (prefix char 'z')
+        //let mut buff: [u8; 16] = [0; 16];
+        let mut buff = vec![0; 16];
+        convert_from_multibase_base58btc(encoded_without_multibase.as_str(), &mut buff);
+    }
+
+    #[rstest]
+    #[should_panic(
+        expected = "Entered base58btc content is invalid: buffer provided to decode base58 encoded string into was too small"
+    )]
+    fn test_multibase_base58btc_conversion_buffer_too_small() {
+        let encoded = convert_to_multibase_base58btc("helloworld".as_bytes()); // zfP1vxkpyLWnH9dD6BQA
+        //let mut buff: [u8; 16] = [0; 16];
+        let mut buff = vec![0; 8]; // empirical size for "helloworld" (encoded)
+        convert_from_multibase_base58btc(encoded.as_str(), &mut buff);
+    }
+
+    #[rstest]
     fn test_key_creation(ed25519_key_pair: &Ed25519KeyPair, // fixture
     ) {
         let original_private = ed25519_key_pair.get_signing_key();
@@ -320,8 +355,8 @@ mod test {
     ) {
         let url = tdw_mock.get_url();
 
-        let tdw = TrustDidWeb::create(url, &ed25519_key_pair, Some(false)).unwrap();
-        assert!(tdw.get_did().len() > 0);
+        let tdw = TrustDidWeb::create(url, ed25519_key_pair, Some(false)).unwrap();
+        assert!(!tdw.get_did().is_empty());
         assert!(tdw.get_did().starts_with("did:tdw:"))
     }
 
@@ -386,7 +421,7 @@ mod test {
         let did_doc_v2 = did_doc_v2.to_string();
 
         // use updated DID log (as json body) to setup the GET mock
-        let scid = tdw_id.get_scid();
+        //let scid = tdw_id.get_scid();
 
         //let did_log_str_v1 = TrustDidWeb::read(scid, tdw.get_did_log()).get_did_log();
         let did_log_str_v1 = did_log.clone();
@@ -394,10 +429,10 @@ mod test {
             did.to_owned(),
             did_log_str_v1,
             did_doc_v2.clone(),
-            &ed25519_key_pair,
+            ed25519_key_pair,
             Some(false),
         )
-        .unwrap();
+            .unwrap();
         let updated_did_log_json = json!(updated.get_did_log());
         server
             .mock("GET", Matcher::Regex(r"/[a-z0-9=]+/did.jsonl$".to_string()))
@@ -410,8 +445,21 @@ mod test {
         // Read updated did doc with new property
         let tdw_v3 = TrustDidWeb::read(did, did_log, Some(false)).unwrap();
         let did_doc_v3: serde_json::Value = serde_json::from_str(&tdw_v3.get_did_doc()).unwrap();
+
         match did_doc_v3["assertionMethod"][0]["id"] {
             serde_json::Value::String(ref s) => assert!(s.eq("did:jwk:123#type1")),
+            _ => panic!("Invalid did doc"),
+        };
+        match did_doc_v3["assertionMethod"][0]["controller"] {
+            serde_json::Value::String(ref s) => assert!(s.eq("did:jwk:123")),
+            _ => panic!("Invalid did doc"),
+        };
+        match did_doc_v3["assertionMethod"][0]["type"] {
+            serde_json::Value::String(ref s) => assert!(s.eq("TestKey")),
+            _ => panic!("Invalid did doc"),
+        };
+        match did_doc_v3["assertionMethod"][0]["publicKeyMultibase"] {
+            serde_json::Value::String(ref s) => assert!(s.eq("SomeKey")),
             _ => panic!("Invalid did doc"),
         };
     }
@@ -457,7 +505,7 @@ mod test {
             &unauthorized_key_pair,
             Some(false),
         )
-        .unwrap();
+            .unwrap();
     }
 
     #[rstest]
@@ -484,7 +532,7 @@ mod test {
             ed25519_key_pair,
             Some(false),
         )
-        .unwrap();
+            .unwrap();
         let deactivated_did_log_json = json!(deactivated.get_did_log());
         server
             .mock("GET", Matcher::Regex(r"/[a-z0-9=]+/did.jsonl$".to_string()))
@@ -518,6 +566,6 @@ mod test {
             ed25519_key_pair,
             Some(false),
         )
-        .unwrap();
+            .unwrap();
     }
 }
