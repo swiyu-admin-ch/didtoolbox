@@ -1,31 +1,50 @@
 # didtoolbox
 
 This project implements the following things:
+
 - General util structs reused by other libraries of e-id-admin
 - Trust did web according to the specification [trust-did-web](https://bcgov.github.io/trustdidweb/)
 
 ## Using the library
-The library can be used either directly in rust as is or through the different built bindings which are published in different submodules
+
+The library can be used either directly in rust as is or through the different built bindings which are published in
+different submodules
+
 ### Rust
+
 The library can be used directly in rust by adding the following dependency to your `Cargo.toml`:
+
 ````toml
 [dependencies]
-didtoolbox = {git="https://github.com/e-id-admin/didtoolbox", branch = "main"}
+didtoolbox = { git = "https://github.com/e-id-admin/didtoolbox", branch = "main" }
 
 # Optional: For manipulating the json content in the example
-serde_json = "1.0.115"
+serde_json = "1.0.133"
 ````
-### Additional language bindings
-> General information how the bindings are generated can be found in the [UniFFI user guide](https://mozilla.github.io/uniffi-rs/latest/)
 
-The library is also available in other languages. Please consult the documentation of the subsequent repositories for more information:
+### Additional language bindings
+
+> General information how the bindings are generated can be found in
+> the [UniFFI user guide](https://mozilla.github.io/uniffi-rs/latest/)
+
+Although indirectly, the library is to a certain extent also available in other languages. Please consult the
+documentation of the
+subsequent repositories for
+more information:
+
 - [Kotlin / Java](https://github.com/e-id-admin/didtoolbox-kotlin)
+- [Kotlin (Android)](https://github.com/e-id-admin/didresolver-kotlin-android/)
+- [Swift](https://github.com/e-id-admin/didresolver-swift)
 
 ## Example
+
 In the example the following steps are shown:
-1. Create a new did:tdw by initializing a did doc. In this did doc an ed25519 key is used as controller and to create the integrity proofs
+
+1. Create a new did:tdw by initializing a did doc. In this did doc an ed25519 key is used as controller and to create
+   the integrity proofs
 2. Add another verification method to the existing did doc
 3. Update the did log
+
 ```rust
 use didtoolbox::ed25519::Ed25519KeyPair;
 use didtoolbox::did_tdw::TrustDidWeb;
@@ -58,11 +77,20 @@ fn main() {
         "publicKeyMultibase": "<some fancy multibase encoded public key>"
     }));
     let did_doc_v2_str = did_doc_v1.to_string();
-    let tdw_v2 = TrustDidWeb::update(tdw_v1.get_did(),tdw_v1.get_did_log(), did_doc_v2_str, &key_pair).unwrap();
+    let tdw_v2 = TrustDidWeb::update(tdw_v1.get_did(), tdw_v1.get_did_log(), did_doc_v2_str, &key_pair).unwrap();
     println!("DID Doc v2: {}", tdw_v2.get_did_doc());
 }
 
 ```
 
+## Changelog
+
+| Version | Description                                                                                                                                                                                               |
+|---------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 0.0.3   | **BREAKING CHANGE** `TrustDidWebProcessor` discontinued. <br/>Signature of the `read` method now also requires a DID log (as string).<br/> All `TrustDidWeb` methods may now throw new `TrustDidWebError` |
+| 0.0.4   | **FEATURE** Non-empty constructor added for `TrustDidWeb`. Code formatted using `rustfmt`                                                                                                                 |
+| 0.0.5   | **IMPROVEMENT/FIX** Ensured conformity with [Trust DID Web - did:tdw - v0.3](https://identity.foundation/trustdidweb/v0.3/)                                                                               |
+
 ## License
+
 This project is licensed under the terms of the MIT license. See the [LICENSE](LICENSE.md) file for details.

@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
-use crate::ed25519::*;
-use crate::utils::{DATE_TIME_FORMAT};
 use crate::didtoolbox::*;
+use crate::ed25519::*;
 use crate::utils;
-use chrono::{serde::ts_seconds, DateTime, Utc};
+use chrono::{serde::ts_seconds, DateTime, SecondsFormat, Utc};
+use hex;
 use serde::{Deserialize, Serialize};
-use sha2::{Sha256, Digest};
 use serde_json::json;
 use serde_json::Value::String as JsonString;
-use hex;
+use sha2::{Digest, Sha256};
 
 #[derive(Clone)]
 pub enum CryptoSuiteType {
@@ -17,7 +16,7 @@ pub enum CryptoSuiteType {
     EcdsaJcs2019,
     EcdsaSd2019,
     EddsaRdfc2022,
-    EddsaJcs2022
+    EddsaJcs2022,
 }
 
 impl std::fmt::Display for CryptoSuiteType {
@@ -44,7 +43,11 @@ pub struct CryptoSuiteOptions {
 }
 
 impl CryptoSuiteOptions {
-    pub fn new(crypto_suite: CryptoSuiteType, verification_method: String, challenge: String) -> CryptoSuiteOptions {
+    pub fn new(
+        crypto_suite: CryptoSuiteType,
+        verification_method: String,
+        challenge: String,
+    ) -> CryptoSuiteOptions {
         CryptoSuiteOptions {
             proof_type: "DataIntegrityProof".to_string(),
             crypto_suite,
@@ -86,7 +89,9 @@ impl DataIntegrityProof {
                 _ => String::from(""),
             },
             created: match value["created"] {
-                serde_json::Value::String(ref s) => DateTime::parse_from_str(s, DATE_TIME_FORMAT).unwrap().to_utc(),
+                serde_json::Value::String(ref s) => DateTime::parse_from_rfc3339(s)
+                    .unwrap()
+                    .to_utc(),
                 _ => Utc::now(),
             },
             verification_method: match value["verificationMethod"] {
@@ -99,7 +104,7 @@ impl DataIntegrityProof {
             },
             challenge: match value["challenge"] {
                 serde_json::Value::String(ref s) => s.to_string(),
-                _ => String::from("")
+                _ => String::from(""),
             },
             proof_value: match value["proofValue"] {
                 serde_json::Value::String(ref s) => s.to_string(),
@@ -109,8 +114,9 @@ impl DataIntegrityProof {
     }
 
     pub fn to_value(&self) -> serde_json::Value {
-        let mut value = serde_json::to_value(&self).unwrap();
-        value["created"] = serde_json::Value::String(self.created.format(DATE_TIME_FORMAT).to_string());
+        let mut value = serde_json::to_value(self).unwrap();
+        value["created"] =
+            serde_json::Value::String(self.created.to_rfc3339_opts(SecondsFormat::Secs, true).to_string());
         value
     }
 }
@@ -128,7 +134,11 @@ pub struct CryptoSuiteVerificationResult {
 // See https://www.w3.org/TR/vc-data-integrity/#cryptographic-suites
 pub trait CryptoSuite {
     // See https://www.w3.org/TR/vc-data-integrity/#dfn-createproof
-    fn create_proof(&self, unsecured_data_document: &serde_json::Value, proof_options: &CryptoSuiteOptions) -> String;
+    fn create_proof(
+        &self,
+        unsecured_data_document: &serde_json::Value,
+        proof_options: &CryptoSuiteOptions,
+    ) -> String;
     // See https://www.w3.org/TR/vc-data-integrity/#dfn-verifyproof
     //fn create_verification(&self, secured_document: &str, presentation_header: String) -> CryptoSuiteVerificationResult;
 }
@@ -138,7 +148,11 @@ pub trait CryptoSuite {
 /// https://www.w3.org/TR/vc-data-integrity/#algorithms
 pub trait VCDataIntegrity {
     // See https://www.w3.org/TR/vc-data-integrity/#add-proof
-    fn add_proof(&self, unsecured_document: &serde_json::Value, options: &CryptoSuiteOptions) -> serde_json::Value;
+    fn add_proof(
+        &self,
+        unsecured_document: &serde_json::Value,
+        options: &CryptoSuiteOptions,
+    ) -> serde_json::Value;
     // See https://www.w3.org/TR/vc-data-integrity/#verify-proof
     fn verify_proof(&self, secured_document: &serde_json::Value) -> bool;
 }
@@ -151,7 +165,11 @@ pub struct EddsaCryptosuite {
 // NOTE Only https://www.w3.org/TR/vc-di-eddsa/#eddsa-jcs-2022 is supported
 impl VCDataIntegrity for EddsaCryptosuite {
     // See https://www.w3.org/TR/vc-di-eddsa/#create-proof-eddsa-jcs-2022
-    fn add_proof(&self, unsecured_document: &serde_json::Value, options: &CryptoSuiteOptions) -> serde_json::Value {
+    fn add_proof(
+        &self,
+        unsecured_document: &serde_json::Value,
+        options: &CryptoSuiteOptions,
+    ) -> serde_json::Value {
         if !matches!(options.crypto_suite, CryptoSuiteType::EddsaJcs2022) {
             panic!("Invalid crypto suite. Only eddsa-jcs-2022 is supported");
         }
@@ -163,7 +181,7 @@ impl VCDataIntegrity for EddsaCryptosuite {
         let mut proof = json!({
             "type": options.proof_type,
             "cryptoSuite": options.crypto_suite.to_string(),
-            "created": Utc::now().format(DATE_TIME_FORMAT).to_string(),
+            "created": Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true).to_string(),
             "verificationMethod": options.verification_method,
             "proofPurpose": options.proof_purpose,
             "challenge": options.challenge.as_ref().unwrap(),
@@ -175,10 +193,10 @@ impl VCDataIntegrity for EddsaCryptosuite {
 
         // 3.1.6 Proof serialization
         let proof_signature = match &self.signing_key {
-            Some(signing_key) => {
-                signing_key.sign(hash_data)
-            },
-            None => panic!("Invalid eddsa cryptosuite. Signing key is missing but required for proof creation"),
+            Some(signing_key) => signing_key.sign(hash_data),
+            None => panic!(
+                "Invalid eddsa cryptosuite. Signing key is missing but required for proof creation"
+            ),
         };
         let proof_signature_multibase = proof_signature.to_multibase();
         proof["proofValue"] = JsonString(proof_signature_multibase);
@@ -187,7 +205,6 @@ impl VCDataIntegrity for EddsaCryptosuite {
         let mut secured_document = unsecured_document.clone();
         secured_document["proof"] = proof;
         secured_document
-
     }
 
     // See https://www.w3.org/TR/vc-di-eddsa/#verify-proof-eddsa-jcs-2022
@@ -209,18 +226,13 @@ impl VCDataIntegrity for EddsaCryptosuite {
         let hash_data = proof_hash + &doc_hash;
 
         let signature = match secured_document["proof"]["proofValue"] {
-            JsonString(ref proof_value) => {
-                Ed25519Signature::from_multibase(proof_value)
-            },
+            JsonString(ref proof_value) => Ed25519Signature::from_multibase(proof_value),
             _ => panic!("Invalid proof value. Expected string"),
         };
         match self.verifying_key {
             Some(ref verifying_key) => {
-                match verifying_key.verifying_key.verify_strict(hash_data.as_bytes(), &signature.signature) {
-                    Ok(_) => true,
-                    Err(_) => false,
-                }
-            },
+                verifying_key.verifying_key.verify_strict(hash_data.as_bytes(), &signature.signature).is_ok()
+            }
             None => panic!("Invalid eddsa cryptosuite. Verifying key is missing but required for proof verification"),
         }
     }
