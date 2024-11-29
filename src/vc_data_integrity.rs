@@ -2,8 +2,7 @@
 use crate::didtoolbox::*;
 use crate::ed25519::*;
 use crate::utils;
-use crate::utils::DATE_TIME_FORMAT;
-use chrono::{serde::ts_seconds, DateTime, Utc};
+use chrono::{serde::ts_seconds, DateTime, SecondsFormat, Utc};
 use hex;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -90,7 +89,7 @@ impl DataIntegrityProof {
                 _ => String::from(""),
             },
             created: match value["created"] {
-                serde_json::Value::String(ref s) => DateTime::parse_from_str(s, DATE_TIME_FORMAT)
+                serde_json::Value::String(ref s) => DateTime::parse_from_rfc3339(s)
                     .unwrap()
                     .to_utc(),
                 _ => Utc::now(),
@@ -117,7 +116,7 @@ impl DataIntegrityProof {
     pub fn to_value(&self) -> serde_json::Value {
         let mut value = serde_json::to_value(self).unwrap();
         value["created"] =
-            serde_json::Value::String(self.created.format(DATE_TIME_FORMAT).to_string());
+            serde_json::Value::String(self.created.to_rfc3339_opts(SecondsFormat::Secs, true).to_string());
         value
     }
 }
@@ -182,7 +181,7 @@ impl VCDataIntegrity for EddsaCryptosuite {
         let mut proof = json!({
             "type": options.proof_type,
             "cryptoSuite": options.crypto_suite.to_string(),
-            "created": Utc::now().format(DATE_TIME_FORMAT).to_string(),
+            "created": Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true).to_string(),
             "verificationMethod": options.verification_method,
             "proofPurpose": options.proof_purpose,
             "challenge": options.challenge.as_ref().unwrap(),

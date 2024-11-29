@@ -131,7 +131,7 @@ impl DidDoc {
         self.deactivated.unwrap_or(false)
     }
 
-    pub fn from_json(json_content: &String) -> Self {
+    pub fn from_json(json_content: &str) -> Self {
         let did_doc: DidDoc = match serde_json::from_str(json_content) {
             Ok(did_doc) => did_doc,
             Err(e) => {

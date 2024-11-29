@@ -4,7 +4,7 @@ use crate::ed25519::*;
 use crate::utils;
 use crate::vc_data_integrity::*;
 use chrono::serde::ts_seconds;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, SecondsFormat, Utc};
 use hex;
 use hex::ToHex;
 use regex;
@@ -83,7 +83,7 @@ impl DidLogEntry {
     /// Creation of new log entry (without known version_id)
     pub fn of(version_id: String, parameters: DidMethodParameters, did_doc: DidDoc) -> Self {
         DidLogEntry {
-            version_id: version_id,
+            version_id,
             version_index: Option::None,
             version_time: Utc::now(),
             parameters,
@@ -233,7 +233,7 @@ impl DidLogEntry {
         match &self.proof {
             Some(proof) => serde_json::json!([
                 self.version_id,
-                self.version_time.to_owned().format(utils::DATE_TIME_FORMAT).to_string(),
+                self.version_time.to_owned().to_rfc3339_opts(SecondsFormat::Secs, true).to_string(),
                 self.parameters,
                 {
                     "value": self.did_doc
@@ -242,7 +242,7 @@ impl DidLogEntry {
             ]),
             None => serde_json::json!([
                 self.version_id,
-                self.version_time.to_owned().format(utils::DATE_TIME_FORMAT).to_string(),
+                self.version_time.to_owned().to_rfc3339_opts(SecondsFormat::Secs, true).to_string(),
                 self.parameters,
                 {
                     "value": self.did_doc
@@ -297,7 +297,7 @@ impl DidMethodParameters {
             panic!("Invalid multibase format for SCID. base58btc identifier expected");
         }
         DidMethodParameters {
-            method: Option::Some(String::from("did:tdw:0.3")),
+            method: Option::Some(String::from(DID_METHOD_PARAMETER_VERSION)),
             scid: Option::Some(scid),
             hash: Option::None,
             // Since v0.3 (https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
@@ -351,6 +351,19 @@ impl DidMethodParameters {
             portable: Option::None,
         }
     }
+
+    pub fn from_json(json_content: &str) -> Self {
+        let did_method_parameters: DidMethodParameters = match serde_json::from_str(json_content) {
+            Ok(did_method_parameters) => did_method_parameters,
+            Err(e) => {
+                panic!(
+                    "Error parsing DID Document. Make sure the content is correct -> {}",
+                    e
+                );
+            }
+        };
+        did_method_parameters
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -358,6 +371,9 @@ pub struct DidDocumentState {
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub did_log_entries: Vec<DidLogEntry>,
 }
+
+/// As defined by https://identity.foundation/trustdidweb/v0.3/#didtdw-did-method-parameters
+const DID_METHOD_PARAMETER_VERSION: &str = "did:tdw:0.3";
 
 impl DidDocumentState {
     pub fn new() -> Self {
@@ -403,11 +419,23 @@ impl DidDocumentState {
                         None => panic!("Invalid entry hash format. The valid format is <version number>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.")
                     }
 
+                    if version_index_as_str == "1" {
+                        let params = DidMethodParameters::from_json(&entry[2].to_string()); // may panic
+                        match params.method {
+                            Some(method) => {
+                                if method != DID_METHOD_PARAMETER_VERSION {
+                                    panic!("Invalid entry method parameter. Expected '{DID_METHOD_PARAMETER_VERSION}'")
+                                }
+                            }
+                            None => panic!("Missing entry 'method' parameter")
+                        }
+                    }
+
                     // TODO replace this with toString call of log entry
                     DidLogEntry::new(
-                        String::from(version_id.clone()),
+                        version_id.clone(),
                         version_index_as_str.parse::<usize>().unwrap(),
-                        DateTime::parse_from_str(entry[1].as_str().unwrap(), utils::DATE_TIME_FORMAT).unwrap().to_utc(),
+                        DateTime::parse_from_rfc3339(entry[1].as_str().unwrap()).unwrap().to_utc(),
                         serde_json::from_str(&entry[2].to_string()).unwrap(),
                         serde_json::from_str(&entry[3]["value"].to_string()).unwrap(),
                         DataIntegrityProof::from(entry[4].to_string()),
@@ -460,7 +488,7 @@ impl DidDocumentState {
                     let scid = genesis_entry.parameters.scid.clone().unwrap();
                     if let Some(res) = &scid_to_validate {
                         if res.ne(scid.as_str()) {
-                            panic!("The scid from the did doc {scid} doesnt match the requested one {res}")
+                            panic!("The scid from the did doc {scid} does not match the requested one {res}")
                         }
                     }
                     let did_doc_with_palaceholder =
