@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
-use crate::didtoolbox::*;
+
 use crate::ed25519::*;
 use crate::utils;
 use chrono::{serde::ts_seconds, DateTime, SecondsFormat, Utc};
 use hex;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-use serde_json::Value::String as JsonString;
-use sha2::{Digest, Sha256};
+use serde_json::{json, Value::String as JsonString};
+use sha2::Digest;
 
 #[derive(Clone)]
 pub enum CryptoSuiteType {
@@ -64,7 +63,7 @@ impl CryptoSuiteOptions {
 pub struct DataIntegrityProof {
     #[serde(rename = "type")]
     pub proof_type: String,
-    #[serde(rename = "cryptoSuite")]
+    #[serde(rename = "cryptosuite")]
     pub crypto_suite: String,
     #[serde(with = "ts_seconds")]
     pub created: DateTime<Utc>,
@@ -77,47 +76,101 @@ pub struct DataIntegrityProof {
     pub proof_value: String,
 }
 impl DataIntegrityProof {
+    /// The non-empty parsing constructor featuring validation in terms of supported type/proofPurpose/cryptosuite
     pub fn from(json: String) -> Self {
-        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let value = match serde_json::from_str(&json) {
+            Ok(serde_json::Value::Array(entry)) => {
+                if entry.is_empty() {
+                    panic!("Empty proof array detected")
+                }
+                entry.first().unwrap().clone()
+            }
+            Err(e) => {
+                panic!("Malformed proof array detected: {}", e)
+            }
+            _ => panic!("Malformed proof format, expected array"),
+        };
         DataIntegrityProof {
             proof_type: match value["type"] {
-                serde_json::Value::String(ref s) => s.to_string(),
-                _ => String::from(""),
+                JsonString(ref s) => {
+                    if s != "DataIntegrityProof" {
+                        panic!("Unsupported proof's type. Expected 'DataIntegrityProof'");
+                    }
+                    s.to_string()
+                }
+                _ => panic!("Missing proof's type"),
             },
-            crypto_suite: match value["cryptoSuite"] {
-                serde_json::Value::String(ref s) => s.to_string(),
-                _ => String::from(""),
+            crypto_suite: match value["cryptosuite"] {
+                JsonString(ref s) => {
+                    if s != "eddsa-jcs-2022" {
+                        panic!(
+                            "Unsupported proof's cryptosuite. Expected '{}'",
+                            CryptoSuiteType::EddsaJcs2022
+                        );
+                    }
+                    s.to_string()
+                }
+                _ => panic!("Missing proof's cryptosuite"),
             },
             created: match value["created"] {
-                serde_json::Value::String(ref s) => DateTime::parse_from_rfc3339(s)
-                    .unwrap()
-                    .to_utc(),
+                JsonString(ref s) => DateTime::parse_from_rfc3339(s).unwrap().to_utc(),
                 _ => Utc::now(),
             },
             verification_method: match value["verificationMethod"] {
-                serde_json::Value::String(ref s) => s.to_string(),
-                _ => String::from(""),
+                JsonString(ref s) => {
+                    if !s.starts_with("did:key:") {
+                        panic!(
+                            "Unsupported proof's verificationMethod. Expected prefix 'did:key:'"
+                        );
+                    }
+                    s.to_string()
+                }
+                _ => panic!("Missing proof's verificationMethod"),
             },
             proof_purpose: match value["proofPurpose"] {
-                serde_json::Value::String(ref s) => s.to_string(),
-                _ => String::from(""),
+                JsonString(ref s) => {
+                    if s != "authentication" {
+                        panic!("Unsupported proof's proofPurpose. Expected 'authentication'");
+                    }
+                    s.to_string()
+                }
+                _ => panic!("Missing proof's proofPurpose"),
             },
             challenge: match value["challenge"] {
-                serde_json::Value::String(ref s) => s.to_string(),
-                _ => String::from(""),
+                JsonString(ref s) => s.to_string(),
+                _ => panic!("Missing proof's challenge"),
             },
             proof_value: match value["proofValue"] {
-                serde_json::Value::String(ref s) => s.to_string(),
+                JsonString(ref s) => s.to_string(),
                 _ => String::from(""),
             },
         }
     }
 
-    pub fn to_value(&self) -> serde_json::Value {
+    /// Construct a serde_json::Value from this DataIntegrityProof
+    pub fn json_value(&self) -> serde_json::Value {
         let mut value = serde_json::to_value(self).unwrap();
-        value["created"] =
-            serde_json::Value::String(self.created.to_rfc3339_opts(SecondsFormat::Secs, true).to_string());
+        value["created"] = serde_json::Value::String(
+            self.created
+                .to_rfc3339_opts(SecondsFormat::Secs, true)
+                .to_string(),
+        );
         value
+    }
+
+    pub fn extract_update_key(&self) -> String {
+        // Option<String> {
+        if self.verification_method.starts_with("did:key:") {
+            let update_key_split = self.verification_method.split('#').collect::<Vec<&str>>();
+            if update_key_split.is_empty() {
+                panic!("A proof's verificationMethod must be #-delimited")
+            }
+            //Some(update_key_split[1].to_string())
+            update_key_split[1].to_string()
+        } else {
+            panic!("Unsupported proof's verificationMethod (only 'did:key' is currently supported): {}", self.verification_method)
+            //None
+        }
     }
 }
 
@@ -131,6 +184,7 @@ pub struct CryptoSuiteVerificationResult {
     pub errors: Vec<String>,
 }
 
+/*
 // See https://www.w3.org/TR/vc-data-integrity/#cryptographic-suites
 pub trait CryptoSuite {
     // See https://www.w3.org/TR/vc-data-integrity/#dfn-createproof
@@ -142,19 +196,15 @@ pub trait CryptoSuite {
     // See https://www.w3.org/TR/vc-data-integrity/#dfn-verifyproof
     //fn create_verification(&self, secured_document: &str, presentation_header: String) -> CryptoSuiteVerificationResult;
 }
+ */
 
 /// Is main entry point for proof generation and validation of a given verifiable credential
 /// Function in this class are based on algorithm section in the vc-data-integrity spec
 /// https://www.w3.org/TR/vc-data-integrity/#algorithms
 pub trait VCDataIntegrity {
-    // See https://www.w3.org/TR/vc-data-integrity/#add-proof
-    fn add_proof(
-        &self,
-        unsecured_document: &serde_json::Value,
-        options: &CryptoSuiteOptions,
-    ) -> serde_json::Value;
+    // TODO https://www.w3.org/TR/vc-data-integrity/#add-proof
     // See https://www.w3.org/TR/vc-data-integrity/#verify-proof
-    fn verify_proof(&self, secured_document: &serde_json::Value) -> bool;
+    fn verify_proof(&self, proof: &DataIntegrityProof, doc_hash: &String) -> bool;
 }
 
 pub struct EddsaCryptosuite {
@@ -164,74 +214,25 @@ pub struct EddsaCryptosuite {
 
 // NOTE Only https://www.w3.org/TR/vc-di-eddsa/#eddsa-jcs-2022 is supported
 impl VCDataIntegrity for EddsaCryptosuite {
-    // See https://www.w3.org/TR/vc-di-eddsa/#create-proof-eddsa-jcs-2022
-    fn add_proof(
-        &self,
-        unsecured_document: &serde_json::Value,
-        options: &CryptoSuiteOptions,
-    ) -> serde_json::Value {
-        if !matches!(options.crypto_suite, CryptoSuiteType::EddsaJcs2022) {
-            panic!("Invalid crypto suite. Only eddsa-jcs-2022 is supported");
-        }
-        if options.proof_type != "DataIntegrityProof" {
-            panic!("Invalid proof type. Only DataIntegrityProof is supported");
-        }
-
-        // 3.1.3 Transformation of doc and options
-        let mut proof = json!({
-            "type": options.proof_type,
-            "cryptoSuite": options.crypto_suite.to_string(),
-            "created": Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true).to_string(),
-            "verificationMethod": options.verification_method,
-            "proofPurpose": options.proof_purpose,
-            "challenge": options.challenge.as_ref().unwrap(),
-        });
-        // 3.1.4 Hash didDoc and config
-        let proof_hash = utils::generate_jcs_hash_from_value(&proof);
-        let doc_hash = utils::generate_jcs_hash_from_value(unsecured_document);
-        let hash_data = proof_hash + &doc_hash;
-
-        // 3.1.6 Proof serialization
-        let proof_signature = match &self.signing_key {
-            Some(signing_key) => signing_key.sign(hash_data),
-            None => panic!(
-                "Invalid eddsa cryptosuite. Signing key is missing but required for proof creation"
-            ),
-        };
-        let proof_signature_multibase = proof_signature.to_multibase();
-        proof["proofValue"] = JsonString(proof_signature_multibase);
-
-        // Create secured document
-        let mut secured_document = unsecured_document.clone();
-        secured_document["proof"] = proof;
-        secured_document
-    }
-
     // See https://www.w3.org/TR/vc-di-eddsa/#verify-proof-eddsa-jcs-2022
     // See https://www.w3.org/TR/vc-di-eddsa/#proof-verification-eddsa-jcs-2022
-    fn verify_proof(&self, secured_document: &serde_json::Value) -> bool {
-        let original_proof = secured_document["proof"].clone();
-        let proof = json!({
-            "type": original_proof["type"],
-            "cryptoSuite": original_proof["cryptoSuite"],
-            "created": original_proof["created"],
-            "verificationMethod": original_proof["verificationMethod"],
-            "proofPurpose": original_proof["proofPurpose"],
-            "challenge": original_proof["challenge"],
+    fn verify_proof(&self, proof: &DataIntegrityProof, doc_hash: &String) -> bool {
+        let proof_value = &proof.proof_value;
+        let proof_without_proof_value = json!({
+            "type": proof.proof_type,
+            "cryptosuite": proof.crypto_suite,
+            "created": proof.created,
+            "verificationMethod": proof.verification_method,
+            "proofPurpose": proof.proof_purpose,
+            "challenge": proof.challenge,
         });
-
-        let doc: DidDoc = serde_json::from_value(secured_document.clone()).unwrap();
-        let proof_hash = utils::generate_jcs_hash_from_value(&proof);
-        let doc_hash = utils::generate_jcs_hash_from_value(&serde_json::to_value(&doc).unwrap());
+        let proof_hash = utils::hash_canonical(&proof_without_proof_value);
         let hash_data = proof_hash + &doc_hash;
-
-        let signature = match secured_document["proof"]["proofValue"] {
-            JsonString(ref proof_value) => Ed25519Signature::from_multibase(proof_value),
-            _ => panic!("Invalid proof value. Expected string"),
-        };
+        let signature = Ed25519Signature::from_multibase(proof_value.as_str());
         match self.verifying_key {
             Some(ref verifying_key) => {
-                verifying_key.verifying_key.verify_strict(hash_data.as_bytes(), &signature.signature).is_ok()
+                let hash_data_decoded: [u8; 64] = hex::FromHex::from_hex(hash_data).unwrap();
+                verifying_key.verifying_key.verify_strict(&hash_data_decoded, &signature.signature).is_err()
             }
             None => panic!("Invalid eddsa cryptosuite. Verifying key is missing but required for proof verification"),
         }

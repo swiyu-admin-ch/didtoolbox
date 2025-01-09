@@ -45,14 +45,8 @@ enum TrustDidWebError {
 };
 
 interface TrustDidWeb {
-    [Name=create, Throws=TrustDidWebError]
-    constructor(string url, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
     [Name=read, Throws=TrustDidWebError]
     constructor(string did_tdw, string did_log, boolean? allow_http);
-    [Name=update, Throws=TrustDidWebError]
-    constructor(string did_tdw, string did_log, string did_doc, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
-    [Name=deactivate, Throws=TrustDidWebError]
-    constructor(string did_tdw, string did_log, [ByRef] Ed25519KeyPair key_pair, boolean? allow_http);
     string get_did();
     string get_did_log();
     string get_did_doc();
@@ -102,10 +96,16 @@ dictionary Jwk {
   string? y;
 };
 
+enum VerificationType {
+    "Multikey",
+    "JsonWebKey2020",
+    "Ed25519VerificationKey2020",
+};
+
 dictionary VerificationMethod {
     string id;
     string controller;
-    string verification_type;
+    VerificationType verification_type;
     string? public_key_multibase;
     Jwk? public_key_jwk;
 };

@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 
-use serde::{Deserialize, Serialize};
+//use std::fmt;
+use crate::utils;
+use serde::{Deserialize, Deserializer, Serialize};
+
 /// Entry in an did log file as shown here
 /// https://bcgov.github.io/trustdidweb/#term:did-log-entry
 
@@ -29,19 +32,46 @@ pub struct VerificationMethod {
     pub id: String,
     pub controller: String,
     #[serde(rename = "type")]
-    pub verification_type: String,
+    pub verification_type: VerificationType,
     #[serde(rename = "publicKeyMultibase", skip_serializing_if = "Option::is_none")]
     pub public_key_multibase: Option<String>,
     #[serde(rename = "publicKeyJwk", skip_serializing_if = "Option::is_none")]
     pub public_key_jwk: Option<Jwk>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum VerificationType {
+    Multikey,
+    // https://w3c-ccg.github.io/lds-jws2020/#json-web-key-2020
+    JsonWebKey2020,
+    // https://www.w3.org/TR/vc-di-eddsa/#ed25519verificationkey2020
+    Ed25519VerificationKey2020,
+}
+
+impl std::fmt::Display for VerificationType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let string_representation = match self {
+            VerificationType::Multikey => String::from("Multikey"),
+            VerificationType::JsonWebKey2020 => String::from("JsonWebKey2020"),
+            VerificationType::Ed25519VerificationKey2020 => {
+                String::from("Ed25519VerificationKey2020")
+            }
+        };
+        write!(f, "{}", string_representation)
+    }
+}
+
 impl VerificationMethod {
-    pub fn new(id: String, controller: String, public_key_multibase: String) -> Self {
+    pub fn new(
+        id: String,
+        controller: String,
+        public_key_multibase: String,
+        verification_type: VerificationType,
+    ) -> Self {
         VerificationMethod {
             id,
             controller,
-            verification_type: String::from("Multikey"),
+            verification_type,
             public_key_multibase: Some(public_key_multibase),
             public_key_jwk: None,
         }
@@ -61,6 +91,7 @@ impl Clone for VerificationMethod {
 
 // See      https://www.w3.org/TR/did-core/#dfn-did-documents
 // Examples https://www.w3.org/TR/did-core/#did-documents
+// According to https://www.w3.org/TR/did-core/#did-document-properties
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DidDoc {
     #[serde(rename = "@context")]
@@ -88,10 +119,143 @@ pub struct DidDoc {
         default
     )]
     pub assertion_method: Vec<VerificationMethod>,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[serde(
+        rename = "keyAgreement",
+        skip_serializing_if = "Vec::is_empty",
+        default
+    )]
+    pub key_agreement: Vec<VerificationMethod>,
+    //#[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[serde(skip)]
     pub controller: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deactivated: Option<bool>,
+}
+
+// See      https://www.w3.org/TR/did-core/#dfn-did-documents
+// Examples https://www.w3.org/TR/did-core/#did-documents
+// According to https://www.w3.org/TR/did-core/#did-document-properties
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DidDocNormalized {
+    #[serde(rename = "@context")]
+    pub context: Vec<String>,
+    pub id: String,
+    #[serde(
+        rename = "verificationMethod",
+        skip_serializing_if = "Vec::is_empty",
+        default
+    )]
+    pub verification_method: Vec<VerificationMethod>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub authentication: Vec<String>,
+    #[serde(
+        rename = "capabilityInvocation",
+        skip_serializing_if = "Vec::is_empty",
+        default
+    )]
+    pub capability_invocation: Vec<String>,
+    #[serde(
+        rename = "capabilityDelegation",
+        skip_serializing_if = "Vec::is_empty",
+        default
+    )]
+    pub capability_delegation: Vec<String>,
+    #[serde(
+        rename = "assertionMethod",
+        skip_serializing_if = "Vec::is_empty",
+        default
+    )]
+    pub assertion_method: Vec<String>,
+    #[serde(
+        rename = "keyAgreement",
+        skip_serializing_if = "Vec::is_empty",
+        default
+    )]
+    pub key_agreement: Vec<String>,
+    //#[serde(skip_serializing_if = "Vec::is_empty", default)]
+    //pub controller: Vec<String>,
+    //#[serde(skip_serializing_if = "String::is_empty", default)]
+    #[serde(skip)]
+    pub controller: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deactivated: Option<bool>,
+}
+
+impl DidDocNormalized {
+    pub fn to_did_doc(&self) -> DidDoc {
+        let controller = match self.controller.clone() {
+            None => vec![],
+            Some(c) => vec![c],
+        };
+
+        let mut did_doc = DidDoc {
+            context: self.context.clone(), // vec![],
+            id: self.id.clone(),
+            verification_method: self.verification_method.clone(),
+            authentication: vec![],
+            capability_invocation: vec![],
+            capability_delegation: vec![],
+            assertion_method: vec![],
+            key_agreement: vec![],
+            //controller: self.controller.clone(),
+            controller,
+            deactivated: self.deactivated.clone(),
+        };
+        if !self.authentication.is_empty() {
+            did_doc.authentication = vec![];
+            self.authentication.iter().for_each(|id: &String| {
+                match self.verification_method.iter().filter(|m| m.id == *id).next() {
+                    Some(obj) => did_doc.authentication.push(obj.clone()),
+                    None => panic!("Authentication (reference) key {} refers to non-existing verification method", id)
+                };
+            });
+        }
+        if !self.capability_invocation.is_empty() {
+            did_doc.capability_invocation = vec![];
+            self.capability_invocation.iter().for_each(|id: &String| {
+                match self.verification_method.iter().filter(|m| m.id == *id).next() {
+                    Some(obj) => did_doc.capability_invocation.push(obj.clone()),
+                    None => panic!("Capability invocation (reference) key {} refers to non-existing verification method", id)
+                };
+            });
+        }
+        if !self.capability_delegation.is_empty() {
+            did_doc.capability_delegation = vec![];
+            self.capability_delegation.iter().for_each(|id: &String| {
+                match self.verification_method.iter().filter(|m| m.id == *id).next() {
+                    Some(obj) => did_doc.capability_delegation.push(obj.clone()),
+                    None => panic!("Capability delegation (reference) key {} refers to non-existing verification method", id)
+                };
+            });
+        }
+        if !self.assertion_method.is_empty() {
+            did_doc.assertion_method = vec![];
+            self.assertion_method.iter().for_each(|id: &String| {
+                match self
+                    .verification_method
+                    .iter()
+                    .filter(|m| m.id == *id)
+                    .next()
+                {
+                    Some(obj) => did_doc.assertion_method.push(obj.clone()),
+                    None => panic!(
+                        "Assertion (reference) key {} refers to non-existing verification method",
+                        id
+                    ),
+                };
+            });
+        }
+        if !self.key_agreement.is_empty() {
+            did_doc.key_agreement = vec![];
+            self.key_agreement.iter().for_each(|id: &String| {
+                match self.verification_method.iter().filter(|m| m.id == *id).next() {
+                    Some(obj) => did_doc.key_agreement.push(obj.clone()),
+                    None => panic!("Key agreement (reference) key {} refers to non-existing verification method", id)
+                };
+            });
+        }
+        did_doc
+    }
 }
 
 impl DidDoc {
@@ -142,5 +306,73 @@ impl DidDoc {
             }
         };
         did_doc
+    }
+
+    /// Generates an SCID (self certifying identifier) for the DIDDoc.
+    /// This function is used both in the initial generation as well as in the verification
+    /// process of the DidDoc log file.
+    pub fn build_scid(&self) -> String {
+        if !&self.id.contains(utils::SCID_PLACEHOLDER) {
+            panic!("Invalid did:tdw document. SCID placeholder not found");
+        }
+        let json = serde_json::to_value(&self).unwrap();
+
+        utils::base58btc_encode_multihash(&json)
+    }
+
+    pub fn normalize(&self) -> DidDocNormalized {
+        let mut controller: Option<String> = None;
+        if !self.controller.is_empty() {
+            controller = Some(self.controller.first().unwrap().clone());
+        }
+        let mut did_doc_norm = DidDocNormalized {
+            context: self.context.clone(), // vec![],
+            id: self.id.clone(),
+            verification_method: self.verification_method.clone(),
+            authentication: vec![],
+            capability_invocation: vec![],
+            capability_delegation: vec![],
+            assertion_method: vec![],
+            key_agreement: vec![],
+            //controller: self.controller.clone(),
+            controller: controller,
+            deactivated: self.deactivated.clone(),
+        };
+        if !self.authentication.is_empty() {
+            did_doc_norm.authentication = self
+                .authentication
+                .iter()
+                .map(|vm: &VerificationMethod| vm.id.clone())
+                .collect::<Vec<String>>();
+        }
+        if !self.capability_invocation.is_empty() {
+            did_doc_norm.capability_invocation = self
+                .capability_invocation
+                .iter()
+                .map(|vm: &VerificationMethod| vm.id.clone())
+                .collect::<Vec<String>>();
+        }
+        if !self.capability_delegation.is_empty() {
+            did_doc_norm.capability_delegation = self
+                .capability_delegation
+                .iter()
+                .map(|vm: &VerificationMethod| vm.id.clone())
+                .collect::<Vec<String>>();
+        }
+        if !self.assertion_method.is_empty() {
+            did_doc_norm.assertion_method = self
+                .assertion_method
+                .iter()
+                .map(|vm: &VerificationMethod| vm.id.clone())
+                .collect::<Vec<String>>();
+        }
+        if !self.key_agreement.is_empty() {
+            did_doc_norm.key_agreement = self
+                .key_agreement
+                .iter()
+                .map(|vm: &VerificationMethod| vm.id.clone())
+                .collect::<Vec<String>>();
+        }
+        did_doc_norm
     }
 }
