@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 
 use crate::ed25519::*;
-use crate::utils;
+//use sha2::Digest;
+use crate::jcs_sha256_hasher::JcsSha256Hasher;
 use chrono::{serde::ts_seconds, DateTime, SecondsFormat, Utc};
 use hex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value::String as JsonString};
-use sha2::Digest;
 
 #[derive(Clone)]
 pub enum CryptoSuiteType {
@@ -204,7 +204,7 @@ pub trait CryptoSuite {
 pub trait VCDataIntegrity {
     // TODO https://www.w3.org/TR/vc-data-integrity/#add-proof
     // See https://www.w3.org/TR/vc-data-integrity/#verify-proof
-    fn verify_proof(&self, proof: &DataIntegrityProof, doc_hash: &String) -> bool;
+    fn verify_proof(&self, proof: &DataIntegrityProof, doc_hash: &str) -> bool;
 }
 
 pub struct EddsaCryptosuite {
@@ -216,7 +216,7 @@ pub struct EddsaCryptosuite {
 impl VCDataIntegrity for EddsaCryptosuite {
     // See https://www.w3.org/TR/vc-di-eddsa/#verify-proof-eddsa-jcs-2022
     // See https://www.w3.org/TR/vc-di-eddsa/#proof-verification-eddsa-jcs-2022
-    fn verify_proof(&self, proof: &DataIntegrityProof, doc_hash: &String) -> bool {
+    fn verify_proof(&self, proof: &DataIntegrityProof, doc_hash: &str) -> bool {
         let proof_value = &proof.proof_value;
         let proof_without_proof_value = json!({
             "type": proof.proof_type,
@@ -226,8 +226,10 @@ impl VCDataIntegrity for EddsaCryptosuite {
             "proofPurpose": proof.proof_purpose,
             "challenge": proof.challenge,
         });
-        let proof_hash = utils::hash_canonical(&proof_without_proof_value);
-        let hash_data = proof_hash + &doc_hash;
+        let proof_hash = JcsSha256Hasher::default()
+            .encode_hex(&proof_without_proof_value)
+            .unwrap(); // should never panic
+        let hash_data = proof_hash + doc_hash;
         let signature = Ed25519Signature::from_multibase(proof_value.as_str());
         match self.verifying_key {
             Some(ref verifying_key) => {

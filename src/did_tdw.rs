@@ -2,17 +2,17 @@
 
 use crate::didtoolbox::*;
 use crate::ed25519::*;
-use crate::utils;
+use crate::jcs_sha256_hasher::JcsSha256Hasher;
 use crate::vc_data_integrity::*;
 use chrono::serde::ts_seconds;
 use chrono::{DateTime, SecondsFormat, Utc};
-use hex;
 use regex;
 use regex::Regex;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_json::Value::{Array as JsonArray, Null, Object as JsonObject, String as JsonString};
-use serde_json::{json, Value as JsonValue};
-use sha2::Digest;
+use serde_json::{
+    from_str as json_from_str, json, to_string as json_to_string, Value as JsonValue,
+};
 use ssi::dids::{
     resolution::{
         DIDMethodResolver as SSIDIDMethodResolver, Error as SSIResolutionError,
@@ -23,6 +23,8 @@ use ssi::dids::{
 use std::cmp::PartialEq;
 use std::sync::{Arc, LazyLock};
 use url_escape;
+
+pub const SCID_PLACEHOLDER: &str = "{SCID}";
 
 /// Entry in a did log file as shown here
 /// https://identity.foundation/trustdidweb/#term:did-log-entry
@@ -167,7 +169,7 @@ impl DidLogEntry {
             signing_key: None,
         };
 
-        if eddsa_suite.verify_proof(&proof, &self.did_doc_hash) {
+        if eddsa_suite.verify_proof(proof, self.did_doc_hash.as_str()) {
             panic!(
                 "Invalid did log. Entry of version {} has invalid data integrity proof",
                 self.version_index.unwrap()
@@ -184,7 +186,7 @@ impl DidLogEntry {
         format!(
             "{}-{}",
             self.version_index.unwrap(),
-            utils::base58btc_encode_multihash(&self.to_log_entry_line())
+            JcsSha256Hasher::default().base58btc_encode_multihash(&self.to_log_entry_line())
         )
     }
 
@@ -244,11 +246,7 @@ impl DidLogEntry {
                     panic!("No update keys detected")
                 }
 
-                match update_keys
-                    .iter()
-                    .filter(|entry| *entry == &update_key)
-                    .next()
-                {
+                match update_keys.iter().find(|entry| *entry == &update_key) {
                     Some(_) => {}
                     _ => panic!(
                         "Key extracted from proof is not authorized for update: {}",
@@ -327,13 +325,13 @@ impl DidLogEntry {
 
     pub fn get_original_scid(&self, scid: &String) -> String {
         let entry_with_placeholder_without_proof = json!([
-            utils::SCID_PLACEHOLDER,
+            SCID_PLACEHOLDER,
             self.version_time,
-            serde_json::from_str::<JsonValue>(&*str::replace(serde_json::to_string(&self.parameters).unwrap().as_str(), scid, utils::SCID_PLACEHOLDER)).unwrap(),
-            { "value" : serde_json::from_str::<JsonValue>(&*str::replace(&self.did_doc_json, scid, utils::SCID_PLACEHOLDER)).unwrap()},
+            json_from_str::<JsonValue>(str::replace(json_to_string(&self.parameters).unwrap().as_str(), scid, SCID_PLACEHOLDER).as_str()).unwrap(),
+            { "value" : json_from_str::<JsonValue>(str::replace(&self.did_doc_json, scid, SCID_PLACEHOLDER).as_str()).unwrap()},
         ]);
 
-        utils::base58btc_encode_multihash(&entry_with_placeholder_without_proof)
+        JcsSha256Hasher::default().base58btc_encode_multihash(&entry_with_placeholder_without_proof)
     }
 }
 
@@ -480,11 +478,14 @@ pub struct DidDocumentState {
 const DID_METHOD_PARAMETER_VERSION: &str = "did:tdw:0.3";
 
 impl DidDocumentState {
-    pub fn new() -> Self {
+    /*
+    pub(crate) fn default() -> Self {
         DidDocumentState {
             did_log_entries: Vec::new(),
         }
     }
+     */
+
     pub fn from(did_log: String) -> Self {
         let mut unescaped = did_log.clone();
         if unescaped.contains("\\\"") {
@@ -582,7 +583,7 @@ impl DidDocumentState {
                             did_doc_value = obj["value"].clone();
                             if !did_doc_value.is_null() {
                                 did_doc_json = did_doc_value.to_string();
-                                did_doc_hash = utils::hash_canonical(&did_doc_value);
+                                did_doc_hash = JcsSha256Hasher::default().encode_hex(&did_doc_value).unwrap();
                                 match serde_json::from_str::<DidDoc>(&did_doc_json) {
                                     Ok(did_doc) => Some(did_doc),
                                     Err(_) => {

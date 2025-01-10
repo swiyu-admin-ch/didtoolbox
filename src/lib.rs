@@ -9,12 +9,15 @@
 pub mod did_tdw;
 pub mod didtoolbox;
 pub mod ed25519;
+pub mod jcs_sha256_hasher;
+pub mod multibase;
 pub mod utils;
 pub mod vc_data_integrity;
 
-use crate::did_tdw::*;
-use crate::didtoolbox::*;
-use crate::ed25519::*;
+// CAUTION All structs required by uniffi MUST also be "used" here
+use did_tdw::*;
+use didtoolbox::*;
+use ed25519::*;
 
 uniffi::include_scaffolding!("didtoolbox");
 
@@ -23,13 +26,16 @@ mod test {
     use super::did_tdw::*;
     use super::didtoolbox::*;
     use super::ed25519::*;
+    use super::jcs_sha256_hasher::*;
+    use super::multibase::*;
     use super::utils::*;
+    use crate::didtoolbox;
     use core::panic;
-    use mockito::{Matcher, Server, ServerOpts};
+    use hex::encode as hex_encode;
     use rand::distributions::Alphanumeric;
     use rand::Rng;
     use rstest::{fixture, rstest};
-    use serde_json::{json, Value};
+    use serde_json::{Value as JsonValue}; // ,json};
     use std::path::Path;
     use std::{fs, vec};
     //
@@ -153,14 +159,14 @@ mod test {
         let did_doc = DidDoc {
             //context: vec![DID_CONTEXT.to_string(), MKEY_CONTEXT.to_string()],
             context: vec![],
-            id: String::from(SCID_PLACEHOLDER),
+            id: String::from(didtoolbox::SCID_PLACEHOLDER),
             verification_method: vec![],
             authentication: vec![],
             capability_invocation: vec![],
             capability_delegation: vec![],
             assertion_method: vec![],
             key_agreement: vec![],
-            //controller: vec![format!("did:tdw:{}:{}", SCID_PLACEHOLDER, "domain")],
+            //controller: vec![format!("did:tdw:{}:{}", didtoolbox::SCID_PLACEHOLDER, "domain")],
             controller: vec![],
             deactivated: None,
         };
@@ -182,7 +188,11 @@ mod test {
             capability_delegation: vec![],
             assertion_method: vec![],
             key_agreement: vec![],
-            controller: vec![format!("did:tdw:{}:{}", SCID_PLACEHOLDER, "domain")],
+            controller: vec![format!(
+                "did:tdw:{}:{}",
+                didtoolbox::SCID_PLACEHOLDER,
+                "domain"
+            )],
             deactivated: None,
         };
 
@@ -190,39 +200,53 @@ mod test {
     }
 
     #[rstest]
-    fn test_multibase_base58btc_conversion() {
-        let encoded = to_multibase_base58btc("helloworld".as_bytes()); // zfP1vxkpyLWnH9dD6BQA
+    fn test_multibase_conversion() {
+        let multibase = MultibaseEncoderDecoder::default();
+        let encoded = multibase.encode("helloworld".as_bytes()); // zfP1vxkpyLWnH9dD6BQA
         //let mut buff: [u8; 16] = [0; 16];
         let mut buff = vec![0; 16];
-        from_multibase_base58btc(encoded.as_str(), &mut buff);
+        multibase.decode_onto(encoded.as_str(), &mut buff);
         let decoded = String::from_utf8_lossy(&buff).to_string();
         assert!(decoded.starts_with("helloworld"));
         //assert_eq!(decoded, "helloworld");
     }
 
     #[rstest]
-    #[should_panic(expected = "Invalid multibase format for base58btc")]
-    fn test_multibase_base58btc_conversion_invalid_multibase() {
-        let encoded = to_multibase_base58btc("helloworld".as_bytes()); // zfP1vxkpyLWnH9dD6BQA
+    #[should_panic(expected = "Invalid multibase algorithm identifier 'Base58btc'")]
+    fn test_multibase_conversion_invalid_multibase() {
+        let multibase = MultibaseEncoderDecoder::default();
+        let encoded = multibase.encode("helloworld".as_bytes()); // zfP1vxkpyLWnH9dD6BQA
         let encoded_without_multibase = encoded.chars().skip(1).collect::<String>(); // get rid of the multibase code (prefix char 'z')
         //let mut buff: [u8; 16] = [0; 16];
         let mut buff = vec![0; 16];
-        from_multibase_base58btc(encoded_without_multibase.as_str(), &mut buff);
+        multibase.decode_onto(encoded_without_multibase.as_str(), &mut buff);
     }
 
     #[rstest]
     #[should_panic(
-        expected = "Entered base58btc content is invalid: buffer provided to decode base58 encoded string into was too small"
+        expected = "Invalid multibase content: buffer provided to decode base58 encoded string into was too small"
     )]
-    fn test_multibase_base58btc_conversion_buffer_too_small() {
-        let encoded = to_multibase_base58btc("helloworld".as_bytes()); // zfP1vxkpyLWnH9dD6BQA
+    fn test_multibase_conversion_buffer_too_small() {
+        let multibase = MultibaseEncoderDecoder::default();
+        let encoded = multibase.encode("helloworld".as_bytes()); // zfP1vxkpyLWnH9dD6BQA
         //let mut buff: [u8; 16] = [0; 16];
         let mut buff = vec![0; 8]; // empirical size for "helloworld" (encoded)
-        from_multibase_base58btc(encoded.as_str(), &mut buff);
+        multibase.decode_onto(encoded.as_str(), &mut buff);
     }
 
     #[rstest]
-    fn test_key_creation(ed25519_key_pair: &Ed25519KeyPair, // fixture
+    #[case(
+        // Example taken from https://multiformats.io/multihash/#sha2-256---256-bits-aka-sha256
+        "Merkle–Damgård",
+        "122041dd7b6443542e75701aa98a0c235951a28a0d851b11564d20022ab11d2589a8"
+    )]
+    fn test_encode_multihash_sha256(#[case] input: String, #[case] expected: String) {
+        let hash = hex_encode(JcsSha256Hasher::default().encode_multihash(input));
+        assert_eq!(hash, expected);
+    }
+
+    #[rstest]
+    fn test_key_pair_multibase_conversion(ed25519_key_pair: &Ed25519KeyPair, // fixture
     ) {
         let original_private = ed25519_key_pair.get_signing_key();
         let original_public = ed25519_key_pair.get_verifying_key();
@@ -232,6 +256,23 @@ mod test {
 
         assert_eq!(original_private.to_multibase(), new_private.to_multibase());
         assert_eq!(original_public.to_multibase(), new_public.to_multibase());
+    }
+
+    #[rstest]
+    fn test_key_pair_creation_from_multibase(ed25519_key_pair: &Ed25519KeyPair, // fixture
+    ) {
+        let new_ed25519_key_pair =
+            Ed25519KeyPair::from(&ed25519_key_pair.get_signing_key().to_multibase());
+
+        assert_eq!(ed25519_key_pair, &new_ed25519_key_pair);
+        assert_eq!(
+            ed25519_key_pair.get_signing_key().to_multibase(),
+            new_ed25519_key_pair.signing_key.to_multibase()
+        );
+        assert_eq!(
+            ed25519_key_pair.get_verifying_key().to_multibase(),
+            new_ed25519_key_pair.verifying_key.to_multibase()
+        );
     }
 
     #[rstest]
@@ -258,11 +299,11 @@ mod test {
 
         // Read the newly did doc
         let did_doc_str_v1 = TrustDidWeb::read(did_url.clone(), did_log_raw, Some(false)).unwrap();
-        let did_doc_v1: Value = serde_json::from_str(&did_doc_str_v1.get_did_doc()).unwrap();
+        let did_doc_v1: JsonValue = serde_json::from_str(&did_doc_str_v1.get_did_doc()).unwrap();
 
         assert!(!did_doc_v1["@context"].to_string().is_empty());
         match did_doc_v1["id"] {
-            Value::String(ref doc_v1) => {
+            JsonValue::String(ref doc_v1) => {
                 assert!(doc_v1.eq(did_url.as_str()))
             }
             _ => panic!("Invalid did doc"),
@@ -291,12 +332,12 @@ mod test {
 
         // Read the newly did doc
         let tdw_v1 = TrustDidWeb::read(did_url.clone(), did_log_raw, Some(false)).unwrap();
-        let did_doc_json_v1: Value = serde_json::from_str(&tdw_v1.get_did_doc()).unwrap();
+        let did_doc_json_v1: JsonValue = serde_json::from_str(&tdw_v1.get_did_doc()).unwrap();
         let did_doc_obj_v1 = DidDoc::from_json(&tdw_v1.get_did_doc()); // may panic
 
         assert!(!did_doc_json_v1["@context"].to_string().is_empty());
         match did_doc_json_v1["id"] {
-            Value::String(ref doc_v1) => {
+            JsonValue::String(ref doc_v1) => {
                 assert!(doc_v1.eq(did_url.as_str()))
             }
             _ => panic!("Invalid did doc"),

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 
-//use std::fmt;
-use crate::utils;
-use serde::{Deserialize, Deserializer, Serialize};
+use crate::jcs_sha256_hasher::JcsSha256Hasher;
+use serde::{Deserialize, Serialize};
+
+pub const SCID_PLACEHOLDER: &str = "{SCID}";
 
 /// Entry in an did log file as shown here
 /// https://bcgov.github.io/trustdidweb/#term:did-log-entry
@@ -199,12 +200,12 @@ impl DidDocNormalized {
             key_agreement: vec![],
             //controller: self.controller.clone(),
             controller,
-            deactivated: self.deactivated.clone(),
+            deactivated: self.deactivated,
         };
         if !self.authentication.is_empty() {
             did_doc.authentication = vec![];
             self.authentication.iter().for_each(|id: &String| {
-                match self.verification_method.iter().filter(|m| m.id == *id).next() {
+                match self.verification_method.iter().find(|m| m.id == *id) {
                     Some(obj) => did_doc.authentication.push(obj.clone()),
                     None => panic!("Authentication (reference) key {} refers to non-existing verification method", id)
                 };
@@ -213,7 +214,7 @@ impl DidDocNormalized {
         if !self.capability_invocation.is_empty() {
             did_doc.capability_invocation = vec![];
             self.capability_invocation.iter().for_each(|id: &String| {
-                match self.verification_method.iter().filter(|m| m.id == *id).next() {
+                match self.verification_method.iter().find(|m| m.id == *id) {
                     Some(obj) => did_doc.capability_invocation.push(obj.clone()),
                     None => panic!("Capability invocation (reference) key {} refers to non-existing verification method", id)
                 };
@@ -222,7 +223,7 @@ impl DidDocNormalized {
         if !self.capability_delegation.is_empty() {
             did_doc.capability_delegation = vec![];
             self.capability_delegation.iter().for_each(|id: &String| {
-                match self.verification_method.iter().filter(|m| m.id == *id).next() {
+                match self.verification_method.iter().find(|m| m.id == *id) {
                     Some(obj) => did_doc.capability_delegation.push(obj.clone()),
                     None => panic!("Capability delegation (reference) key {} refers to non-existing verification method", id)
                 };
@@ -234,12 +235,11 @@ impl DidDocNormalized {
                 match self
                     .verification_method
                     .iter()
-                    .filter(|m| m.id == *id)
-                    .next()
+                    .find(|m| m.id == *id)
                 {
                     Some(obj) => did_doc.assertion_method.push(obj.clone()),
                     None => panic!(
-                        "Assertion (reference) key {} refers to non-existing verification method",
+                        "Assertion method (reference) key {} refers to non-existing verification method",
                         id
                     ),
                 };
@@ -248,7 +248,7 @@ impl DidDocNormalized {
         if !self.key_agreement.is_empty() {
             did_doc.key_agreement = vec![];
             self.key_agreement.iter().for_each(|id: &String| {
-                match self.verification_method.iter().filter(|m| m.id == *id).next() {
+                match self.verification_method.iter().find(|m| m.id == *id) {
                     Some(obj) => did_doc.key_agreement.push(obj.clone()),
                     None => panic!("Key agreement (reference) key {} refers to non-existing verification method", id)
                 };
@@ -312,12 +312,12 @@ impl DidDoc {
     /// This function is used both in the initial generation as well as in the verification
     /// process of the DidDoc log file.
     pub fn build_scid(&self) -> String {
-        if !&self.id.contains(utils::SCID_PLACEHOLDER) {
+        if !&self.id.contains(SCID_PLACEHOLDER) {
             panic!("Invalid did:tdw document. SCID placeholder not found");
         }
-        let json = serde_json::to_value(&self).unwrap();
+        let json = serde_json::to_value(self).unwrap();
 
-        utils::base58btc_encode_multihash(&json)
+        JcsSha256Hasher::default().base58btc_encode_multihash(&json)
     }
 
     pub fn normalize(&self) -> DidDocNormalized {
@@ -335,8 +335,8 @@ impl DidDoc {
             assertion_method: vec![],
             key_agreement: vec![],
             //controller: self.controller.clone(),
-            controller: controller,
-            deactivated: self.deactivated.clone(),
+            controller,
+            deactivated: self.deactivated,
         };
         if !self.authentication.is_empty() {
             did_doc_norm.authentication = self
