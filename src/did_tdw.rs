@@ -137,7 +137,7 @@ impl DidLogEntry {
         // Verify data integrity proof
         //let verifying_key = self.get_data_integrity_verifying_key(); // may panic
 
-        let proof = match &self.proof {
+        match &self.proof {
             None => {
                 panic!("Invalid did log. Proof is empty.");
             }
@@ -145,36 +145,42 @@ impl DidLogEntry {
                 if v.is_empty() {
                     panic!("Invalid did log. Proof is empty.");
                 }
-                v.first().unwrap()
+
+                for proof in v {
+                    let verifying_key =
+                        self.is_key_authorized_for_update(proof.extract_update_key()); // may panic
+
+                    /*
+                    // Check if verifying key is actually a controller and therefore allowed to update the doc => valid key to create the proof
+                    let controller_keys = self.get_controller_verifying_key();
+                    if !controller_keys
+                        .values()
+                        .any(|(_, key)| key.to_multibase() == verifying_key.to_multibase())
+                    {
+                        panic!(
+                            "Invalid key pair. The provided key pair is not the one referenced in the did doc"
+                        )
+                    }
+                     */
+
+                    if !matches!(proof.crypto_suite_type, Some(CryptoSuiteType::EddsaJcs2022)) {
+                        panic!("Unsupported proof's cryptosuite {}", proof.crypto_suite)
+                    }
+
+                    let cryptosuite = EddsaJcs2022Cryptosuite {
+                        verifying_key: Some(verifying_key),
+                        signing_key: None,
+                    };
+
+                    if cryptosuite.verify_proof(proof, self.did_doc_hash.as_str()) {
+                        panic!(
+                            "Invalid did log. Entry of version {} has invalid data integrity proof",
+                            self.version_index.unwrap()
+                        )
+                    }
+                }
             }
         };
-
-        let verifying_key = self.is_key_authorized_for_update(proof.extract_update_key()); // may panic
-
-        /*
-        // Check if verifying key is actually a controller and therefore allowed to update the doc => valid key to create the proof
-        let controller_keys = self.get_controller_verifying_key();
-        if !controller_keys
-            .values()
-            .any(|(_, key)| key.to_multibase() == verifying_key.to_multibase())
-        {
-            panic!(
-                "Invalid key pair. The provided key pair is not the one referenced in the did doc"
-            )
-        }
-         */
-
-        let eddsa_suite = EddsaCryptosuite {
-            verifying_key: Some(verifying_key),
-            signing_key: None,
-        };
-
-        if eddsa_suite.verify_proof(proof, self.did_doc_hash.as_str()) {
-            panic!(
-                "Invalid did log. Entry of version {} has invalid data integrity proof",
-                self.version_index.unwrap()
-            )
-        }
     }
 
     /// The new versionId takes the form <version number>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.

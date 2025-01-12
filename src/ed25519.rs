@@ -81,6 +81,10 @@ impl Ed25519SigningKey {
         let signature = self.signing_key.sign(message.as_bytes());
         Ed25519Signature { signature }.into()
     }
+    pub fn sign_bytes(&self, message: &[u8]) -> Ed25519Signature { // uniffi-irrelevant
+        let signature = self.signing_key.sign(message);
+        Ed25519Signature { signature }
+    }
 }
 
 #[derive(Clone, PartialEq, Debug)]
