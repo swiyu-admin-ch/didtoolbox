@@ -369,7 +369,7 @@ mod test {
     )]
     #[case(
         "test_data/generated_by_didtoolbox_java/did_3.jsonl",
-        "did:tdw:QmZxK1EAzSW6vT7Qx5xsRREqzenDCnznRGkrgDd1L9cqvE:127.0.0.1%3A54858:123456789:123456789"
+        "did:tdw:QmTeeRSQPcfaUDXsZjhjzJDTaez2RSynS2dy5VSBp3aZu4:127.0.0.1%3A54858:123456789:123456789"
     )]
     fn test_read_did_tdw(#[case] did_log_raw_filepath: String, #[case] did_url: String) {
         let did_log_raw = fs::read_to_string(Path::new(&did_log_raw_filepath));
@@ -394,16 +394,11 @@ mod test {
 
     #[rstest]
     fn test_read_did_tdwX() {
-        //let did_log_raw_filepath = "test_data/example_did.jsonl";
-        //let did_url: String = String::from("did:tdw:Qma6mc1qZw3NqxwX6SB5GPQYzP4pGN2nXD15Jwi4bcDBKu::domain.example");
         let did_log_raw_filepath = "test_data/generated_by_didtoolbox_java/did_1.jsonl";
-        let did_url: String = String::from(
-            "did:tdw:QmajG3izTnBaTsQUCZ3FMmf4H3K6pNzps4CtSPDvaEFaoc:127.0.0.1%3A54858",
-        );
+        let did_url: String = String::from("did:tdw:QmcrvM4Cn9h2xKfg72vNZrfc6CBNHzGXfYaMbCH2Ct5PcR:127.0.0.1%3A54858");
 
         let did_log_raw_filepath = "test_data/generated_by_didtoolbox_java/tdw-js.jsonl";
-        let did_url: String =
-            String::from("did:tdw:Qmb4sce9qf13cwcosaDfRt2NmWpUfqHAdpVfRUCN8gtB8G:example.com");
+        let did_url: String = String::from("did:tdw:Qmb4sce9qf13cwcosaDfRt2NmWpUfqHAdpVfRUCN8gtB8G:example.com");
 
         let did_log_raw = fs::read_to_string(Path::new(&did_log_raw_filepath));
         assert!(did_log_raw.is_ok());

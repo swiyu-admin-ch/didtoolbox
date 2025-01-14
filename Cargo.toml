@@ -28,7 +28,6 @@ hex = "0.4.3"
 regex = "1.11.1"
 url-escape = "0.1.1"
 bs58 = { version = "0.5.1", features = ["check", "cb58"] }
-ssi = { version = "0.10.0", features = ["example", "http-did"] }
 thiserror = "2.0.11"
 
 [build-dependencies]

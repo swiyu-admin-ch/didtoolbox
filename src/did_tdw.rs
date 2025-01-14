@@ -13,13 +13,6 @@ use serde_json::Value::{Array as JsonArray, Null, Object as JsonObject, String a
 use serde_json::{
     from_str as json_from_str, json, to_string as json_to_string, Value as JsonValue,
 };
-use ssi::dids::{
-    resolution::{
-        DIDMethodResolver as SSIDIDMethodResolver, Error as SSIResolutionError,
-        Options as SSIOptions, Output as SSIOutput,
-    },
-    DIDBuf as SSIDIDBuf, DIDMethod as SSIDIDMethod,
-};
 use std::cmp::PartialEq;
 use std::sync::{Arc, LazyLock};
 use url_escape;
@@ -941,6 +934,8 @@ static HAS_PATH_REGEX: LazyLock<Regex> =
 static HAS_PORT_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\:[0-9]+").unwrap());
 
 impl TrustDidWebId {
+    const DID_METHOD_NAME: &'static str = "tdw";
+
     /// Yet another UniFFI-compliant method.
     ///
     /// Otherwise, the idiomatic counterpart (try_from(value: (String, Option<bool>)) -> Result<Self, Self::Error>) may be used as well.
@@ -971,64 +966,59 @@ impl TryFrom<(String, Option<bool>)> for TrustDidWebId {
         let did_tdw = value.0;
         let allow_http = value.1;
 
-        match SSIDIDBuf::try_from(did_tdw.to_owned()) {
-            Ok(buf) => {
-                if !buf.method_name().starts_with(TrustDidWeb::DID_METHOD_NAME) {
-                    return Err(TrustDidWebIdResolutionError::MethodNotSupported(
-                        buf.method_name().to_owned(),
-                    ));
-                };
+        let split: Vec<&str> = did_tdw.splitn(3, ":").collect();
+        if split.len() < 3 || split[2].is_empty() {
+            return Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(
+                did_tdw,
+            ));
+        };
 
-                match buf.method_specific_id().split_once(":") {
-                    Some((scid, did_tdw_reduced)) => {
-                        if !scid.starts_with("Q") {
-                            panic!(
-                                "Invalid multibase format for SCID. base58btc identifier expected"
-                            );
-                        }
-                        let mut decoded_url = String::from("");
-                        url_escape::decode_to_string(
-                            did_tdw_reduced.replace(":", "/"),
-                            &mut decoded_url,
-                        );
-
-                        let url = match String::from_utf8(decoded_url.into_bytes()) {
-                            Ok(url) => {
-                                if url.starts_with("localhost")
-                                    || url.starts_with("127.0.0.1")
-                                    || allow_http.unwrap_or(false)
-                                {
-                                    format!("http://{}", url)
-                                } else {
-                                    format!("https://{}", url)
-                                }
-                            }
-                            Err(_) => {
-                                return Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(
-                                    did_tdw_reduced.to_string(),
-                                ))
-                            }
-                        };
-                        if HAS_PATH_REGEX.captures(url.as_str()).is_some()
-                            || HAS_PORT_REGEX.captures(url.as_str()).is_some()
+        let method_name = format!("{}:{}", split[0], split[1]);
+        if method_name != format!("did:{}", Self::DID_METHOD_NAME) {
+            return Err(TrustDidWebIdResolutionError::MethodNotSupported(
+                method_name,
+            ));
+        };
+        let scid = split[2];
+        if !scid.starts_with("Q") {
+            panic!("Invalid multibase format for SCID. base58btc identifier expected");
+        }
+        let mut decoded_url = String::from("");
+        match scid.split_once(":") {
+            Some((scid, did_tdw_reduced)) => {
+                url_escape::decode_to_string(did_tdw_reduced.replace(":", "/"), &mut decoded_url);
+                let url = match String::from_utf8(decoded_url.into_bytes()) {
+                    Ok(url) => {
+                        if url.starts_with("localhost")
+                            || url.starts_with("127.0.0.1")
+                            || allow_http.unwrap_or(false)
                         {
-                            Ok(Self {
-                                scid: scid.to_string(),
-                                url: format!("{}/did.jsonl", url),
-                            })
+                            format!("http://{}", url)
                         } else {
-                            Ok(Self {
-                                scid: scid.to_string(),
-                                url: format!("{}/.well-known/did.jsonl", url),
-                            })
+                            format!("https://{}", url)
                         }
                     }
-                    None => Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(
-                        buf.method_specific_id().to_owned(),
-                    )),
+                    Err(_) => {
+                        return Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(
+                            did_tdw_reduced.to_string(),
+                        ))
+                    }
+                };
+                if HAS_PATH_REGEX.captures(url.as_str()).is_some()
+                    || HAS_PORT_REGEX.captures(url.as_str()).is_some()
+                {
+                    Ok(Self {
+                        scid: scid.to_string(),
+                        url: format!("{}/did.jsonl", url),
+                    })
+                } else {
+                    Ok(Self {
+                        scid: scid.to_string(),
+                        url: format!("{}/.well-known/did.jsonl", url),
+                    })
                 }
             }
-            Err(_) => Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(
+            None => Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(
                 did_tdw,
             )),
         }
@@ -1133,20 +1123,5 @@ impl TrustDidWeb {
             did_log: did_doc_state.to_string(), // DidDocumentState implements std::fmt::Display trait
             did_doc: did_doc_str,
         })
-    }
-}
-
-impl SSIDIDMethod for TrustDidWeb {
-    const DID_METHOD_NAME: &'static str = "tdw";
-}
-
-impl SSIDIDMethodResolver for TrustDidWeb {
-    async fn resolve_method_representation<'a>(
-        &'a self,
-        method_specific_id: &'a str,
-        options: SSIOptions,
-    ) -> Result<SSIOutput<Vec<u8>>, SSIResolutionError> {
-        // TODO Implement DIDMethodResolver for TrustDidWeb
-        todo!()
     }
 }
