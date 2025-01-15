@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 use std::sync::Arc;
 
-use crate::utils;
+use crate::multibase::MultibaseEncoderDecoder;
 use ed25519_dalek::{
     Signature, Signer, SigningKey, VerifyingKey, PUBLIC_KEY_LENGTH, SECRET_KEY_LENGTH,
     SIGNATURE_LENGTH,
@@ -20,34 +20,55 @@ pub struct Ed25519Signature {
 impl MultiBaseConverter for Ed25519Signature {
     fn to_multibase(&self) -> String {
         let signature_bytes = self.signature.to_bytes();
-        utils::convert_to_multibase_base58btc(&signature_bytes)
+        MultibaseEncoderDecoder::default().encode(&signature_bytes)
     }
 
     fn from_multibase(multibase: &str) -> Self {
         let mut signature_bytes: [u8; SIGNATURE_LENGTH] = [0; SIGNATURE_LENGTH];
-        utils::convert_from_multibase_base58btc(multibase, &mut signature_bytes); // may panic
+        MultibaseEncoderDecoder::default().decode_onto(multibase, &mut signature_bytes); // may panic
         Ed25519Signature {
             signature: Signature::from_bytes(&signature_bytes),
         }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Ed25519SigningKey {
     signing_key: SigningKey,
 }
 
+/// As specified by https://www.w3.org/TR/controller-document/#Multikey
 impl MultiBaseConverter for Ed25519SigningKey {
+    /// As specified by https://www.w3.org/TR/controller-document/#Multikey:
+    ///
+    /// The encoding of an Ed25519 secret key MUST start with the two-byte prefix 0x8026 (the varint expression of 0x1300),
+    /// followed by the 32-byte secret key data. The resulting 34-byte value MUST then be encoded using the base-58-btc alphabet,
+    /// according to Section 2.4 Multibase (https://www.w3.org/TR/controller-document/#multibase-0),
+    /// and then prepended with the base-58-btc Multibase header (z).
     fn to_multibase(&self) -> String {
-        let public_key_bytes = self.signing_key.to_bytes();
-        utils::convert_to_multibase_base58btc(&public_key_bytes)
+        let signing_key_bytes = self.signing_key.to_bytes();
+        let mut signing_key_with_prefix: [u8; PUBLIC_KEY_LENGTH + 2] = [0; PUBLIC_KEY_LENGTH + 2];
+        signing_key_with_prefix[0] = 0x13;
+        signing_key_with_prefix[1] = 0x00;
+        signing_key_with_prefix[2..].copy_from_slice(&signing_key_bytes);
+        MultibaseEncoderDecoder::default().encode(&signing_key_with_prefix)
     }
 
+    /// As specified by https://www.w3.org/TR/controller-document/#Multikey:
+    ///
+    /// The encoding of an Ed25519 secret key MUST start with the two-byte prefix 0x8026 (the varint expression of 0x1300),
+    /// followed by the 32-byte secret key data. The resulting 34-byte value MUST then be encoded using the base-58-btc alphabet,
+    /// according to Section 2.4 Multibase (https://www.w3.org/TR/controller-document/#multibase-0),
+    /// and then prepended with the base-58-btc Multibase header (z).
     fn from_multibase(multibase: &str) -> Self {
-        let mut public_key_bytes: [u8; SECRET_KEY_LENGTH] = [0; SECRET_KEY_LENGTH];
-        utils::convert_from_multibase_base58btc(multibase, &mut public_key_bytes); // may panic
+        let mut signing_key_buff: [u8; SECRET_KEY_LENGTH + 2] = [0; SECRET_KEY_LENGTH + 2];
+        MultibaseEncoderDecoder::default().decode_onto(multibase, &mut signing_key_buff); // may panic
+
+        let mut signing_key: [u8; SECRET_KEY_LENGTH] = [0; SECRET_KEY_LENGTH];
+        signing_key.copy_from_slice(&signing_key_buff[2..]); // get rid of the multibase header
+
         Ed25519SigningKey {
-            signing_key: SigningKey::from_bytes(&public_key_bytes),
+            signing_key: SigningKey::from_bytes(&signing_key),
         }
     }
 }
@@ -60,35 +81,52 @@ impl Ed25519SigningKey {
         let signature = self.signing_key.sign(message.as_bytes());
         Ed25519Signature { signature }.into()
     }
+    pub fn sign_bytes(&self, message: &[u8]) -> Ed25519Signature { // uniffi-irrelevant
+        let signature = self.signing_key.sign(message);
+        Ed25519Signature { signature }
+    }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Ed25519VerifyingKey {
     pub verifying_key: VerifyingKey,
 }
+
+/// As specified by https://www.w3.org/TR/controller-document/#Multikey
 impl MultiBaseConverter for Ed25519VerifyingKey {
+    /// As specified by https://www.w3.org/TR/controller-document/#Multikey:
+    ///
+    /// The encoding of an Ed25519 public key MUST start with the two-byte prefix 0xed01 (the varint expression of 0xed),
+    /// followed by the 32-byte public key data.
+    /// The resulting 34-byte value MUST then be encoded using the base-58-btc alphabet,
+    /// according to Section 2.4 Multibase (https://www.w3.org/TR/controller-document/#multibase-0),
+    /// and then prepended with the base-58-btc Multibase header (z).
     fn to_multibase(&self) -> String {
         let public_key_without_prefix = self.verifying_key.to_bytes();
         let mut public_key_with_prefix: [u8; PUBLIC_KEY_LENGTH + 2] = [0; PUBLIC_KEY_LENGTH + 2];
         public_key_with_prefix[0] = 0xed;
         public_key_with_prefix[1] = 0x01;
         public_key_with_prefix[2..].copy_from_slice(&public_key_without_prefix);
-        utils::convert_to_multibase_base58btc(&public_key_with_prefix)
+        MultibaseEncoderDecoder::default().encode(&public_key_with_prefix)
     }
 
+    /// As specified by https://www.w3.org/TR/controller-document/#Multikey:
+    ///
+    /// The encoding of an Ed25519 public key MUST start with the two-byte prefix 0xed01 (the varint expression of 0xed),
+    /// followed by the 32-byte public key data.
+    /// The resulting 34-byte value MUST then be encoded using the base-58-btc alphabet,
+    /// according to Section 2.4 Multibase (https://www.w3.org/TR/controller-document/#multibase-0),
+    /// and then prepended with the base-58-btc Multibase header (z).
     fn from_multibase(multibase: &str) -> Self {
-        // According to https://www.w3.org/community/reports/credentials/CG-FINAL-di-eddsa-2020-20220724/#ed25519verificationkey2020
-        // the public key has a **two** byte prefix of 0xed01, which is not part of the public key instance itself
-        // therefore "+2" is added to the length of the multibase public key
-        let mut public_key_with_prefix: [u8; PUBLIC_KEY_LENGTH + 2] = [0; PUBLIC_KEY_LENGTH + 2];
-        utils::convert_from_multibase_base58btc(multibase, &mut public_key_with_prefix);
+        let mut verifying_key_buff: [u8; PUBLIC_KEY_LENGTH + 2] = [0; PUBLIC_KEY_LENGTH + 2];
+        MultibaseEncoderDecoder::default().decode_onto(multibase, &mut verifying_key_buff);
 
-        let mut public_key: [u8; PUBLIC_KEY_LENGTH] = [0; PUBLIC_KEY_LENGTH];
-        public_key.copy_from_slice(&public_key_with_prefix[2..]);
+        let mut verifying_key: [u8; PUBLIC_KEY_LENGTH] = [0; PUBLIC_KEY_LENGTH];
+        verifying_key.copy_from_slice(&verifying_key_buff[2..]); // get rid of the multibase header
 
-        match VerifyingKey::from_bytes(&public_key) {
+        match VerifyingKey::from_bytes(&verifying_key) {
             Ok(verifying_key) => Ed25519VerifyingKey { verifying_key },
-            Err(_) => panic!("{} is an invalid ed25519 public key", multibase),
+            Err(_) => panic!("{} is an invalid ed25519 verifying key", multibase),
         }
     }
 }
@@ -98,7 +136,7 @@ impl Ed25519VerifyingKey {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Ed25519KeyPair {
     pub verifying_key: Ed25519VerifyingKey,
     pub signing_key: Ed25519SigningKey,
@@ -114,13 +152,18 @@ impl Ed25519KeyPair {
         }
     }
 
+    /// As specified by https://www.w3.org/TR/controller-document/#Multikey:
+    ///
+    /// The encoding of an Ed25519 secret key MUST start with the two-byte prefix 0x8026 (the varint expression of 0x1300),
+    /// followed by the 32-byte secret key data. The resulting 34-byte value MUST then be encoded using the base-58-btc alphabet,
+    /// according to Section 2.4 Multibase (https://www.w3.org/TR/controller-document/#multibase-0),
+    /// and then prepended with the base-58-btc Multibase header (z).
     pub fn from(signing_key_multibase: &str) -> Self {
-        let mut signing_key_bytes: [u8; SECRET_KEY_LENGTH] = [0; SECRET_KEY_LENGTH];
-        utils::convert_from_multibase_base58btc(signing_key_multibase, &mut signing_key_bytes); // may panic
-        let signing_key = SigningKey::from_bytes(&signing_key_bytes);
+        let signing_key = Ed25519SigningKey::from_multibase(signing_key_multibase);
+        let signing_key_bytes = SigningKey::from_bytes(&signing_key.signing_key.to_bytes());
         Ed25519KeyPair {
-            verifying_key: Ed25519VerifyingKey::new(signing_key.verifying_key()),
-            signing_key: Ed25519SigningKey::new(signing_key),
+            verifying_key: Ed25519VerifyingKey::new(signing_key_bytes.verifying_key()),
+            signing_key,
         }
     }
 
