@@ -1,6 +1,6 @@
 [package]
 name = "didtoolbox"
-version = "0.0.6"
+version = "1.0.0"
 edition = "2021"
 license = "MIT"
 description = "Toolbox containing did:tdw"

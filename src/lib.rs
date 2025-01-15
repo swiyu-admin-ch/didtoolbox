@@ -360,16 +360,20 @@ mod test {
         "did:tdw:Qma6mc1qZw3NqxwX6SB5GPQYzP4pGN2nXD15Jwi4bcDBKu:domain.example"
     )]*/
     #[case(
+        "test_data/generated_by_didtoolbox_java/tdw-js.jsonl",
+        "did:tdw:Qmb4sce9qf13cwcosaDfRt2NmWpUfqHAdpVfRUCN8gtB8G:example.com"
+    )]
+    #[case(
         "test_data/generated_by_didtoolbox_java/did_1.jsonl",
-        "did:tdw:QmajG3izTnBaTsQUCZ3FMmf4H3K6pNzps4CtSPDvaEFaoc:127.0.0.1%3A54858"
+        "did:tdw:QmPJ85fz4FMocjsm6qqHkN2DqJLYJLQwvXAcNDFemM1Jgg:127.0.0.1%3A54858"
     )]
     #[case(
         "test_data/generated_by_didtoolbox_java/did_2.jsonl",
-        "did:tdw:QmP4JfSDqTZp6zQzfQYxfTG31X1i7VujVyDPESgTchXTtJ:127.0.0.1%3A54858:123456789"
+        "did:tdw:QmUSyQohHF4tcRhdkJYoamuMQAXQmYBoFLCot35xd7dPda:127.0.0.1%3A54858:123456789"
     )]
     #[case(
         "test_data/generated_by_didtoolbox_java/did_3.jsonl",
-        "did:tdw:QmTeeRSQPcfaUDXsZjhjzJDTaez2RSynS2dy5VSBp3aZu4:127.0.0.1%3A54858:123456789:123456789"
+        "did:tdw:QmcTh4ghpn5HHuubeGzt5JMS9PfAyxZLVPn3zTq3TYP69v:127.0.0.1%3A54858:123456789:123456789"
     )]
     fn test_read_did_tdw(#[case] did_log_raw_filepath: String, #[case] did_url: String) {
         let did_log_raw = fs::read_to_string(Path::new(&did_log_raw_filepath));
@@ -377,8 +381,9 @@ mod test {
         let did_log_raw = did_log_raw.unwrap();
 
         // Read the newly did doc
-        let did_doc_str_v1 = TrustDidWeb::read(did_url.clone(), did_log_raw, Some(false)).unwrap();
-        let did_doc_v1: JsonValue = serde_json::from_str(&did_doc_str_v1.get_did_doc()).unwrap();
+        let tdw_v1 = TrustDidWeb::read(did_url.clone(), did_log_raw, Some(false)).unwrap();
+        let did_doc_v1: JsonValue = serde_json::from_str(&tdw_v1.get_did_doc()).unwrap();
+        let did_doc_obj_v1 = DidDoc::from_json(&tdw_v1.get_did_doc()); // may panic
 
         assert!(!did_doc_v1["@context"].to_string().is_empty());
         match did_doc_v1["id"] {
@@ -390,12 +395,18 @@ mod test {
         assert!(!did_doc_v1["verificationMethod"].to_string().is_empty());
         assert!(!did_doc_v1["authentication"].to_string().is_empty());
         assert!(!did_doc_v1["controller"].to_string().is_empty());
+
+        assert_eq!(did_doc_obj_v1.id, tdw_v1.get_did());
+        assert!(!did_doc_obj_v1.verification_method.is_empty());
+        assert!(!did_doc_obj_v1.authentication.is_empty());
+        //assert!(!did_doc_v1_obj.controller.is_empty());
     }
 
+    /* comment out to be able to debug
     #[rstest]
-    fn test_read_did_tdwX() {
+    fn test_read_did_tdw_debug() {
         let did_log_raw_filepath = "test_data/generated_by_didtoolbox_java/did_1.jsonl";
-        let did_url: String = String::from("did:tdw:QmcrvM4Cn9h2xKfg72vNZrfc6CBNHzGXfYaMbCH2Ct5PcR:127.0.0.1%3A54858");
+        let did_url: String = String::from("did:tdw:QmPJ85fz4FMocjsm6qqHkN2DqJLYJLQwvXAcNDFemM1Jgg:127.0.0.1%3A54858");
 
         let did_log_raw_filepath = "test_data/generated_by_didtoolbox_java/tdw-js.jsonl";
         let did_url: String = String::from("did:tdw:Qmb4sce9qf13cwcosaDfRt2NmWpUfqHAdpVfRUCN8gtB8G:example.com");
@@ -425,4 +436,5 @@ mod test {
         assert!(!did_doc_obj_v1.authentication.is_empty());
         //assert!(!did_doc_v1_obj.controller.is_empty());
     }
+     */
 }

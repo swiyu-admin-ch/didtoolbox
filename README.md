@@ -2,7 +2,8 @@
 
 # DID toolbox
 
-An official Swiss Government project made by the [Federal Office of Information Technology, Systems and Telecommunication FOITT](https://www.bit.admin.ch/)
+An official Swiss Government project made by
+the [Federal Office of Information Technology, Systems and Telecommunication FOITT](https://www.bit.admin.ch/)
 as part of the electronic identity (e-ID) project.
 
 This project implements the following things:
@@ -80,8 +81,7 @@ fn main() {
         "publicKeyMultibase": "<some fancy multibase encoded public key>"
     }));
     let did_doc_v2_str = did_doc_v1.to_string();
-    let tdw_v2 = TrustDidWeb::update(tdw_v1.get_did(), tdw_v1.get_did_log(), did_doc_v2_str, &key_pair).unwrap();
-    println!("DID Doc v2: {}", tdw_v2.get_did_doc());
+    // updating DID log goes here
 }
 
 ```
