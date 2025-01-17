@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MIT
 
-use crate::jcs_sha256_hasher::JcsSha256Hasher;
+use crate::errors::TrustDidWebError;
 use serde::{Deserialize, Serialize};
-
-pub const SCID_PLACEHOLDER: &str = "{SCID}";
 
 /// Entry in an did log file as shown here
 /// https://bcgov.github.io/trustdidweb/#term:did-log-entry
@@ -183,7 +181,7 @@ pub struct DidDocNormalized {
 }
 
 impl DidDocNormalized {
-    pub fn to_did_doc(&self) -> DidDoc {
+    pub fn to_did_doc(&self) -> Result<DidDoc, TrustDidWebError> {
         let controller = match self.controller.clone() {
             None => vec![],
             Some(c) => vec![c],
@@ -204,57 +202,66 @@ impl DidDocNormalized {
         };
         if !self.authentication.is_empty() {
             did_doc.authentication = vec![];
-            self.authentication.iter().for_each(|id: &String| {
+            self.authentication.iter().try_for_each(|id| -> Result<(), TrustDidWebError> {
                 match self.verification_method.iter().find(|m| m.id == *id) {
-                    Some(obj) => did_doc.authentication.push(obj.clone()),
-                    None => panic!("Authentication (reference) key {} refers to non-existing verification method", id)
-                };
-            });
+                    Some(obj) => {
+                        did_doc.authentication.push(obj.clone());
+                        Ok(())
+                    }
+                    None => Err(TrustDidWebError::InvalidDidDocument(format!("Authentication (reference) key refers to non-existing verification method: {}", id)))
+                }
+            })?;
         }
         if !self.capability_invocation.is_empty() {
             did_doc.capability_invocation = vec![];
-            self.capability_invocation.iter().for_each(|id: &String| {
+            self.capability_invocation.iter().try_for_each(|id| -> Result<(), TrustDidWebError> {
                 match self.verification_method.iter().find(|m| m.id == *id) {
-                    Some(obj) => did_doc.capability_invocation.push(obj.clone()),
-                    None => panic!("Capability invocation (reference) key {} refers to non-existing verification method", id)
-                };
-            });
+                    Some(obj) => {
+                        did_doc.capability_invocation.push(obj.clone());
+                        Ok(())
+                    }
+                    None => Err(TrustDidWebError::InvalidDidDocument(format!("Capability invocation (reference) key refers to non-existing verification method: {}", id)))
+                }
+            })?;
         }
         if !self.capability_delegation.is_empty() {
             did_doc.capability_delegation = vec![];
-            self.capability_delegation.iter().for_each(|id: &String| {
+            self.capability_delegation.iter().try_for_each(|id| -> Result<(), TrustDidWebError> {
                 match self.verification_method.iter().find(|m| m.id == *id) {
-                    Some(obj) => did_doc.capability_delegation.push(obj.clone()),
-                    None => panic!("Capability delegation (reference) key {} refers to non-existing verification method", id)
-                };
-            });
+                    Some(obj) => {
+                        did_doc.capability_delegation.push(obj.clone());
+                        Ok(())
+                    }
+                    None => Err(TrustDidWebError::InvalidDidDocument(format!("Capability delegation (reference) key refers to non-existing verification method: {}", id)))
+                }
+            })?;
         }
         if !self.assertion_method.is_empty() {
             did_doc.assertion_method = vec![];
-            self.assertion_method.iter().for_each(|id: &String| {
-                match self
-                    .verification_method
-                    .iter()
-                    .find(|m| m.id == *id)
+            self.assertion_method.iter().try_for_each(|id| -> Result<(), TrustDidWebError> {
+                match self.verification_method.iter().find(|m| m.id == *id)
                 {
-                    Some(obj) => did_doc.assertion_method.push(obj.clone()),
-                    None => panic!(
-                        "Assertion method (reference) key {} refers to non-existing verification method",
-                        id
-                    ),
-                };
-            });
+                    Some(obj) => {
+                        did_doc.assertion_method.push(obj.clone());
+                        Ok(())
+                    }
+                    None => Err(TrustDidWebError::InvalidDidDocument(format!("Assertion method (reference) key refers to non-existing verification method: {}", id)))
+                }
+            })?;
         }
         if !self.key_agreement.is_empty() {
             did_doc.key_agreement = vec![];
-            self.key_agreement.iter().for_each(|id: &String| {
+            self.key_agreement.iter().try_for_each(|id| -> Result<(), TrustDidWebError> {
                 match self.verification_method.iter().find(|m| m.id == *id) {
-                    Some(obj) => did_doc.key_agreement.push(obj.clone()),
-                    None => panic!("Key agreement (reference) key {} refers to non-existing verification method", id)
-                };
-            });
+                    Some(obj) => {
+                        did_doc.key_agreement.push(obj.clone());
+                        Ok(())
+                    }
+                    None => Err(TrustDidWebError::InvalidDidDocument(format!("Key agreement (reference) key refers to non-existing verification method: {}", id)))
+                }
+            })?;
         }
-        did_doc
+        Ok(did_doc)
     }
 }
 
@@ -295,29 +302,17 @@ impl DidDoc {
         self.deactivated.unwrap_or(false)
     }
 
-    pub fn from_json(json_content: &str) -> Self {
+    pub fn from_json(json_content: &str) -> Result<Self, TrustDidWebError> {
         let did_doc: DidDoc = match serde_json::from_str(json_content) {
             Ok(did_doc) => did_doc,
             Err(e) => {
-                panic!(
+                return Err(TrustDidWebError::DeserializationFailed(format!(
                     "Error parsing DID Document. Make sure the content is correct -> {}",
                     e
-                );
+                )));
             }
         };
-        did_doc
-    }
-
-    /// Generates an SCID (self certifying identifier) for the DIDDoc.
-    /// This function is used both in the initial generation as well as in the verification
-    /// process of the DidDoc log file.
-    pub fn build_scid(&self) -> String {
-        if !&self.id.contains(SCID_PLACEHOLDER) {
-            panic!("Invalid did:tdw document. SCID placeholder not found");
-        }
-        let json = serde_json::to_value(self).unwrap();
-
-        JcsSha256Hasher::default().base58btc_encode_multihash(&json)
+        Ok(did_doc)
     }
 
     pub fn normalize(&self) -> DidDocNormalized {

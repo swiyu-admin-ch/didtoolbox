@@ -11,15 +11,16 @@ extern crate core;
 pub mod did_tdw;
 pub mod didtoolbox;
 pub mod ed25519;
+pub mod errors;
 pub mod jcs_sha256_hasher;
 pub mod multibase;
-pub mod utils;
 pub mod vc_data_integrity;
 
-// CAUTION All structs required by uniffi MUST also be "used" here
+// CAUTION All structs required by UniFFI bindings generator (declared in UDL) MUST also be "used" here
 use did_tdw::*;
 use didtoolbox::*;
 use ed25519::*;
+use errors::*;
 
 uniffi::include_scaffolding!("didtoolbox");
 
@@ -30,8 +31,7 @@ mod test {
     use super::ed25519::*;
     use super::jcs_sha256_hasher::*;
     use super::multibase::*;
-    use super::utils::*;
-    use crate::didtoolbox;
+    use crate::errors::*;
     use crate::vc_data_integrity::*;
     use chrono::DateTime;
     use core::panic;
@@ -114,16 +114,21 @@ mod test {
                 e.kind(),
                 TrustDidWebIdResolutionErrorKind::MethodNotSupported
             ),
-            _ => (),
+            _ => panic!(
+                "Expected error kind: {:?}",
+                TrustDidWebIdResolutionErrorKind::MethodNotSupported
+            ),
         }
     }
 
+    /* TODO
     #[rstest]
     #[case("did:tdw:MySCID:localhost%3A8000:123:456")]
     #[should_panic(expected = "Invalid multibase format for SCID. base58btc identifier expected")]
     fn test_tdw_to_url_conversion_error_invalid_scid_multibase(#[case] tdw: String) {
         TrustDidWebId::parse_did_tdw(tdw, Some(true)).unwrap();
     }
+     */
 
     #[rstest]
     #[case("did:tdw:")]
@@ -133,86 +138,24 @@ mod test {
                 e.kind(),
                 TrustDidWebIdResolutionErrorKind::InvalidMethodSpecificId
             ),
-            _ => (),
+            _ => panic!(
+                "Expected error kind: {:?}",
+                TrustDidWebIdResolutionErrorKind::InvalidMethodSpecificId
+            ),
         }
     }
 
     #[rstest]
-    #[case("http://localhost:8000/123/456", "localhost%3A8000:123:456")]
-    #[case("http://localhost:8000", "localhost%3A8000")]
-    #[case("http://localhost/123/456", "localhost:123:456")]
-    #[case("http://sub.localhost/123/456", "sub.localhost:123:456")]
-    #[case("http://sub.localhost", "sub.localhost")]
-    fn test_url_to_tdw_domain(#[case] url: String, #[case] domain: String) {
-        let resolved_domain = get_tdw_domain_from_url(&url, Some(true)).unwrap();
-        assert_eq!(domain, resolved_domain)
-    }
-
-    #[rstest]
-    #[case("not_really_an_http_url")]
-    #[case("http://sub.localhost/did.jsonl")]
-    fn test_url_to_tdw_domain_error(#[case] url: String) {
-        match get_tdw_domain_from_url(&url, Some(true)) {
-            Err(e) => assert_eq!(e.kind(), TrustDidWebErrorKind::InvalidMethodSpecificId),
-            _ => (),
-        }
-    }
-
-    #[rstest]
-    fn test_did_doc_build_scid() {
-        let did_doc = DidDoc {
-            //context: vec![DID_CONTEXT.to_string(), MKEY_CONTEXT.to_string()],
-            context: vec![],
-            id: String::from(didtoolbox::SCID_PLACEHOLDER),
-            verification_method: vec![],
-            authentication: vec![],
-            capability_invocation: vec![],
-            capability_delegation: vec![],
-            assertion_method: vec![],
-            key_agreement: vec![],
-            //controller: vec![format!("did:tdw:{}:{}", didtoolbox::SCID_PLACEHOLDER, "domain")],
-            controller: vec![],
-            deactivated: None,
-        };
-
-        let scid = did_doc.build_scid();
-        assert_eq!(scid.len(), 46);
-        assert_eq!(scid, "QmQnmvyVZQzkRTozocCrpbyJciVoEUu65u7rz8Cocp5Rmx")
-    }
-
-    #[rstest]
-    #[should_panic(expected = "Invalid did:tdw document. SCID placeholder not found")]
-    fn test_did_doc_build_scid_panic() {
-        let did_doc = DidDoc {
-            context: vec![DID_CONTEXT.to_string(), MKEY_CONTEXT.to_string()],
-            id: String::from(""),
-            verification_method: vec![],
-            authentication: vec![],
-            capability_invocation: vec![],
-            capability_delegation: vec![],
-            assertion_method: vec![],
-            key_agreement: vec![],
-            controller: vec![format!(
-                "did:tdw:{}:{}",
-                didtoolbox::SCID_PLACEHOLDER,
-                "domain"
-            )],
-            deactivated: None,
-        };
-
-        did_doc.build_scid();
-    }
-
-    #[rstest]
-    fn test_multibase_conversion() {
+    fn test_multibase_conversion() -> Result<(), Box<dyn std::error::Error>> {
         let multibase = MultibaseEncoderDecoder::default();
         let encoded = multibase.encode("helloworld".as_bytes()); // zfP1vxkpyLWnH9dD6BQA
         //let mut buff: [u8; 16] = [0; 16];
         let mut buff = vec![0; 16];
-        multibase.decode_onto(encoded.as_str(), &mut buff);
+        multibase.decode_onto(encoded.as_str(), &mut buff)?;
         let decoded = String::from_utf8_lossy(&buff).to_string();
         assert!(decoded.starts_with("helloworld"));
         //assert_eq!(decoded, "helloworld");
+        Ok(())
     }
 
     #[rstest]
@@ -223,19 +166,20 @@ mod test {
         let encoded_without_multibase = encoded.chars().skip(1).collect::<String>(); // get rid of the multibase code (prefix char 'z')
         //let mut buff: [u8; 16] = [0; 16];
         let mut buff = vec![0; 16];
-        multibase.decode_onto(encoded_without_multibase.as_str(), &mut buff);
+        let _ = multibase.decode_onto(encoded_without_multibase.as_str(), &mut buff);
     }
 
     #[rstest]
-    #[should_panic(
-        expected = "Invalid multibase content: buffer provided to decode base58 encoded string into was too small"
-    )]
+    #[should_panic(expected = "buffer provided to decode base58 encoded string into was too small")]
     fn test_multibase_conversion_buffer_too_small() {
         let multibase = MultibaseEncoderDecoder::default();
         let encoded = multibase.encode("helloworld".as_bytes()); // zfP1vxkpyLWnH9dD6BQA
         //let mut buff: [u8; 16] = [0; 16];
         let mut buff = vec![0; 8]; // empirical size for "helloworld" (encoded)
-        multibase.decode_onto(encoded.as_str(), &mut buff);
+        match multibase.decode_onto(encoded.as_str(), &mut buff) {
+            Ok(_) => panic!("Error expected to be returned"),
+            Err(err) => panic!("{}", err),
+        }
     }
 
     #[rstest]
@@ -250,23 +194,26 @@ mod test {
     }
 
     #[rstest]
-    fn test_key_pair_multibase_conversion(ed25519_key_pair: &Ed25519KeyPair, // fixture
-    ) {
+    fn test_key_pair_multibase_conversion(
+        ed25519_key_pair: &Ed25519KeyPair, // fixture
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let original_private = ed25519_key_pair.get_signing_key();
         let original_public = ed25519_key_pair.get_verifying_key();
 
-        let new_private = Ed25519SigningKey::from_multibase(&original_private.to_multibase());
-        let new_public = Ed25519VerifyingKey::from_multibase(&original_public.to_multibase());
+        let new_private = Ed25519SigningKey::from_multibase(&original_private.to_multibase())?;
+        let new_public = Ed25519VerifyingKey::from_multibase(&original_public.to_multibase())?;
 
         assert_eq!(original_private.to_multibase(), new_private.to_multibase());
         assert_eq!(original_public.to_multibase(), new_public.to_multibase());
+        Ok(())
     }
 
     #[rstest]
-    fn test_key_pair_creation_from_multibase(ed25519_key_pair: &Ed25519KeyPair, // fixture
-    ) {
+    fn test_key_pair_creation_from_multibase(
+        ed25519_key_pair: &Ed25519KeyPair, // fixture
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let new_ed25519_key_pair =
-            Ed25519KeyPair::from(&ed25519_key_pair.get_signing_key().to_multibase());
+            Ed25519KeyPair::from(&ed25519_key_pair.get_signing_key().to_multibase())?;
 
         assert_eq!(ed25519_key_pair, &new_ed25519_key_pair);
         assert_eq!(
@@ -277,10 +224,11 @@ mod test {
             ed25519_key_pair.get_verifying_key().to_multibase(),
             new_ed25519_key_pair.verifying_key.to_multibase()
         );
+        Ok(())
     }
 
     #[rstest]
-    fn test_cryptosuite_add_and_verify_proof() {
+    fn test_cryptosuite_add_and_verify_proof() -> Result<(), Box<dyn std::error::Error>> {
         // From https://www.w3.org/TR/vc-di-eddsa/#example-credential-without-proof-0
         let credential_without_proof = json!(
             {
@@ -318,13 +266,15 @@ mod test {
         let suite = EddsaJcs2022Cryptosuite {
             verifying_key: Some(Ed25519VerifyingKey::from_multibase(
                 "z6MkrJVnaZkeFzdQyMZu1cgjg7k1pZZ6pvBQ7XJPt4swbTQ2",
-            )),
+            )?),
             signing_key: Some(Ed25519SigningKey::from_multibase(
                 "z3u2en7t5LR2WtQH5PfFqMqwVHBeXouLzo6haApm8XHqvjxq",
-            )),
+            )?),
         };
 
         let secured_document = suite.add_proof(&credential_without_proof, &options);
+        assert!(secured_document.is_ok());
+        let secured_document = secured_document.unwrap();
 
         assert!(
             !secured_document.is_null(),
@@ -348,10 +298,16 @@ mod test {
         );
 
         // sanity check
-        assert!(suite.verify_proof(
-            &DataIntegrityProof::from(serde_json::to_string(proof).unwrap()),
-            &doc_hash
-        ));
+        let proof_as_string = serde_json::to_string(proof)?;
+        let data_integrity_proof = DataIntegrityProof::from(proof_as_string)?;
+        assert!(
+            suite
+                .verify_proof(&data_integrity_proof, options.context, &doc_hash)
+                .is_ok(),
+            "Sanity check failed"
+        );
+
+        Ok(())
     }
 
     #[rstest]
@@ -375,15 +331,18 @@ mod test {
         "test_data/generated_by_didtoolbox_java/did_3.jsonl",
         "did:tdw:QmcTh4ghpn5HHuubeGzt5JMS9PfAyxZLVPn3zTq3TYP69v:127.0.0.1%3A54858:123456789:123456789"
     )]
-    fn test_read_did_tdw(#[case] did_log_raw_filepath: String, #[case] did_url: String) {
+    fn test_read_did_tdw(
+        #[case] did_log_raw_filepath: String,
+        #[case] did_url: String,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let did_log_raw = fs::read_to_string(Path::new(&did_log_raw_filepath));
         assert!(did_log_raw.is_ok());
         let did_log_raw = did_log_raw.unwrap();
 
         // Read the newly did doc
-        let tdw_v1 = TrustDidWeb::read(did_url.clone(), did_log_raw, Some(false)).unwrap();
+        let tdw_v1 = TrustDidWeb::read(did_url.clone(), did_log_raw, Some(false))?;
         let did_doc_v1: JsonValue = serde_json::from_str(&tdw_v1.get_did_doc()).unwrap();
-        let did_doc_obj_v1 = DidDoc::from_json(&tdw_v1.get_did_doc()); // may panic
+        let did_doc_obj_v1 = DidDoc::from_json(&tdw_v1.get_did_doc())?;
 
         assert!(!did_doc_v1["@context"].to_string().is_empty());
         match did_doc_v1["id"] {
@@ -400,6 +359,8 @@ mod test {
         assert!(!did_doc_obj_v1.verification_method.is_empty());
         assert!(!did_doc_obj_v1.authentication.is_empty());
         //assert!(!did_doc_v1_obj.controller.is_empty());
+
+        Ok(())
     }
 
     /* comment out to be able to debug

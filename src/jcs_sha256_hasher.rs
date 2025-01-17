@@ -11,8 +11,6 @@ use serde_json::error::Error as JsonError;
 use serde_json_canonicalizer::to_string as jcs_to_string;
 use sha2::{Digest, Sha256};
 
-pub const SCID_MIN_LENGTH: usize = 32;
-
 /// A helper capable of SHA2-256 hashing of canonical JSON structures.
 //#[derive(Default, Clone)]
 pub struct JcsSha256Hasher {
@@ -27,7 +25,7 @@ impl JcsSha256Hasher {
     }
 
     /// Serialize the given data structure as a JCS UTF-8 string and calculate SHA2-256 hash out of it.
-    /// The hash encoded as hex strict representation is returned. Lower case letters are used (e. g. f9b4ca)
+    /// The hash encoded as hex strict representation is returned. Lower case letters are used (e.g. f9b4ca)
     ///
     /// # Errors
     ///
@@ -67,30 +65,24 @@ impl JcsSha256Hasher {
 
     /// Serialize the given data structure as a JCS UTF-8 string and calculate SHA2-256 multihash out of it.
     /// The multihash encoded in base58btc format is returned
-    pub fn base58btc_encode_multihash(&mut self, json: &serde_json::Value) -> String {
-        match jcs_to_string(json) {
-            Ok(jcs_string) => {
-                // WORKAROUND (":ff" -> ":") in case of numeric json properties (e.g. witnessThreshold)
-                let multihash_sha256 = self.encode_multihash(jcs_string.replace(":ff", ":"));
+    pub fn base58btc_encode_multihash(
+        &mut self,
+        json: &serde_json::Value,
+    ) -> serde_json::Result<String> {
+        let canonical = jcs_to_string(json)?;
 
-                //
-                // Since v0.3 (https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
-                //            Change base32 encoding with base58btc, as it offers a better expansion rate.
-                // More here: https://identity.foundation/trustdidweb/v0.3/#generate-scid
-                //            To generate the required [[ref: SCID]] for a did:tdw DID, the DID Controller MUST execute the following function:
-                //            base58btc(multihash(JCS(preliminary log entry with placeholders), <hash algorithm>))
-                let encoded = base58_encode(multihash_sha256)
-                    .with_alphabet(Alphabet58::BITCOIN) // it is the default alphabet, but still (to ensure spec conformity)
-                    .into_string();
-                if encoded.len() < SCID_MIN_LENGTH {
-                    panic!(
-                        "Invalid scid length. A minimum of {} is required",
-                        SCID_MIN_LENGTH
-                    );
-                }
-                encoded
-            }
-            Err(_) => panic!("Invalid json couldn't canonicalize"),
-        }
+        // WORKAROUND (":ff" -> ":") in case of numeric json properties (e.g. witnessThreshold)
+        let multihash_sha256 = self.encode_multihash(canonical.replace(":ff", ":"));
+
+        //
+        // Since v0.3 (https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
+        //            Change base32 encoding with base58btc, as it offers a better expansion rate.
+        // More here: https://identity.foundation/trustdidweb/v0.3/#generate-scid
+        //            To generate the required [[ref: SCID]] for a did:tdw DID, the DID Controller MUST execute the following function:
+        //            base58btc(multihash(JCS(preliminary log entry with placeholders), <hash algorithm>))
+        let encoded = base58_encode(multihash_sha256)
+            .with_alphabet(Alphabet58::BITCOIN) // it is the default alphabet, but still (to ensure spec conformity)
+            .into_string();
+        Ok(encoded)
     }
 }

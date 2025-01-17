@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
+
 use std::sync::Arc;
 
+use crate::errors::TrustDidWebError;
 use crate::multibase::MultibaseEncoderDecoder;
 use ed25519_dalek::{
     Signature, Signer, SigningKey, VerifyingKey, PUBLIC_KEY_LENGTH, SECRET_KEY_LENGTH,
@@ -10,7 +12,9 @@ use rand::rngs::OsRng;
 
 pub trait MultiBaseConverter {
     fn to_multibase(&self) -> String;
-    fn from_multibase(multibase: &str) -> Self;
+    fn from_multibase(multibase: &str) -> Result<Self, TrustDidWebError>
+    where
+        Self: Sized;
 }
 
 #[derive(Clone)]
@@ -23,11 +27,13 @@ impl MultiBaseConverter for Ed25519Signature {
         MultibaseEncoderDecoder::default().encode(&signature_bytes)
     }
 
-    fn from_multibase(multibase: &str) -> Self {
+    fn from_multibase(multibase: &str) -> Result<Self, TrustDidWebError> {
         let mut signature_bytes: [u8; SIGNATURE_LENGTH] = [0; SIGNATURE_LENGTH];
-        MultibaseEncoderDecoder::default().decode_onto(multibase, &mut signature_bytes); // may panic
-        Ed25519Signature {
-            signature: Signature::from_bytes(&signature_bytes),
+        match MultibaseEncoderDecoder::default().decode_onto(multibase, &mut signature_bytes) {
+            Err(err) => Err(TrustDidWebError::DeserializationFailed(format!("{}", err))),
+            Ok(_) => Ok(Ed25519Signature {
+                signature: Signature::from_bytes(&signature_bytes),
+            }),
         }
     }
 }
@@ -60,16 +66,19 @@ impl MultiBaseConverter for Ed25519SigningKey {
     /// followed by the 32-byte secret key data. The resulting 34-byte value MUST then be encoded using the base-58-btc alphabet,
     /// according to Section 2.4 Multibase (https://www.w3.org/TR/controller-document/#multibase-0),
     /// and then prepended with the base-58-btc Multibase header (z).
-    fn from_multibase(multibase: &str) -> Self {
+    fn from_multibase(multibase: &str) -> Result<Self, TrustDidWebError> {
         let mut signing_key_buff: [u8; SECRET_KEY_LENGTH + 2] = [0; SECRET_KEY_LENGTH + 2];
-        MultibaseEncoderDecoder::default().decode_onto(multibase, &mut signing_key_buff); // may panic
+        match MultibaseEncoderDecoder::default().decode_onto(multibase, &mut signing_key_buff) {
+            Err(err) => return Err(TrustDidWebError::DeserializationFailed(format!("{}", err))),
+            Ok(_) => {}
+        }
 
         let mut signing_key: [u8; SECRET_KEY_LENGTH] = [0; SECRET_KEY_LENGTH];
         signing_key.copy_from_slice(&signing_key_buff[2..]); // get rid of the multibase header
 
-        Ed25519SigningKey {
+        Ok(Ed25519SigningKey {
             signing_key: SigningKey::from_bytes(&signing_key),
-        }
+        })
     }
 }
 impl Ed25519SigningKey {
@@ -81,7 +90,8 @@ impl Ed25519SigningKey {
         let signature = self.signing_key.sign(message.as_bytes());
         Ed25519Signature { signature }.into()
     }
-    pub fn sign_bytes(&self, message: &[u8]) -> Ed25519Signature { // uniffi-irrelevant
+    pub fn sign_bytes(&self, message: &[u8]) -> Ed25519Signature {
+        // uniffi-irrelevant
         let signature = self.signing_key.sign(message);
         Ed25519Signature { signature }
     }
@@ -117,16 +127,22 @@ impl MultiBaseConverter for Ed25519VerifyingKey {
     /// The resulting 34-byte value MUST then be encoded using the base-58-btc alphabet,
     /// according to Section 2.4 Multibase (https://www.w3.org/TR/controller-document/#multibase-0),
     /// and then prepended with the base-58-btc Multibase header (z).
-    fn from_multibase(multibase: &str) -> Self {
+    fn from_multibase(multibase: &str) -> Result<Self, TrustDidWebError> {
         let mut verifying_key_buff: [u8; PUBLIC_KEY_LENGTH + 2] = [0; PUBLIC_KEY_LENGTH + 2];
-        MultibaseEncoderDecoder::default().decode_onto(multibase, &mut verifying_key_buff);
+        match MultibaseEncoderDecoder::default().decode_onto(multibase, &mut verifying_key_buff) {
+            Err(err) => return Err(TrustDidWebError::DeserializationFailed(format!("{}", err))),
+            _ => {}
+        }
 
         let mut verifying_key: [u8; PUBLIC_KEY_LENGTH] = [0; PUBLIC_KEY_LENGTH];
         verifying_key.copy_from_slice(&verifying_key_buff[2..]); // get rid of the multibase header
 
         match VerifyingKey::from_bytes(&verifying_key) {
-            Ok(verifying_key) => Ed25519VerifyingKey { verifying_key },
-            Err(_) => panic!("{} is an invalid ed25519 verifying key", multibase),
+            Ok(verifying_key) => Ok(Ed25519VerifyingKey { verifying_key }),
+            Err(_) => Err(TrustDidWebError::InvalidDataIntegrityProof(format!(
+                "{} is an invalid ed25519 verifying key",
+                multibase
+            ))),
         }
     }
 }
@@ -158,13 +174,13 @@ impl Ed25519KeyPair {
     /// followed by the 32-byte secret key data. The resulting 34-byte value MUST then be encoded using the base-58-btc alphabet,
     /// according to Section 2.4 Multibase (https://www.w3.org/TR/controller-document/#multibase-0),
     /// and then prepended with the base-58-btc Multibase header (z).
-    pub fn from(signing_key_multibase: &str) -> Self {
-        let signing_key = Ed25519SigningKey::from_multibase(signing_key_multibase);
+    pub fn from(signing_key_multibase: &str) -> Result<Self, TrustDidWebError> {
+        let signing_key = Ed25519SigningKey::from_multibase(signing_key_multibase)?;
         let signing_key_bytes = SigningKey::from_bytes(&signing_key.signing_key.to_bytes());
-        Ed25519KeyPair {
+        Ok(Ed25519KeyPair {
             verifying_key: Ed25519VerifyingKey::new(signing_key_bytes.verifying_key()),
             signing_key,
-        }
+        })
     }
 
     pub fn get_signing_key(&self) -> Arc<Ed25519SigningKey> {

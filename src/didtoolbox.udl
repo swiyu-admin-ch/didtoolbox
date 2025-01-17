@@ -36,12 +36,16 @@ enum TrustDidWebError {
     "MethodNotSupported",
     /// Invalid method-specific identifier.
     "InvalidMethodSpecificId",
-    /// TODO Complete this docstring
+    /// Failed to serialize DID document (to JSON).
     "SerializationFailed",
     /// The supplied did doc is invalid or contains an argument which isn't part of the did specification/recommendation.
     "DeserializationFailed",
     /// Invalid (or not yet supported) operation against DID doc.
-    "InvalidOperation"
+    "InvalidOperation",
+    /// Invalid DID document.
+    "InvalidDidDocument",
+    /// Invalid DID log integration proof.
+    "InvalidDataIntegrityProof"
 };
 
 interface TrustDidWeb {
@@ -53,19 +57,19 @@ interface TrustDidWeb {
 };
 
 interface Ed25519Signature {
-    [Name=from_multibase]
+    [Name=from_multibase, Throws=TrustDidWebError]
     constructor([ByRef] string multibase);
     string to_multibase();
 };
 
 interface Ed25519SigningKey {
-    [Name=from_multibase]
+    [Name=from_multibase, Throws=TrustDidWebError]
     constructor([ByRef] string multibase);
     string to_multibase();
 };
 
 interface Ed25519VerifyingKey {
-    [Name=from_multibase]
+    [Name=from_multibase, Throws=TrustDidWebError]
     constructor([ByRef] string multibase);
     string to_multibase();
 };
@@ -73,7 +77,7 @@ interface Ed25519VerifyingKey {
 interface Ed25519KeyPair {
     [Name=generate]
     constructor();
-    [Name=from]
+    [Name=from, Throws=TrustDidWebError]
     constructor([ByRef] string signing_key_multibase);
     Ed25519Signature sign(string message);
     Ed25519SigningKey get_signing_key();
@@ -81,9 +85,11 @@ interface Ed25519KeyPair {
 };
 
 interface DidDocumentState {
-    [Name=from]
+    [Name=from, Throws=TrustDidWebError]
     constructor(string did_log);
+    [Throws=TrustDidWebError]
     DidDoc validate();
+    [Throws=TrustDidWebError]
     DidDoc validate_with_scid(string? scid);
 };
 
@@ -111,7 +117,7 @@ dictionary VerificationMethod {
 };
 
 interface DidDoc {
-    [Name=from_json]
+    [Name=from_json, Throws=TrustDidWebError]
     constructor([ByRef] string json_content);
     sequence<string> get_context();
     string get_id();
