@@ -48,7 +48,7 @@ impl MultibaseEncoderDecoder {
     ///
     /// If the buffer is not resizeable bytes will be written from the beginning and bytes after
     /// the final encoded byte will not be touched.
-    pub fn decode_onto(&self, multibase: &str, result: &mut [u8]) {
+    pub fn decode_onto(&self, multibase: &str, result: &mut [u8]) -> bs58::decode::Result<usize> {
         if self.algorithm != MultibaseAlgorithm::Base58btc {
             panic!("Unsupported multibase algorithm {:?}", self.algorithm);
         }
@@ -60,13 +60,8 @@ impl MultibaseEncoderDecoder {
             );
         }
         let raw = multibase.chars().skip(1).collect::<String>(); // get rid of the multibase code
-        match base58_decode(raw)
+        base58_decode(raw)
             .with_alphabet(self.alphabet)
             .onto(result) // decode into the given buffer
-        {
-            Ok(_) => (),
-            // e.g. "buffer provided to decode base58 encoded string into was too small"
-            Err(err) => panic!("Invalid multibase content: {err}"),
-        }
     }
 }
