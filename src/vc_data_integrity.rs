@@ -229,13 +229,14 @@ impl DataIntegrityProof {
     /// Delivers first available update key
     pub fn extract_update_key(&self) -> Result<String, TrustDidWebError> {
         if self.verification_method.starts_with("did:key:") {
-            let update_key_split = self.verification_method.split('#').collect::<Vec<&str>>();
+            let hash_separated = self.verification_method.to_owned().replace("did:key:", "");
+            let update_key_split = hash_separated.split('#').collect::<Vec<&str>>();
             if update_key_split.is_empty() {
                 return Err(TrustDidWebError::InvalidDataIntegrityProof(
                     "A proof's verificationMethod must be #-delimited".to_string(),
                 ));
             }
-            Ok(update_key_split[1].to_string())
+            Ok(update_key_split[0].to_string())
         } else {
             Err(TrustDidWebError::InvalidDataIntegrityProof(
                 format!("Unsupported proof's verificationMethod (only 'did:key' is currently supported): {}", self.verification_method)

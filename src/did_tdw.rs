@@ -40,6 +40,8 @@ pub struct DidLogEntry {
     pub did_doc_hash: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proof: Option<Vec<DataIntegrityProof>>,
+    #[serde(skip)]
+    prev_entry: Option<Box<DidLogEntry>>, // Box-ed to prevent "recursive without indirection"
 }
 
 impl DidLogEntry {
@@ -53,6 +55,7 @@ impl DidLogEntry {
         did_doc_json: String,
         did_doc_hash: String,
         proof: DataIntegrityProof,
+        prev_entry: Option<Box<DidLogEntry>>,
     ) -> Self {
         DidLogEntry {
             version_id,
@@ -63,47 +66,9 @@ impl DidLogEntry {
             did_doc_json,
             did_doc_hash,
             proof: Some(vec![proof]),
+            prev_entry,
         }
     }
-
-    /*
-    /// Creation of new log entry (with integrity proof)
-    pub fn of_with_proof(
-        version_id: String,
-        parameters: DidMethodParameters,
-        did_doc: DidDoc,
-        proof: DataIntegrityProof,
-    ) -> Self {
-        let did_doc_json = serde_json::to_string(&did_doc.normalize()).unwrap();
-        let did_doc_hash = utils::hash_canonical(&serde_json::to_value(&did_doc_json).unwrap());
-        DidLogEntry {
-            version_id,
-            version_index: Option::None,
-            version_time: Utc::now(),
-            parameters,
-            did_doc,
-            did_doc_json,
-            did_doc_hash,
-            proof: Some(vec![proof]),
-        }
-    }
-
-    /// Creation of new log entry (with known version_id and w/out proof)
-    pub fn of(version_id: String, parameters: DidMethodParameters, did_doc: DidDoc) -> Self {
-        let did_doc_json = serde_json::to_string(&did_doc.normalize()).unwrap();
-        let did_doc_hash = utils::hash_canonical(&serde_json::to_value(&did_doc_json).unwrap());
-        DidLogEntry {
-            version_id,
-            version_index: Option::None,
-            version_time: Utc::now(),
-            parameters,
-            did_doc,
-            did_doc_json,
-            did_doc_hash,
-            proof: None,
-        }
-    }
-     */
 
     /// Check whether the versionId of this log entry is based on the previous versionId
     pub fn verify_version_id_integrity(
@@ -119,6 +84,7 @@ impl DidLogEntry {
             did_doc_json: self.did_doc_json.clone(),
             did_doc_hash: self.did_doc_hash.clone(),
             proof: None,
+            prev_entry: None,
         };
         let version_id = entry_without_proof.build_version_id().map_err(|err| {
             TrustDidWebError::InvalidDataIntegrityProof(format!(
@@ -137,9 +103,6 @@ impl DidLogEntry {
 
     /// Check whether the integrity proof matches the content of the did document of this log entry
     pub fn verify_data_integrity_proof(&self) -> Result<(), TrustDidWebError> {
-        // Verify data integrity proof
-        //let verifying_key = self.get_data_integrity_verifying_key(); // may panic
-
         match &self.proof {
             None => {
                 return Err(TrustDidWebError::InvalidDataIntegrityProof(
@@ -153,22 +116,14 @@ impl DidLogEntry {
                     ));
                 }
 
+                let prev = match self.prev_entry.as_ref() {
+                    None => self,
+                    //Some(_) => &prev_entry.clone().unwrap()
+                    Some(e) => e,
+                };
                 for proof in v {
                     let verifying_key =
-                        self.is_key_authorized_for_update(proof.extract_update_key()?)?;
-
-                    /*
-                    // Check if verifying key is actually a controller and therefore allowed to update the doc => valid key to create the proof
-                    let controller_keys = self.get_controller_verifying_key();
-                    if !controller_keys
-                        .values()
-                        .any(|(_, key)| key.to_multibase() == verifying_key.to_multibase())
-                    {
-                        panic!(
-                            "Invalid key pair. The provided key pair is not the one referenced in the did doc"
-                        )
-                    }
-                     */
+                        prev.is_key_authorized_for_update(proof.extract_update_key()?)?;
 
                     if !matches!(proof.crypto_suite_type, Some(CryptoSuiteType::EddsaJcs2022)) {
                         return Err(TrustDidWebError::InvalidDataIntegrityProof(format!(
@@ -200,55 +155,6 @@ impl DidLogEntry {
         Ok(format!("{}-{}", self.version_index.unwrap(), entry_hash))
     }
 
-    /*
-    fn get_controller_verifying_key(&self) -> HashMap<String, (String, Ed25519VerifyingKey)> {
-        self.did_doc
-            .verification_method
-            .iter()
-            /*.filter(|entry| {
-                self.did_doc.controller.iter().any(|controller| {
-                    entry.id.starts_with(controller)
-                        && entry.verification_type == VerificationType::Ed25519VerificationKey2020
-                })
-            })*/
-            .map(|entry| {
-                (
-                    entry
-                        .id
-                        .split("#")
-                        .collect::<Vec<&str>>()
-                        .first()
-                        .unwrap()
-                        .to_string(),
-                    (
-                        entry.id.clone(),
-                        Ed25519VerifyingKey::from_multibase(
-                            entry.public_key_multibase.as_ref().unwrap(),
-                        ),
-                    ),
-                )
-            })
-            .collect::<HashMap<String, (String, Ed25519VerifyingKey)>>()
-    }
-     */
-
-    /*
-    fn check_if_verification_method_match_public_key(
-        &self,
-        did_tdw: &str,
-        verifying_key: &Ed25519VerifyingKey,
-    ) {
-        match self.get_controller_verifying_key().get(did_tdw) {
-            Some(public_key) => {
-                if public_key.1.to_multibase() != verifying_key.to_multibase() {
-                    panic!("Invalid key pair. The provided key pair is not the one referenced in the did doc")
-                }
-            }
-            None => panic!("Invalid did_tdw. The did_tdw is not a controller of the did doc"),
-        }
-    }
-     */
-
     fn is_key_authorized_for_update(
         &self,
         update_key: String,
@@ -273,43 +179,19 @@ impl DidLogEntry {
 
                 Ok(Ed25519VerifyingKey::from_multibase(update_key.as_str())?)
             }
-            None => Ok(Ed25519VerifyingKey::from_multibase(update_key.as_str())?),
+            None => {
+                let prev_entry = match self.prev_entry.to_owned() {
+                    Some(e) => e,
+                    _ => {
+                        return Err(TrustDidWebError::InvalidDataIntegrityProof(
+                            "No update keys detected".to_string(),
+                        ));
+                    }
+                };
+                prev_entry.is_key_authorized_for_update(update_key) // recursive call
+            }
         }
     }
-
-    /*
-    /// Get the verification method id (did_tdw#key-1) and verifying key with which the data integrity proof was created
-    pub fn get_data_integrity_verifying_key(&self) -> Ed25519VerifyingKey {
-        let proof_verification_method = self.proof.as_ref().unwrap().verification_method.clone();
-        let verification_method = self
-            .did_doc
-            .verification_method
-            .iter()
-            .filter(|entry| entry.id == proof_verification_method)
-            .collect::<Vec<&VerificationMethod>>()
-            .first()
-            .unwrap()
-            .to_owned();
-
-        // Make sure the verification method is part of the authentication section
-        if !self
-            .did_doc
-            .authentication
-            .iter()
-            .any(|authentication_method| authentication_method.id == verification_method.id)
-        {
-            panic!("Invalid integrity proof for log with id {}. The verification method used for the integrity proof is not part of the authentication section", self.version_index.unwrap())
-        }
-
-        if verification_method.verification_type != VerificationType::Ed25519VerificationKey2020 {
-            panic!("Invalid verification method. Only eddsa verification keys are supported")
-        }
-
-        Ed25519VerifyingKey::from_multibase(
-            verification_method.public_key_multibase.as_ref().unwrap(),
-        )
-    }
-     */
 
     fn to_log_entry_line(&self) -> JsonValue {
         let did_doc_json_value: JsonValue = serde_json::from_str(&self.did_doc_json).unwrap();
@@ -450,26 +332,26 @@ impl DidMethodParameters {
         }
     }
 
-    pub fn deactivate() -> Self {
-        DidMethodParameters {
-            method: Option::None,
-            scid: Option::None,
-            hash: Option::None,
-            // Since v0.3 (https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
-            //            Removes the cryptosuite parameter, moving it to implied based on the method parameter.
-            /*
-            cryptosuite: Option::None,
-             */
-            prerotation: Option::None,
-            update_keys: Option::None,
-            next_keys: Option::None,
-            witnesses: Option::None,
-            witness_threshold: Option::None,
-            moved: Option::None,
-            deactivated: Option::Some(true),
-            ttl: Option::None,
-            portable: Option::None,
-        }
+    fn merge_from(&mut self, other: &DidMethodParameters) {
+        let _other = other.to_owned();
+        self.method = _other.method.or(self.method.to_owned());
+        self.scid = _other.scid.or(self.scid.to_owned());
+        self.hash = _other.hash.or(self.hash.to_owned());
+        self.prerotation = _other.prerotation.or(self.prerotation.to_owned());
+        self.update_keys = _other.update_keys.or(self.update_keys.to_owned());
+        self.next_keys = _other.next_keys.or(self.next_keys.to_owned());
+        self.witnesses = _other.witnesses.or(self.witnesses.to_owned());
+        self.witness_threshold = _other.witness_threshold.or(self.witness_threshold.to_owned());
+        self.moved = _other.moved.or(self.moved.to_owned());
+        self.deactivated = _other.deactivated.or(self.deactivated.to_owned());
+        self.ttl = _other.ttl.or(self.ttl.to_owned());
+        self.portable = _other.portable.or(self.portable.to_owned());
+    }
+
+    /// As specified by https://identity.foundation/didwebvh/v0.3/#deactivate-revoke
+    fn deactivate(&mut self) {
+        self.update_keys = Some(vec![]);
+        self.deactivated = Some(true);
     }
 
     pub fn from_json(json_content: &str) -> Result<Self, TrustDidWebError> {
@@ -515,10 +397,18 @@ impl DidDocumentState {
         let mut did_doc_json: String = "".to_string();
         let mut did_doc_hash: String = "".to_string();
         let mut did_doc_value: JsonValue = Null;
+        let mut prev_entry: Option<Box<DidLogEntry>> = None;
+        let mut is_deactivated: bool = false;
         Ok(DidDocumentState {
             did_log_entries: unescaped.split("\n")
                 .filter(|line| !line.is_empty())
                 .map(|line| {
+                    if is_deactivated {
+                        return Err(TrustDidWebError::InvalidDidDocument(
+                            "Already deactivated".to_string(),
+                        ));
+                    }
+
                     let entry: JsonValue = match serde_json::from_str(line) {
                         Ok(entry) => entry,
                         Err(err) => return Err(TrustDidWebError::DeserializationFailed(
@@ -553,9 +443,9 @@ impl DidDocumentState {
                         ))
                     };
 
+                    let mut new_params: Option<DidMethodParameters> = None;
                     current_params = match entry[2] {
                         JsonObject(ref obj) => {
-                            let mut new_params: Option<DidMethodParameters> = None;
                             if !obj.is_empty() {
                                 new_params = Some(DidMethodParameters::from_json(&entry[2].to_string())?);
                             }
@@ -576,27 +466,13 @@ impl DidDocumentState {
                                         "Missing entry 'method' parameter".to_string(),
                                     ))
                                 }
-                                new_params // from the initial log entry
+                                new_params.to_owned() // from the initial log entry
                             } else if current_params.is_some() && new_params.is_none() {
-                                //current_params.to_owned()
                                 Some(DidMethodParameters::empty())
                             } else { // i.e. current_params.is_some() && p.is_some()
-                                //let params = current_params.clone().unwrap();
-                                let new_params = new_params.unwrap();
-                                Some(DidMethodParameters { // kind of merge
-                                    method: None,
-                                    scid: None,
-                                    hash: None,
-                                    prerotation: new_params.prerotation, // .or(params.prerotation),
-                                    update_keys: new_params.update_keys, // .or(params.update_keys),
-                                    next_keys: new_params.next_keys, // .or(params.next_keys),
-                                    witnesses: new_params.witnesses, // .or(params.witnesses),
-                                    witness_threshold: new_params.witness_threshold, // .or(params.witness_threshold),
-                                    moved: new_params.moved,
-                                    deactivated: new_params.deactivated, // .or(params.deactivated),
-                                    ttl: new_params.ttl,
-                                    portable: new_params.portable, // .or(params.portable),
-                                })
+                                let mut _current_params = current_params.to_owned().unwrap();
+                                _current_params.merge_from(&new_params.to_owned().unwrap());
+                                Some(_current_params)
                             }
                         }
                         _ => {
@@ -609,24 +485,47 @@ impl DidDocumentState {
                         }
                     };
 
+                    is_deactivated = current_params.to_owned().is_some_and(|p| p.deactivated.is_some_and(|d| d));
+                    if is_deactivated {
+                        // https://identity.foundation/didwebvh/v0.3/#deactivate-revoke:
+                        // To deactivate the DID, the DID Controller SHOULD add to the DID log entry parameters the item "deactivated": true.
+                        // A DID MAY update the DIDDoc further to indicate the deactivation of the DID,
+                        // such as including an empty updateKeys list ("updateKeys": []) in the parameters,
+                        // preventing further versions of the DID.
+                        if current_params.is_some() {
+                            let mut _current_params = current_params.to_owned().unwrap();
+                            _current_params.deactivate();
+                            current_params = Some(_current_params);
+                        }
+                    }
+
                     current_did_doc = match entry[3] {
                         JsonObject(ref obj) => {
-                            did_doc_value = obj["value"].clone();
-                            if !did_doc_value.is_null() {
-                                did_doc_json = did_doc_value.to_string();
-                                did_doc_hash = JcsSha256Hasher::default().encode_hex(&did_doc_value).unwrap();
-                                match serde_json::from_str::<DidDoc>(&did_doc_json) {
-                                    Ok(did_doc) => Some(did_doc),
-                                    Err(_) => {
-                                        match serde_json::from_str::<DidDocNormalized>(&did_doc_json) {
-                                            Ok(did_doc_alt) => {
-                                                let doc = did_doc_alt.to_did_doc()?;
-                                                Some(doc)
+                            if obj.contains_key("value") {
+                                did_doc_value = obj["value"].to_owned();
+                                if !did_doc_value.is_null() {
+                                    did_doc_json = did_doc_value.to_string();
+                                    did_doc_hash = JcsSha256Hasher::default().encode_hex(&did_doc_value).unwrap();
+                                    match serde_json::from_str::<DidDoc>(&did_doc_json) {
+                                        Ok(did_doc) => Some(did_doc),
+                                        Err(_) => {
+                                            match serde_json::from_str::<DidDocNormalized>(&did_doc_json) {
+                                                Ok(did_doc_alt) => {
+                                                    let doc = did_doc_alt.to_did_doc()?;
+                                                    Some(doc)
+                                                }
+                                                Err(err) => return Err(TrustDidWebError::DeserializationFailed(
+                                                    format!("Missing DID document: {}", err)
+                                                ))
                                             }
-                                            Err(err) => return Err(TrustDidWebError::DeserializationFailed(
-                                                format!("Missing DID document: {}", err)
-                                            ))
                                         }
+                                    }
+                                } else {
+                                    match &current_did_doc {
+                                        Some(did_doc) => Some(did_doc.to_owned()),
+                                        None => return Err(TrustDidWebError::DeserializationFailed(
+                                            "Missing DID Document.".to_string(),
+                                        ))
                                     }
                                 }
                             } else {
@@ -634,7 +533,7 @@ impl DidDocumentState {
                                 match &current_did_doc {
                                     Some(did_doc) => Some(did_doc.to_owned()),
                                     None => return Err(TrustDidWebError::DeserializationFailed(
-                                        "Missing DID Document.".to_string(),
+                                        "Missing DID Document. JSON patch is not supported.".to_string(),
                                     ))
                                 }
                             }
@@ -663,17 +562,20 @@ impl DidDocumentState {
                         ))
                     };
 
-                    // TODO replace this with toString call of log entry
-                    Ok(DidLogEntry::new(
+                    let current_entry = DidLogEntry::new(
                         version_id.clone(),
                         version_index_as_str.parse::<usize>().unwrap(),
                         DateTime::parse_from_rfc3339(entry[1].as_str().unwrap()).unwrap().to_utc(),
-                        current_params.clone().unwrap(),
+                        new_params.unwrap(),
                         current_did_doc.clone().unwrap(),
                         did_doc_json.clone(),
                         did_doc_hash.clone(),
                         proof,
-                    ))
+                        prev_entry.clone(),
+                    );
+                    prev_entry = Some(Box::from(current_entry.clone()));
+
+                    Ok(current_entry)
                 }).collect::<Result<Vec<DidLogEntry>, TrustDidWebError>>()?
         })
     }
@@ -761,105 +663,6 @@ impl DidDocumentState {
     pub fn validate(&self) -> Result<Arc<DidDoc>, TrustDidWebError> {
         self.validate_with_scid(None)
     }
-
-    /*
-    /// Add a new entry to the did log file
-    /// https://bcgov.github.io/trustdidweb/#create-register
-    pub fn update(&mut self, log_entry: DidLogEntry, did_tdw: &str, key_pair: &Ed25519KeyPair) {
-        // Identify version id
-        let mut index: usize = 1;
-        let mut previous_version_id = log_entry.version_id.clone();
-        let mut verification_method = String::new();
-
-        // Make sure only activated did docs can be updated
-
-        if self.did_log_entries.is_empty() {
-            // Genesis entry (Create)
-            // Check if version hash is present
-            if log_entry.version_id.is_empty() {
-                panic!("For the initial log entry the SCID/previous hash has to be provided")
-            }
-            log_entry.check_if_verification_method_match_public_key(
-                did_tdw,
-                key_pair.get_verifying_key().as_ref(),
-            ); // may panic
-            verification_method = log_entry
-                .get_controller_verifying_key()
-                .get(did_tdw)
-                .unwrap()
-                .0
-                .clone();
-        } else {
-            // Subsequent entry (Update)
-            let previous_entry = self.did_log_entries.last().unwrap();
-
-            // Make sure portability cant be set afterward to true
-            if let Some(portable) = log_entry.parameters.portable {
-                if portable {
-                    panic!("Portability can only be set in genesis entry to true")
-                }
-            }
-
-            // Make sure only activated did docs can be updated
-            if let Some(true) = previous_entry.did_doc.deactivated {
-                panic!("Invalid did doc. The did doc is already deactivated. For simplicity reasons we don't allow updates of dids")
-            }
-
-            // Get new version index
-            index = previous_entry.version_index.unwrap() + 1;
-            // Get last version hash
-            previous_version_id = previous_entry.version_id.clone();
-            previous_entry.check_if_verification_method_match_public_key(
-                did_tdw,
-                key_pair.get_verifying_key().as_ref(),
-            ); // may panic
-            verification_method = log_entry
-                .get_controller_verifying_key()
-                .get(did_tdw)
-                .unwrap()
-                .0
-                .clone();
-        }
-
-        // Generate new hash and use it as versionId and integrity challenge
-        let doc_without_version_id = DidLogEntry {
-            version_index: Some(index),
-            version_id: previous_version_id,
-            did_doc_json: log_entry.did_doc_json.clone(),
-            did_doc_hash: log_entry.did_doc_hash.clone(),
-            ..log_entry
-        };
-        let integrity_challenge = doc_without_version_id.build_version_id();
-        let doc_without_proof = DidLogEntry {
-            version_id: integrity_challenge.clone(),
-            ..doc_without_version_id
-        };
-
-        // Generate data integrity proof for new entry
-        let suite_options = CryptoSuiteOptions::new(
-            CryptoSuiteType::EddsaJcs2022,
-            verification_method,
-            integrity_challenge,
-        );
-        let signing_key = key_pair.get_signing_key().to_multibase();
-        let eddsa_suite = EddsaCryptosuite {
-            signing_key: Some(Ed25519SigningKey::from_multibase(&signing_key)),
-            verifying_key: None,
-        };
-        let did_doc_ = match serde_json::to_string(&doc_without_proof.did_doc) {
-            Ok(doc) => doc,
-            Err(_) => panic!("Invalid did doc"),
-        };
-        let did_doc_value = serde_json::from_str(&did_doc_).unwrap();
-        let secured_document = eddsa_suite.add_proof(&did_doc_value, &suite_options);
-        let proof_value_string = json!([secured_document["proof"]]);
-        let doc = DidLogEntry {
-            proof: Some(vec![DataIntegrityProof::from(serde_json::to_string(&proof_value_string).unwrap())]),
-            ..doc_without_proof
-        };
-        self.did_log_entries.push(doc);
-    }
-     */
 }
 
 impl std::fmt::Display for DidDocumentState {

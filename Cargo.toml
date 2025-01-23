@@ -18,7 +18,7 @@ include = [
 [dependencies]
 uniffi = { version = "0.28.3", features = ["cli"] }
 serde = { version = "1.0.217", features = ["derive"] }
-serde_json = { version = "1.0.135", features = ["preserve_order"] }
+serde_json = { version = "1.0.137", features = ["preserve_order"] }
 serde_json_canonicalizer = "0.3.0"
 chrono = { version = "0.4.39", features = ["serde"] }
 ed25519-dalek = { version = "2.1.1", features = ["rand_core"] }

@@ -272,9 +272,7 @@ mod test {
             )?),
         };
 
-        let secured_document = suite.add_proof(&credential_without_proof, &options);
-        assert!(secured_document.is_ok());
-        let secured_document = secured_document.unwrap();
+        let secured_document = suite.add_proof(&credential_without_proof, &options)?;
 
         assert!(
             !secured_document.is_null(),
@@ -288,9 +286,7 @@ mod test {
         // https://www.w3.org/TR/vc-di-eddsa/#example-signature-of-combined-hashes-base58-btc-1
         assert!(proof_value.to_string().contains("z2HnFSSPPBzR36zdDgK8PbEHeXbR56YF24jwMpt3R1eHXQzJDMWS93FCzpvJpwTWd3GAVFuUfjoJdcnTMuVor51aX"));
 
-        let doc_hash = JcsSha256Hasher::default()
-            .encode_hex(&credential_without_proof)
-            .unwrap();
+        let doc_hash = JcsSha256Hasher::default().encode_hex(&credential_without_proof)?;
         // From https://www.w3.org/TR/vc-di-eddsa/#example-hash-of-canonical-credential-without-proof-hex-0
         assert_eq!(
             "59b7cb6251b8991add1ce0bc83107e3db9dbbab5bd2c28f687db1a03abc92f19",
@@ -316,8 +312,16 @@ mod test {
         "did:tdw:Qma6mc1qZw3NqxwX6SB5GPQYzP4pGN2nXD15Jwi4bcDBKu:domain.example"
     )]*/
     #[case(
-        "test_data/generated_by_didtoolbox_java/tdw-js.jsonl",
-        "did:tdw:Qmb4sce9qf13cwcosaDfRt2NmWpUfqHAdpVfRUCN8gtB8G:example.com"
+        "test_data/generated_by_tdw_js/single_update_key.jsonl",
+        "did:tdw:QmXjp5qhSEvm8oXip43cDX62hZhHZdAMYv7Magy1tkffSz:example.com"
+    )]
+    #[case(
+        "test_data/generated_by_tdw_js/unique_update_keys.jsonl",
+        "did:tdw:QmXjp5qhSEvm8oXip43cDX62hZhHZdAMYv7Magy1tkffSz:example.com"
+    )]
+    #[case(
+        "test_data/generated_by_tdw_js/alternate_update_keys.jsonl",
+        "did:tdw:QmdSU7F2rF8r4m6GZK7Evi2tthfDDxhw3NppU8pJMbd2hB:example.com"
     )]
     #[case(
         "test_data/generated_by_didtoolbox_java/did_1.jsonl",
@@ -335,13 +339,11 @@ mod test {
         #[case] did_log_raw_filepath: String,
         #[case] did_url: String,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let did_log_raw = fs::read_to_string(Path::new(&did_log_raw_filepath));
-        assert!(did_log_raw.is_ok());
-        let did_log_raw = did_log_raw.unwrap();
+        let did_log_raw = fs::read_to_string(Path::new(&did_log_raw_filepath))?;
 
         // Read the newly did doc
         let tdw_v1 = TrustDidWeb::read(did_url.clone(), did_log_raw, Some(false))?;
-        let did_doc_v1: JsonValue = serde_json::from_str(&tdw_v1.get_did_doc()).unwrap();
+        let did_doc_v1: JsonValue = serde_json::from_str(&tdw_v1.get_did_doc())?;
         let did_doc_obj_v1 = DidDoc::from_json(&tdw_v1.get_did_doc())?;
 
         assert!(!did_doc_v1["@context"].to_string().is_empty());
@@ -363,28 +365,57 @@ mod test {
         Ok(())
     }
 
-    /* comment out to be able to debug
     #[rstest]
-    fn test_read_did_tdw_debug() {
-        let did_log_raw_filepath = "test_data/generated_by_didtoolbox_java/did_1.jsonl";
-        let did_url: String = String::from("did:tdw:QmPJ85fz4FMocjsm6qqHkN2DqJLYJLQwvXAcNDFemM1Jgg:127.0.0.1%3A54858");
+    #[case(
+        "test_data/generated_by_tdw_js/unhappy_path/not_authorized.jsonl",
+        "did:tdw:QmXjp5qhSEvm8oXip43cDX62hZhHZdAMYv7Magy1tkffSz:example.com"
+    )]
+    fn test_read_did_tdw_unauthorized_key(
+        #[case] did_log_raw_filepath: String,
+        #[case] did_url: String,
+    ) {
+        //let did_log_raw_filepath = "test_data/generated_by_tdw_js/unhappy_path/not_authorized.jsonl";
+        //let did_url: String = String::from("did:tdw:QmXjp5qhSEvm8oXip43cDX62hZhHZdAMYv7Magy1tkffSz:example.com");
 
-        let did_log_raw_filepath = "test_data/generated_by_didtoolbox_java/tdw-js.jsonl";
-        let did_url: String = String::from("did:tdw:Qmb4sce9qf13cwcosaDfRt2NmWpUfqHAdpVfRUCN8gtB8G:example.com");
+        let did_log_raw = fs::read_to_string(Path::new(&did_log_raw_filepath)).unwrap();
 
-        let did_log_raw = fs::read_to_string(Path::new(&did_log_raw_filepath));
-        assert!(did_log_raw.is_ok());
-        let did_log_raw = did_log_raw.unwrap();
+        // CAUTION No ? operator required here as we want to inspect the expected error
+        let tdw_v1 = TrustDidWeb::read(did_url.clone(), did_log_raw, Some(false));
+
+        assert!(tdw_v1.is_err());
+        let err = tdw_v1.err();
+        assert!(err.is_some());
+        let err = err.unwrap();
+        assert_eq!(err.kind(), TrustDidWebErrorKind::InvalidIntegrityProof);
+        // e.g. "invalid DID log integration proof: Key extracted from proof is not authorized for update: z6Mkwf4PgXLq8sRfucTggtZXmigKZP7gQhFamk3XHGV54QvF"
+        assert!(err
+            .to_string()
+            .contains("Key extracted from proof is not authorized for update"));
+    }
+
+    #[rstest]
+    #[case(
+        "test_data/generated_by_tdw_js/deactivated.jsonl",
+        "did:tdw:QmdSU7F2rF8r4m6GZK7Evi2tthfDDxhw3NppU8pJMbd2hB:example.com"
+    )]
+    fn test_read_did_tdw_deactivated(
+        #[case] did_log_raw_filepath: String,
+        #[case] did_url: String,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        //let did_log_raw_filepath = "test_data/generated_by_tdw_js/deactivated.jsonl";
+        //let did_url: String = String::from("did:tdw:QmdSU7F2rF8r4m6GZK7Evi2tthfDDxhw3NppU8pJMbd2hB:example.com");
+
+        let did_log_raw = fs::read_to_string(Path::new(&did_log_raw_filepath))?;
 
         // Read the newly did doc
-        let tdw_v1 = TrustDidWeb::read(did_url.clone(), did_log_raw, Some(false)).unwrap();
-        let did_doc_json_v1: JsonValue = serde_json::from_str(&tdw_v1.get_did_doc()).unwrap();
-        let did_doc_obj_v1 = DidDoc::from_json(&tdw_v1.get_did_doc()); // may panic
+        let tdw_v1 = TrustDidWeb::read(did_url.clone(), did_log_raw, Some(false))?;
+        let did_doc_json_v1: JsonValue = serde_json::from_str(&tdw_v1.get_did_doc())?;
+        let did_doc_obj_v1 = DidDoc::from_json(&tdw_v1.get_did_doc())?;
 
         assert!(!did_doc_json_v1["@context"].to_string().is_empty());
         match did_doc_json_v1["id"] {
             JsonValue::String(ref doc_v1) => {
-                assert!(doc_v1.eq(did_url.as_str()))
+                assert!(doc_v1.eq(did_url.as_str()), "DID mismatch")
             }
             _ => panic!("Invalid did doc"),
         }
@@ -393,9 +424,37 @@ mod test {
         assert!(!did_doc_json_v1["controller"].to_string().is_empty());
 
         assert_eq!(did_doc_obj_v1.id, tdw_v1.get_did());
-        assert!(!did_doc_obj_v1.verification_method.is_empty());
-        assert!(!did_doc_obj_v1.authentication.is_empty());
+        // CAUTION after deactivation these should be empty
+        assert!(did_doc_obj_v1.verification_method.is_empty());
+        assert!(did_doc_obj_v1.authentication.is_empty());
         //assert!(!did_doc_v1_obj.controller.is_empty());
+
+        Ok(())
     }
-     */
+
+    #[rstest]
+    #[case(
+        "test_data/generated_by_tdw_js/already_deactivated.jsonl",
+        "did:tdw:QmdSU7F2rF8r4m6GZK7Evi2tthfDDxhw3NppU8pJMbd2hB:example.com"
+    )]
+    fn test_read_did_tdw_already_deactivated(
+        #[case] did_log_raw_filepath: String,
+        #[case] did_url: String,
+    ) {
+        //let did_log_raw_filepath = "test_data/generated_by_tdw_js/already_deactivated.jsonl";
+        //let did_url: String = String::from("did:tdw:QmdSU7F2rF8r4m6GZK7Evi2tthfDDxhw3NppU8pJMbd2hB:example.com");
+
+        let did_log_raw = fs::read_to_string(Path::new(&did_log_raw_filepath)).unwrap();
+
+        // CAUTION No ? operator required here as we want to inspect the expected error
+        let tdw_v1 = TrustDidWeb::read(did_url.clone(), did_log_raw, Some(false));
+
+        assert!(tdw_v1.is_err());
+        let err = tdw_v1.err();
+        assert!(err.is_some());
+        let err = err.unwrap();
+        assert_eq!(err.kind(), TrustDidWebErrorKind::InvalidDidDocument);
+        // e.g. "invalid DID log integration proof: Key extracted from proof is not authorized for update: z6Mkwf4PgXLq8sRfucTggtZXmigKZP7gQhFamk3XHGV54QvF"
+        assert!(err.to_string().contains("Already deactivated"));
+    }
 }
