@@ -10,7 +10,7 @@ as part of the electronic identity (e-ID) project.
 
 *Users must not use this library to create new DIDs, as they won't be compatible.*
 
-This project has been superseded by [DID Toolbox](https://github.com/e-id-admin/didtoolbox-java). Parts of this library are still required by [DID Resolver](https://github.com/e-id-admin/didresolver). This library will vanish in the near future, and the required parts will be relocated to Resolver.
+This project has been superseded by [DID Toolbox](https://github.com/swiyu-admin-ch/didtoolbox-java). Parts of this library are still required by [DID Resolver](https://github.com/swiyu-admin-ch/didresolver). This library will vanish in the near future, and the required parts will be relocated to Resolver.
 
 ## Using the library
 
@@ -22,7 +22,7 @@ The library can be used directly in rust by adding the following dependency to y
 
 ````toml
 [dependencies]
-didtoolbox = { git = "https://github.com/e-id-admin/didtoolbox", branch = "main" }
+didtoolbox = { git = "https://github.com/swiyu-admin-ch/didtoolbox", branch = "main" }
 
 # Optional: For manipulating the json content in the example
 serde_json = "1.0.133"

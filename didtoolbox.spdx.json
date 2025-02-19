@@ -358,7 +358,7 @@
       "SPDXID": "SPDXRef-Package-didtoolbox-1.0.1",
       "description": "Toolbox containing did:tdw",
       "downloadLocation": "NONE",
-      "homepage": "https://github.com/e-id-admin/didtoolbox",
+      "homepage": "https://github.com/swiyu-admin-ch/didtoolbox",
       "licenseConcluded": "MIT",
       "licenseDeclared": "MIT",
       "name": "didtoolbox",

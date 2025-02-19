@@ -5,7 +5,7 @@ edition = "2021"
 license = "MIT"
 description = "Toolbox containing did:tdw"
 authors = ["Frithjof Hoppe", "Vladica Stojic"]
-homepage = "https://github.com/e-id-admin/didtoolbox"
+homepage = "https://github.com/swiyu-admin-ch/didtoolbox"
 readme = "README.md"
 include = [
     "Cargo.toml",
