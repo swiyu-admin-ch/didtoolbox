@@ -2,7 +2,7 @@
 
 //! This project implements the following things:
 //!
-//! - General util structs reused by other libraries of e-id-admin
+//! - General util structs reused by other libraries of swiyu-admin-ch
 //! - Trust did web according to the specification [trust-did-web](https://bcgov.github.io/trustdidweb/)
 //!
 
