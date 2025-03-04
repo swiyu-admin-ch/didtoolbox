@@ -697,11 +697,22 @@ impl TrustDidWebId {
     /// Yet another UniFFI-compliant method.
     ///
     /// Otherwise, the idiomatic counterpart (try_from(value: (String, Option<bool>)) -> Result<Self, Self::Error>) may be used as well.
+    #[deprecated(since = "1.0.3", note = "please use the `parse_did` method instead")]
     pub fn parse_did_tdw(
         did_tdw: String,
         allow_http: Option<bool>,
     ) -> Result<Self, TrustDidWebIdResolutionError> {
         match Self::try_from((did_tdw, allow_http)) {
+            Ok(parsed) => Ok(parsed),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Yet another UniFFI-compliant method.
+    ///
+    /// Otherwise, the idiomatic counterpart (try_from(did_tdw: String) -> Result<Self, Self::Error>) may be used as well.
+    pub fn parse_did(did_tdw: String) -> Result<Self, TrustDidWebIdResolutionError> {
+        match Self::try_from(did_tdw) {
             Ok(parsed) => Ok(parsed),
             Err(e) => Err(e),
         }
@@ -716,7 +727,69 @@ impl TrustDidWebId {
     }
 }
 
-/// Implementation for a tuple denoting did_twd and allow_http.
+/// Implementation for a string denoting did_tdw
+impl TryFrom<String> for TrustDidWebId {
+    type Error = TrustDidWebIdResolutionError;
+
+    fn try_from(did_tdw: String) -> Result<Self, Self::Error> {
+        let split: Vec<&str> = did_tdw.splitn(3, ":").collect();
+        if split.len() < 3 || split[2].is_empty() {
+            return Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(
+                did_tdw,
+            ));
+        };
+
+        let method_name = format!("{}:{}", split[0], split[1]);
+        if method_name != format!("did:{}", Self::DID_METHOD_NAME) {
+            return Err(TrustDidWebIdResolutionError::MethodNotSupported(
+                method_name,
+            ));
+        };
+        let scid = split[2];
+        /* TODO Ensure the SCID is encoded properly
+        if !scid.starts_with("Q") {
+            return Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(
+                String::from("Invalid multibase format for SCID. base58btc identifier expected"),
+            ));
+        }
+         */
+        let mut decoded_url = String::from("");
+        match scid.split_once(":") {
+            Some((scid, did_tdw_reduced)) => {
+                url_escape::decode_to_string(did_tdw_reduced.replace(":", "/"), &mut decoded_url);
+                let url = match String::from_utf8(decoded_url.into_bytes()) {
+                    Ok(url) => {
+                        format!("https://{}", url)
+                    }
+                    Err(_) => {
+                        return Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(
+                            did_tdw_reduced.to_string(),
+                        ))
+                    }
+                };
+                if HAS_PATH_REGEX.captures(url.as_str()).is_some()
+                    || HAS_PORT_REGEX.captures(url.as_str()).is_some()
+                {
+                    Ok(Self {
+                        scid: scid.to_string(),
+                        url: format!("{}/did.jsonl", url),
+                    })
+                } else {
+                    Ok(Self {
+                        scid: scid.to_string(),
+                        url: format!("{}/.well-known/did.jsonl", url),
+                    })
+                }
+            }
+            None => Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(
+                did_tdw,
+            )),
+        }
+    }
+}
+
+/// Implementation for a tuple denoting did_tdw and allow_http.
+#[diagnostic::do_not_recommend]
 impl TryFrom<(String, Option<bool>)> for TrustDidWebId {
     type Error = TrustDidWebIdResolutionError;
 
@@ -816,6 +889,7 @@ impl TrustDidWeb {
         self.did_doc.clone()
     }
 
+    #[deprecated(since = "1.0.3", note = "please use the `read_log` method instead")]
     pub fn read(
         did_tdw: String,
         did_log: String,
@@ -823,6 +897,24 @@ impl TrustDidWeb {
     ) -> Result<Self, TrustDidWebError> {
         let did_doc_state = DidDocumentState::from(did_log)?;
         let did = TrustDidWebId::parse_did_tdw(did_tdw.to_owned(), allow_http)
+            .map_err(|err| TrustDidWebError::InvalidMethodSpecificId(format!("{}", err)))?;
+        let scid = did.get_scid();
+        let did_doc_arc = did_doc_state.validate_with_scid(Some(scid.to_owned()))?;
+        let did_doc = did_doc_arc.as_ref().clone();
+        let did_doc_str = match serde_json::to_string(&did_doc) {
+            Ok(v) => v,
+            Err(e) => return Err(TrustDidWebError::SerializationFailed(e.to_string())),
+        };
+        Ok(Self {
+            did: did_doc.id,
+            did_log: did_doc_state.to_string(), // DidDocumentState implements std::fmt::Display trait
+            did_doc: did_doc_str,
+        })
+    }
+
+    pub fn read_log(did_tdw: String, did_log: String) -> Result<Self, TrustDidWebError> {
+        let did_doc_state = DidDocumentState::from(did_log)?;
+        let did = TrustDidWebId::parse_did(did_tdw.to_owned())
             .map_err(|err| TrustDidWebError::InvalidMethodSpecificId(format!("{}", err)))?;
         let scid = did.get_scid();
         let did_doc_arc = did_doc_state.validate_with_scid(Some(scid.to_owned()))?;

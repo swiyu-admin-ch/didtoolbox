@@ -82,26 +82,26 @@ mod test {
     #[rstest]
     #[case(
         "did:tdw:QMySCID:localhost%3A8000:123:456",
-        "http://localhost:8000/123/456/did.jsonl"
+        "https://localhost:8000/123/456/did.jsonl"
     )]
-    #[case("did:tdw:QMySCID:localhost%3A8000", "http://localhost:8000/did.jsonl")]
-    #[case("did:tdw:QMySCID:localhost", "http://localhost/.well-known/did.jsonl")]
+    #[case("did:tdw:QMySCID:localhost%3A8000", "https://localhost:8000/did.jsonl")]
+    #[case("did:tdw:QMySCID:localhost", "https://localhost/.well-known/did.jsonl")]
     #[case(
         "did:tdw:QMySCID:admin.ch%3A8000:123:456",
-        "http://admin.ch:8000/123/456/did.jsonl"
+        "https://admin.ch:8000/123/456/did.jsonl"
     )]
-    #[case("did:tdw:QMySCID:admin.ch%3A8000", "http://admin.ch:8000/did.jsonl")]
-    #[case("did:tdw:QMySCID:admin.ch", "http://admin.ch/.well-known/did.jsonl")]
+    #[case("did:tdw:QMySCID:admin.ch%3A8000", "https://admin.ch:8000/did.jsonl")]
+    #[case("did:tdw:QMySCID:admin.ch", "https://admin.ch/.well-known/did.jsonl")]
     #[case(
         "did:tdw:QMySCID:sub.admin.ch",
-        "http://sub.admin.ch/.well-known/did.jsonl"
+        "https://sub.admin.ch/.well-known/did.jsonl"
     )]
     #[case(
         "did:tdw:QMySCID:sub.admin.ch:mypath:mytrala",
-        "http://sub.admin.ch/mypath/mytrala/did.jsonl"
+        "https://sub.admin.ch/mypath/mytrala/did.jsonl"
     )]
     fn test_tdw_to_url_conversion(#[case] tdw: String, #[case] url: String) {
-        let tdw = TrustDidWebId::parse_did_tdw(tdw, Some(true)).unwrap();
+        let tdw = TrustDidWebId::parse_did(tdw).unwrap();
         let resolved_url = tdw.get_url();
         assert_eq!(resolved_url, url)
     }
@@ -109,7 +109,7 @@ mod test {
     #[rstest]
     #[case("did:xyz:QMySCID:localhost%3A8000:123:456")]
     fn test_tdw_to_url_conversion_error_kind_method_not_supported(#[case] tdw: String) {
-        match TrustDidWebId::parse_did_tdw(tdw, Some(true)) {
+        match TrustDidWebId::parse_did(tdw) {
             Err(e) => assert_eq!(
                 e.kind(),
                 TrustDidWebIdResolutionErrorKind::MethodNotSupported
@@ -133,7 +133,7 @@ mod test {
     #[rstest]
     #[case("did:tdw:")]
     fn test_tdw_to_url_conversion_error_kind_invalid_method_specific_id(#[case] tdw: String) {
-        match TrustDidWebId::parse_did_tdw(tdw, Some(true)) {
+        match TrustDidWebId::parse_did(tdw) {
             Err(e) => assert_eq!(
                 e.kind(),
                 TrustDidWebIdResolutionErrorKind::InvalidMethodSpecificId
@@ -344,7 +344,7 @@ mod test {
         let did_log_raw = fs::read_to_string(Path::new(&did_log_raw_filepath))?;
 
         // Read the newly did doc
-        let tdw_v1 = TrustDidWeb::read(did_url.clone(), did_log_raw, Some(false))?;
+        let tdw_v1 = TrustDidWeb::read_log(did_url.clone(), did_log_raw)?;
         let did_doc_v1: JsonValue = serde_json::from_str(&tdw_v1.get_did_doc())?;
         let did_doc_obj_v1 = DidDoc::from_json(&tdw_v1.get_did_doc())?;
 
@@ -382,7 +382,7 @@ mod test {
         let did_log_raw = fs::read_to_string(Path::new(&did_log_raw_filepath)).unwrap();
 
         // CAUTION No ? operator required here as we want to inspect the expected error
-        let tdw_v1 = TrustDidWeb::read(did_url.clone(), did_log_raw, Some(false));
+        let tdw_v1 = TrustDidWeb::read_log(did_url.clone(), did_log_raw);
 
         assert!(tdw_v1.is_err());
         let err = tdw_v1.err();
@@ -410,7 +410,7 @@ mod test {
         let did_log_raw = fs::read_to_string(Path::new(&did_log_raw_filepath))?;
 
         // Read the newly did doc
-        let tdw_v1 = TrustDidWeb::read(did_url.clone(), did_log_raw, Some(false))?;
+        let tdw_v1 = TrustDidWeb::read_log(did_url.clone(), did_log_raw)?;
         let did_doc_json_v1: JsonValue = serde_json::from_str(&tdw_v1.get_did_doc())?;
         let did_doc_obj_v1 = DidDoc::from_json(&tdw_v1.get_did_doc())?;
 
@@ -449,7 +449,7 @@ mod test {
         let did_log_raw = fs::read_to_string(Path::new(&did_log_raw_filepath)).unwrap();
 
         // CAUTION No ? operator required here as we want to inspect the expected error
-        let tdw_v1 = TrustDidWeb::read(did_url.clone(), did_log_raw, Some(false));
+        let tdw_v1 = TrustDidWeb::read_log(did_url.clone(), did_log_raw);
 
         assert!(tdw_v1.is_err());
         let err = tdw_v1.err();
