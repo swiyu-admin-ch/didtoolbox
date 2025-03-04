@@ -10,7 +10,7 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use regex;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use serde_json::Value::{Array as JsonArray, Null, Object as JsonObject, String as JsonString};
+use serde_json::Value::{Array as JsonArray, Object as JsonObject, String as JsonString};
 use serde_json::{
     from_str as json_from_str, json, to_string as json_to_string, Value as JsonValue,
 };
@@ -393,10 +393,6 @@ impl DidDocumentState {
         }
 
         let mut current_params: Option<DidMethodParameters> = None;
-        let mut current_did_doc: Option<DidDoc> = None;
-        let mut did_doc_json: String = "".to_string();
-        let mut did_doc_hash: String = "".to_string();
-        let mut did_doc_value: JsonValue = Null;
         let mut prev_entry: Option<Box<DidLogEntry>> = None;
         let mut is_deactivated: bool = false;
         Ok(DidDocumentState {
@@ -499,10 +495,14 @@ impl DidDocumentState {
                         }
                     }
 
+                    let mut did_doc_hash: String = "".to_string();
+                    let mut current_did_doc: Option<DidDoc> = None;
+                    let mut did_doc_json: String = "".to_string();
+
                     current_did_doc = match entry[3] {
                         JsonObject(ref obj) => {
                             if obj.contains_key("value") {
-                                did_doc_value = obj["value"].to_owned();
+                                let did_doc_value: JsonValue = obj["value"].to_owned();
                                 if !did_doc_value.is_null() {
                                     did_doc_json = did_doc_value.to_string();
                                     did_doc_hash = JcsSha256Hasher::default().encode_hex(&did_doc_value).unwrap();
@@ -528,14 +528,14 @@ impl DidDocumentState {
                                         ))
                                     }
                                 }
-                            } else {
-                                // TODO Lookup for "patch"?
-                                match &current_did_doc {
-                                    Some(did_doc) => Some(did_doc.to_owned()),
-                                    None => return Err(TrustDidWebError::DeserializationFailed(
-                                        "Missing DID Document. JSON patch is not supported.".to_string(),
+                            } else if obj.contains_key("patch") {
+                                return Err(TrustDidWebError::DeserializationFailed(
+                                        "Missing DID Document. JSON 'patch' is not supported.".to_string(),
                                     ))
-                                }
+                            } else {
+                                return Err(TrustDidWebError::DeserializationFailed(
+                                    "Missing DID Document. No 'value' detected.".to_string(),
+                                ))
                             }
                         }
                         _ => {
