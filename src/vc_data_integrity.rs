@@ -277,6 +277,7 @@ pub trait VCDataIntegrity {
     fn add_proof(
         &self,
         unsecured_document: &serde_json::Value,
+        version_index: Option<usize>,
         options: &CryptoSuiteProofOptions,
     ) -> Result<serde_json::Value, TrustDidWebError>;
     // See https://www.w3.org/TR/vc-data-integrity/#verify-proof
@@ -299,8 +300,12 @@ impl VCDataIntegrity for EddsaJcs2022Cryptosuite {
     fn add_proof(
         &self,
         unsecured_document: &serde_json::Value,
+        version_index: Option<usize>,
         options: &CryptoSuiteProofOptions,
     ) -> Result<serde_json::Value, TrustDidWebError> {
+        // According to https://www.w3.org/TR/vc-di-eddsa/#proof-configuration-eddsa-jcs-2022:
+        // If proofConfig.type is not set to DataIntegrityProof or proofConfig.cryptosuite is not set to eddsa-jcs-2022,
+        // an error MUST be raised that SHOULD convey an error type of PROOF_GENERATION_ERROR.
         if !matches!(options.crypto_suite, CryptoSuiteType::EddsaJcs2022) {
             return Err(TrustDidWebError::InvalidDataIntegrityProof(format!(
                 "Unsupported proof's cryptosuite. Only '{}' is supported",
@@ -332,7 +337,17 @@ impl VCDataIntegrity for EddsaJcs2022Cryptosuite {
             proof_without_proof_value["@context"] = json!(ctx);
         }
         if let Some(challenge) = &options.challenge {
-            proof_without_proof_value["challenge"] = json!(challenge);
+            proof_without_proof_value["challenge"] = json!(challenge); // EIDSYS-429
+        } else {
+            proof_without_proof_value["challenge"] =
+                match JcsSha256Hasher::default().base58btc_encode_multihash(unsecured_document) {
+                    Ok(scid) => {
+                        json!(format!("{}-{}", version_index.unwrap_or(1), scid))
+                    }
+                    Err(err) => {
+                        return Err(TrustDidWebError::InvalidDataIntegrityProof(err.to_string()))
+                    }
+                }
         }
 
         // See https://www.w3.org/TR/vc-di-eddsa/#hashing-eddsa-jcs-2022
@@ -353,7 +368,8 @@ impl VCDataIntegrity for EddsaJcs2022Cryptosuite {
         };
         //let signature_hex = hex::encode(signature.signature.to_bytes()); // checkpoint
 
-        proof_without_proof_value["proofValue"] = JsonString(signature.to_multibase()); // finally, it's got one!
+        let proof_value = signature.to_multibase();
+        proof_without_proof_value["proofValue"] = JsonString(proof_value);
         let mut secured_document = unsecured_document.clone();
         secured_document["proof"] = json!([proof_without_proof_value]);
         Ok(secured_document)
@@ -378,12 +394,10 @@ impl VCDataIntegrity for EddsaJcs2022Cryptosuite {
             "created": proof.created,
             "verificationMethod": proof.verification_method,
             "proofPurpose": proof.proof_purpose,
+            "challenge": proof.challenge, // EIDSYS-429
         });
         if let Some(ctx) = context {
             proof_without_proof_value["@context"] = json!(ctx);
-        }
-        if !proof.challenge.is_empty() {
-            proof_without_proof_value["challenge"] = json!(proof.challenge);
         }
 
         // See https://www.w3.org/TR/vc-di-eddsa/#hashing-eddsa-jcs-2022

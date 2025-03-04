@@ -272,7 +272,7 @@ mod test {
             )?),
         };
 
-        let secured_document = suite.add_proof(&credential_without_proof, &options)?;
+        let secured_document = suite.add_proof(&credential_without_proof, None, &options)?;
 
         assert!(
             !secured_document.is_null(),
@@ -284,7 +284,9 @@ mod test {
         assert!(proof_value.is_string(), "'proofValue' must be a string");
 
         // https://www.w3.org/TR/vc-di-eddsa/#example-signature-of-combined-hashes-base58-btc-1
-        assert!(proof_value.to_string().contains("z2HnFSSPPBzR36zdDgK8PbEHeXbR56YF24jwMpt3R1eHXQzJDMWS93FCzpvJpwTWd3GAVFuUfjoJdcnTMuVor51aX"));
+        // CAUTION The value suggested in the spec (z2HnFSSPPBzR36zdDgK8PbEHeXbR56YF24jwMpt3R1eHXQzJDMWS93FCzpvJpwTWd3GAVFuUfjoJdcnTMuVor51aX)
+        //         is irrelevant here since the add_proof method also computes a proof's challenge (if not supplied already)
+        assert!(proof_value.to_string().contains("z3swhrb2DFocc562PATcKiv8YtjUzxLdfr4dhb9DidvG2BNkJqAXe65bsEMiNJdGKDdnYxiBa7cKXXw4cSKCvMcfm"));
 
         let doc_hash = JcsSha256Hasher::default().encode_hex(&credential_without_proof)?;
         // From https://www.w3.org/TR/vc-di-eddsa/#example-hash-of-canonical-credential-without-proof-hex-0
