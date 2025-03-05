@@ -57,6 +57,9 @@ pub enum TrustDidWebError {
     /// Invalid (or not yet supported) operation against DID doc
     #[error("invalid (or not yet supported) operation against DID doc: {0}")]
     InvalidOperation(String),
+    /// Invalid DID parameter
+    #[error("invalid DID parameter: {0}")]
+    InvalidDidParameter(String),
     /// Invalid DID document
     #[error("invalid DID document: {0}")]
     InvalidDidDocument(String),
@@ -74,6 +77,7 @@ impl TrustDidWebError {
             Self::SerializationFailed(_) => TrustDidWebErrorKind::SerializationFailed,
             Self::DeserializationFailed(_) => TrustDidWebErrorKind::DeserializationFailed,
             Self::InvalidOperation(_) => TrustDidWebErrorKind::InvalidOperation,
+            Self::InvalidDidParameter(_) => TrustDidWebErrorKind::InvalidDidParameter,
             Self::InvalidDidDocument(_) => TrustDidWebErrorKind::InvalidDidDocument,
             Self::InvalidDataIntegrityProof(_) => TrustDidWebErrorKind::InvalidIntegrityProof,
         }
@@ -90,6 +94,7 @@ pub enum TrustDidWebErrorKind {
     SerializationFailed,
     DeserializationFailed,
     InvalidOperation,
+    InvalidDidParameter,
     InvalidDidDocument,
     InvalidIntegrityProof,
 }

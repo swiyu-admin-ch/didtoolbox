@@ -9,6 +9,7 @@
 extern crate core;
 
 pub mod did_tdw;
+pub mod did_tdw_parameters;
 pub mod didtoolbox;
 pub mod ed25519;
 pub mod errors;
@@ -31,6 +32,7 @@ mod test {
     use super::ed25519::*;
     use super::jcs_sha256_hasher::*;
     use super::multibase::*;
+    use crate::did_tdw_parameters::*;
     use crate::errors::*;
     use crate::vc_data_integrity::*;
     use chrono::DateTime;
@@ -149,7 +151,7 @@ mod test {
     fn test_multibase_conversion() -> Result<(), Box<dyn std::error::Error>> {
         let multibase = MultibaseEncoderDecoder::default();
         let encoded = multibase.encode("helloworld".as_bytes()); // zfP1vxkpyLWnH9dD6BQA
-        //let mut buff: [u8; 16] = [0; 16];
+                                                                 //let mut buff: [u8; 16] = [0; 16];
         let mut buff = vec![0; 16];
         multibase.decode_onto(encoded.as_str(), &mut buff)?;
         let decoded = String::from_utf8_lossy(&buff).to_string();
@@ -164,7 +166,7 @@ mod test {
         let multibase = MultibaseEncoderDecoder::default();
         let encoded = multibase.encode("helloworld".as_bytes()); // zfP1vxkpyLWnH9dD6BQA
         let encoded_without_multibase = encoded.chars().skip(1).collect::<String>(); // get rid of the multibase code (prefix char 'z')
-        //let mut buff: [u8; 16] = [0; 16];
+                                                                                     //let mut buff: [u8; 16] = [0; 16];
         let mut buff = vec![0; 16];
         let _ = multibase.decode_onto(encoded_without_multibase.as_str(), &mut buff);
     }
@@ -174,7 +176,7 @@ mod test {
     fn test_multibase_conversion_buffer_too_small() {
         let multibase = MultibaseEncoderDecoder::default();
         let encoded = multibase.encode("helloworld".as_bytes()); // zfP1vxkpyLWnH9dD6BQA
-        //let mut buff: [u8; 16] = [0; 16];
+                                                                 //let mut buff: [u8; 16] = [0; 16];
         let mut buff = vec![0; 8]; // empirical size for "helloworld" (encoded)
         match multibase.decode_onto(encoded.as_str(), &mut buff) {
             Ok(_) => panic!("Error expected to be returned"),
@@ -306,6 +308,105 @@ mod test {
         );
 
         Ok(())
+    }
+
+    /// A rather trivial assertion helper around TrustDidWebError.
+    fn assert_trust_did_web_error(
+        res: Result<(), TrustDidWebError>,
+        expected_kind: TrustDidWebErrorKind,
+        error_contains: String,
+    ) {
+        assert!(res.is_err());
+        let err = res.err();
+        assert!(err.is_some());
+        let err = err.unwrap();
+        assert_eq!(err.kind(), expected_kind);
+
+        let err_to_string = err.to_string();
+        assert!(
+            err_to_string.contains(error_contains.as_str()),
+            "expected '{}' is not mentioned in '{}'",
+            error_contains,
+            err_to_string
+        );
+    }
+
+    #[rstest]
+    fn test_did_tdw_parameters_validate() {
+        let params_for_genesis_did_doc =
+            DidMethodParameters::for_genesis_did_doc("scid".to_string(), "update_key".to_string());
+        assert!(params_for_genesis_did_doc
+            .validate(true, false, false) // MUT
+            .is_ok());
+        assert!(params_for_genesis_did_doc
+            .validate(false, false, false) // MUT
+            .is_ok());
+
+        let mut params = params_for_genesis_did_doc.to_owned(); // reset to minimum
+        params.portable = Some(true); // all it takes to reproduce the behaviour
+        assert!(params.validate(true, false, false).is_ok()); // MUT
+        assert_trust_did_web_error(
+            params.validate(false, false, true), // MUT
+            TrustDidWebErrorKind::InvalidDidParameter,
+            "Invalid 'portable' DID parameter. The value can ONLY be set to true in the first log entry, the initial version of the DID.".to_string(),
+        );
+        assert_trust_did_web_error(
+            params.validate(false, false, false), // MUT
+            TrustDidWebErrorKind::InvalidDidParameter,
+            "Invalid 'portable' DID parameter. Once the value has been set to false, it cannot be set back to true.".to_string(),
+        );
+
+        params = params_for_genesis_did_doc.to_owned(); // reset to minimum
+        params.prerotation = Some(false); // all it takes to reproduce the behaviour
+        assert_trust_did_web_error(
+            params.validate(false, true, false), // MUT
+            TrustDidWebErrorKind::InvalidDidParameter,
+            // Invalid 'prerotation' DID parameter. Once the value is set to true in a DID log entry it MUST NOT be set to false in a subsequent entry.
+            "Invalid 'prerotation' DID parameter".to_string(),
+        );
+
+        params = DidMethodParameters::empty(); // complete reset
+        assert_trust_did_web_error(
+            params.validate(true, false, false), // MUT
+            TrustDidWebErrorKind::InvalidDidParameter,
+            // Missing 'method' DID parameter. This item MUST appear in the first DID log entry.
+            "Missing 'method' DID parameter".to_string(),
+        );
+
+        params.method = Some("".to_string()); // all it takes to reproduce the behaviour
+        assert_trust_did_web_error(
+            params.validate(true, false, false), // MUT
+            TrustDidWebErrorKind::InvalidDidParameter,
+            // Invalid 'method' DID parameter. Expected '{DID_METHOD_PARAMETER_VERSION}'
+            "Invalid 'method' DID parameter".to_string(),
+        );
+
+        params = params_for_genesis_did_doc.to_owned(); // reset to minimum
+        params.scid = None; // all it takes to reproduce the behaviour
+        assert_trust_did_web_error(
+            params.validate(true, false, false), // MUT
+            TrustDidWebErrorKind::InvalidDidParameter,
+            // Missing 'scid' DID parameter. This item MUST appear in the first DID log entry.
+            "Missing 'scid' DID parameter".to_string(),
+        );
+
+        params = params_for_genesis_did_doc.to_owned(); // reset to minimum
+        params.update_keys = None; // all it takes to reproduce the behaviour
+        assert_trust_did_web_error(
+            params.validate(true, false, false), // MUT
+            TrustDidWebErrorKind::InvalidDidParameter,
+            // Missing 'updateKeys' DID parameter. This item MUST appear in the first DID log entry.
+            "Missing 'updateKeys' DID parameter".to_string(),
+        );
+
+        params = params_for_genesis_did_doc.to_owned(); // reset to minimum
+        params.update_keys = Some(vec![]); // all it takes to reproduce the behaviour
+        assert_trust_did_web_error(
+            params.validate(true, false, false), // MUT
+            TrustDidWebErrorKind::InvalidDidParameter,
+            // Empty 'updateKeys' DID parameter detected. This item MUST appear in the first DID log entry.
+            "Empty 'updateKeys' DID parameter".to_string(),
+        );
     }
 
     #[rstest]

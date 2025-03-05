@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+use crate::did_tdw_parameters::*;
 use crate::didtoolbox::*;
 use crate::ed25519::*;
 use crate::errors::*;
@@ -235,147 +236,11 @@ impl DidLogEntry {
     }
 }
 
-// See https://identity.foundation/trustdidweb/#didtdw-did-method-parameters
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct DidMethodParameters {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    pub method: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    pub scid: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    pub hash: Option<String>,
-    // Since v0.3 (https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
-    //            Removes the cryptosuite parameter, moving it to implied based on the method parameter.
-    /*
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    pub cryptosuite: Option<String>,
-     */
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    pub prerotation: Option<bool>,
-    #[serde(default)]
-    #[serde(rename = "updateKeys", skip_serializing_if = "Option::is_none")]
-    pub update_keys: Option<Vec<String>>,
-    #[serde(default)]
-    #[serde(rename = "nextKeyHashes", skip_serializing_if = "Option::is_none")]
-    pub next_keys: Option<Vec<String>>,
-    #[serde(default)]
-    #[serde(rename = "witnesses", skip_serializing_if = "Option::is_none")]
-    pub witnesses: Option<Vec<String>>,
-    #[serde(
-        rename = "witnessThreshold",
-        skip_serializing_if = "Option::is_none",
-        default
-    )]
-    pub witness_threshold: Option<usize>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    pub moved: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    pub deactivated: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    pub ttl: Option<usize>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    pub portable: Option<bool>,
-}
-
-impl DidMethodParameters {
-    pub fn for_genesis_did_doc(scid: String, update_key: String) -> Self {
-        DidMethodParameters {
-            method: Option::Some(String::from(DID_METHOD_PARAMETER_VERSION)),
-            scid: Option::Some(scid),
-            hash: Option::None,
-            // Since v0.3 (https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
-            //            Removes the cryptosuite parameter, moving it to implied based on the method parameter.
-            /*
-            cryptosuite: Option::None,
-             */
-            prerotation: Option::None,
-            //update_keys: Option::None,
-            update_keys: Some(vec![update_key]),
-            next_keys: Option::None,
-            witnesses: Option::None,
-            witness_threshold: Option::None,
-            moved: Option::None,
-            deactivated: Option::None,
-            ttl: Option::None,
-            portable: Option::Some(false),
-        }
-    }
-
-    pub fn empty() -> Self {
-        DidMethodParameters {
-            method: Option::None,
-            scid: Option::None,
-            hash: Option::None,
-            // Since v0.3 (https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
-            //            Removes the cryptosuite parameter, moving it to implied based on the method parameter.
-            /*
-            cryptosuite: Option::None,
-             */
-            prerotation: Option::None,
-            update_keys: Option::None,
-            next_keys: Option::None,
-            witnesses: Option::None,
-            witness_threshold: Option::None,
-            moved: Option::None,
-            deactivated: Option::None,
-            ttl: Option::None,
-            portable: Option::None,
-        }
-    }
-
-    fn merge_from(&mut self, other: &DidMethodParameters) {
-        let _other = other.to_owned();
-        self.method = _other.method.or(self.method.to_owned());
-        self.scid = _other.scid.or(self.scid.to_owned());
-        self.hash = _other.hash.or(self.hash.to_owned());
-        self.prerotation = _other.prerotation.or(self.prerotation.to_owned());
-        self.update_keys = _other.update_keys.or(self.update_keys.to_owned());
-        self.next_keys = _other.next_keys.or(self.next_keys.to_owned());
-        self.witnesses = _other.witnesses.or(self.witnesses.to_owned());
-        self.witness_threshold = _other.witness_threshold.or(self.witness_threshold.to_owned());
-        self.moved = _other.moved.or(self.moved.to_owned());
-        self.deactivated = _other.deactivated.or(self.deactivated.to_owned());
-        self.ttl = _other.ttl.or(self.ttl.to_owned());
-        self.portable = _other.portable.or(self.portable.to_owned());
-    }
-
-    /// As specified by https://identity.foundation/didwebvh/v0.3/#deactivate-revoke
-    fn deactivate(&mut self) {
-        self.update_keys = Some(vec![]);
-        self.deactivated = Some(true);
-    }
-
-    pub fn from_json(json_content: &str) -> Result<Self, TrustDidWebError> {
-        let did_method_parameters: DidMethodParameters = match serde_json::from_str(json_content) {
-            Ok(did_method_parameters) => did_method_parameters,
-            Err(err) => {
-                return Err(TrustDidWebError::DeserializationFailed(format!(
-                    "Error parsing DID method parameters: {}",
-                    err
-                )));
-            }
-        };
-        Ok(did_method_parameters)
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DidDocumentState {
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub did_log_entries: Vec<DidLogEntry>,
 }
-
-/// As defined by https://identity.foundation/trustdidweb/v0.3/#didtdw-did-method-parameters
-const DID_METHOD_PARAMETER_VERSION: &str = "did:tdw:0.3";
 
 impl DidDocumentState {
     /*
@@ -395,6 +260,14 @@ impl DidDocumentState {
         let mut current_params: Option<DidMethodParameters> = None;
         let mut prev_entry: Option<Box<DidLogEntry>> = None;
         let mut is_deactivated: bool = false;
+        let mut is_initial: bool = false;
+        // https://identity.foundation/didwebvh/v0.3/#didtdw-did-method-parameters:
+        // A boolean (true / false) indicating if the DID is portable and thus can be renamed to change the Web location of the DID.
+        let mut is_portable: bool = false;
+        // https://identity.foundation/didwebvh/v0.3/#didtdw-did-method-parameters:
+        // A boolean value indicating that subsequent authentication keys added to the DIDDoc (after this version)
+        // MUST have their hash included in a nextKeyHashes parameter item.
+        let mut prerotation: bool = false;
         Ok(DidDocumentState {
             did_log_entries: unescaped.split("\n")
                 .filter(|line| !line.is_empty())
@@ -431,11 +304,24 @@ impl DidDocumentState {
                         ))
                     };
                     // Since v0.2 (see https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
-                    //            The new versionId takes the form <version number>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.
-                    let (version_index_as_str, _) = match version_id.split_once("-") {
-                        Some((index, hash)) => (index, hash),
+                    //            The new versionId takes the form <versionNumber>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.
+                    let version_index: usize = match version_id.split_once("-") {
+                        Some((index, _)) => {
+                            match index.parse::<usize>() {
+                                Ok(index) => {
+                                    is_initial = false;
+                                    if index == 1 {
+                                        is_initial = true;
+                                    }
+                                    index
+                                }
+                                Err(_) => return Err(TrustDidWebError::DeserializationFailed(
+                                    "The entry hash format (<versionNumber>-<entryHash>) is valid. However, the <versionNumber> is not an (unsigned) integer.".to_string(),
+                                ))
+                            }
+                        }
                         None => return Err(TrustDidWebError::DeserializationFailed(
-                            "Invalid entry hash format. The valid format is <version number>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.".to_string(),
+                            "Invalid entry hash format. The valid format is <versionNumber>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.".to_string(),
                         ))
                     };
 
@@ -449,25 +335,21 @@ impl DidDocumentState {
                                 return Err(TrustDidWebError::DeserializationFailed(
                                     "Missing DID Document parameters.".to_string(),
                                 ));
-                            } else if current_params.is_none() && new_params.is_some() {
-                                match new_params.clone().unwrap().method {
-                                    Some(method) => {
-                                        if method != DID_METHOD_PARAMETER_VERSION {
-                                            return Err(TrustDidWebError::DeserializationFailed(
-                                                "Invalid entry method parameter. Expected '{DID_METHOD_PARAMETER_VERSION}'".to_string(),
-                                            ));
-                                        }
-                                    }
-                                    None => return Err(TrustDidWebError::DeserializationFailed(
-                                        "Missing entry 'method' parameter".to_string(),
-                                    ))
-                                }
+                            } else if current_params.is_none() && new_params.is_some() { // possibly valid initial entry
+
+                                let initial_entry_params = new_params.clone().unwrap(); // a panic-safe unwrap() call (due to previous is_some check)
+
+                                initial_entry_params.validate(is_initial, prerotation, is_portable)?; // here equiv. to: validate(true, false, false)
+
                                 new_params.to_owned() // from the initial log entry
                             } else if current_params.is_some() && new_params.is_none() {
                                 Some(DidMethodParameters::empty())
-                            } else { // i.e. current_params.is_some() && p.is_some()
-                                let mut _current_params = current_params.to_owned().unwrap();
+                            } else { // i.e. current_params.is_some() && new_params.is_some()
+                                let mut _current_params = current_params.to_owned().unwrap(); // a panic-safe unwrap() call (due to previous implicit is_some check)
+
                                 _current_params.merge_from(&new_params.to_owned().unwrap());
+                                _current_params.validate(is_initial, prerotation, is_portable)?;
+
                                 Some(_current_params)
                             }
                         }
@@ -494,6 +376,8 @@ impl DidDocumentState {
                             current_params = Some(_current_params);
                         }
                     }
+                    is_portable = current_params.to_owned().is_some_and(|p| p.portable.is_some_and(|d| d));
+                    prerotation = current_params.to_owned().is_some_and(|p| p.prerotation.is_some_and(|d| d));
 
                     let mut did_doc_hash: String = "".to_string();
                     let mut current_did_doc: Option<DidDoc> = None;
@@ -530,8 +414,8 @@ impl DidDocumentState {
                                 }
                             } else if obj.contains_key("patch") {
                                 return Err(TrustDidWebError::DeserializationFailed(
-                                        "Missing DID Document. JSON 'patch' is not supported.".to_string(),
-                                    ))
+                                    "Missing DID Document. JSON 'patch' is not supported.".to_string(),
+                                ))
                             } else {
                                 return Err(TrustDidWebError::DeserializationFailed(
                                     "Missing DID Document. No 'value' detected.".to_string(),
@@ -564,7 +448,7 @@ impl DidDocumentState {
 
                     let current_entry = DidLogEntry::new(
                         version_id.clone(),
-                        version_index_as_str.parse::<usize>().unwrap(),
+                        version_index,
                         DateTime::parse_from_rfc3339(entry[1].as_str().unwrap()).unwrap().to_utc(),
                         new_params.unwrap(),
                         current_did_doc.clone().unwrap(),

@@ -49,6 +49,8 @@ enum TrustDidWebError {
     "DeserializationFailed",
     /// Invalid (or not yet supported) operation against DID doc.
     "InvalidOperation",
+    /// Invalid DID parameter.
+    "InvalidDidParameter",
     /// Invalid DID document.
     "InvalidDidDocument",
     /// Invalid DID log integration proof.
