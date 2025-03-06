@@ -325,6 +325,19 @@ impl DidDocumentState {
                         ))
                     };
 
+                    // https://identity.foundation/didwebvh/v0.3/#the-did-log-file:
+                    // The versionTime (as stated by the DID Controller) of the entry,
+                    // in ISO8601 format (https://identity.foundation/didwebvh/v0.3/#term:iso8601).
+                    let version_time = match entry[1] {
+                        JsonString(ref dt) => {
+                            match DateTime::parse_from_rfc3339(dt) {
+                                Ok(x) => x.to_utc(),
+                                Err(_) => return Err(TrustDidWebError::DeserializationFailed("Invalid versionTime. String representation of a datetime in ISO8601 format required.".to_string()))
+                            }
+                        }
+                        _ => return Err(TrustDidWebError::DeserializationFailed("Invalid versionTime. String representation of a datetime in ISO8601 format required.".to_string()))
+                    };
+
                     let mut new_params: Option<DidMethodParameters> = None;
                     current_params = match entry[2] {
                         JsonObject(ref obj) => {
@@ -337,13 +350,12 @@ impl DidDocumentState {
                                 ));
                             } else if current_params.is_none() && new_params.is_some() { // possibly valid initial entry
 
-                                let initial_entry_params = new_params.clone().unwrap(); // a panic-safe unwrap() call (due to previous is_some check)
-
-                                initial_entry_params.validate(is_initial, prerotation, is_portable)?; // here equiv. to: validate(true, false, false)
+                                new_params.to_owned().unwrap()     // a panic-safe unwrap() call (due to previous is_some check)
+                                    .validate(is_initial, prerotation, is_portable)?; // here equiv. to: validate(true, false, false)
 
                                 new_params.to_owned() // from the initial log entry
-                            } else if current_params.is_some() && new_params.is_none() {
-                                Some(DidMethodParameters::empty())
+                            } else if current_params.is_some() && new_params.is_none() { // no changes, (current) params remain the same
+                                current_params.to_owned() // a panic-safe unwrap() call (due to previous is_some check)
                             } else { // i.e. current_params.is_some() && new_params.is_some()
                                 let mut _current_params = current_params.to_owned().unwrap(); // a panic-safe unwrap() call (due to previous implicit is_some check)
 
@@ -449,8 +461,8 @@ impl DidDocumentState {
                     let current_entry = DidLogEntry::new(
                         version_id.clone(),
                         version_index,
-                        DateTime::parse_from_rfc3339(entry[1].as_str().unwrap()).unwrap().to_utc(),
-                        new_params.unwrap(),
+                        version_time,
+                        new_params.unwrap_or_else(|| {DidMethodParameters::empty()}),
                         current_did_doc.clone().unwrap(),
                         did_doc_json.clone(),
                         did_doc_hash.clone(),

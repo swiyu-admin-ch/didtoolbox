@@ -39,6 +39,9 @@ pub struct DidMethodParameters {
         skip_serializing_if = "Option::is_none",
         default
     )]
+    #[deprecated(
+        note = "kept for historical reasons only (backward compatibility in regard to unit testing) and should therefore not be used"
+    )]
     pub witness_threshold: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
@@ -175,6 +178,16 @@ impl DidMethodParameters {
             if is_already_prerotated && !prerotation_new_value {
                 return Err(TrustDidWebError::InvalidDidParameter(
                     "Invalid 'prerotation' DID parameter. Once the value is set to true in a DID log entry it MUST NOT be set to false in a subsequent entry.".to_string(),
+                ));
+            }
+        }
+
+        if let Some(witnesses) = &self.witnesses {
+            if !witnesses.is_empty() {
+                // A witness item in the first DID log entry is used to define the witnesses and necessary threshold for that initial log entry.
+                // In all other DID log entries, a witness item becomes active after the publication of its entry.
+                return Err(TrustDidWebError::InvalidDidParameter(
+                    "Unsupported non-empty 'witnesses' DID parameter.".to_string(),
                 ));
             }
         }

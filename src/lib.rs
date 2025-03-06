@@ -407,6 +407,19 @@ mod test {
             // Empty 'updateKeys' DID parameter detected. This item MUST appear in the first DID log entry.
             "Empty 'updateKeys' DID parameter".to_string(),
         );
+
+        params = params_for_genesis_did_doc.to_owned(); // reset to minimum
+        params.witnesses = Some(vec![]); // unsupported, but empty and therefore OK
+        assert!(params
+            .validate(true, false, false) // MUT (the method args are irrelevant for the parameter)
+            .is_ok());
+        params.witnesses = Some(vec!["witness".to_string()]); // all it takes to reproduce the behaviour
+        assert_trust_did_web_error(
+            params.validate(true, false, false), // MUT (the method args are irrelevant for the parameter)
+            TrustDidWebErrorKind::InvalidDidParameter,
+            // Unsupported non-empty 'witnesses' DID parameter
+            "Unsupported non-empty 'witnesses' DID parameter".to_string(),
+        );
     }
 
     #[rstest]
@@ -437,6 +450,10 @@ mod test {
     #[case(
         "test_data/generated_by_didtoolbox_java/did_3.jsonl",
         "did:tdw:QmcTh4ghpn5HHuubeGzt5JMS9PfAyxZLVPn3zTq3TYP69v:127.0.0.1%3A54858:123456789:123456789"
+    )]
+    #[case(
+        "test_data/generated_by_didtoolbox_java/empty_did_params.jsonl",
+        "did:tdw:QmeLapUpgZeyyCmjG8vRKjXYwEAXaYJyAT4ohzR73jZf1A:127.0.0.1%3A54858"
     )]
     fn test_read_did_tdw(
         #[case] did_log_raw_filepath: String,
