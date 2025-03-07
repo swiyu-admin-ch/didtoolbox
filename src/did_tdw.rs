@@ -580,7 +580,6 @@ impl std::fmt::Display for DidDocumentState {
 pub struct TrustDidWebId {
     scid: String,
     url: String,
-    // TODO path: Option<String>
 }
 
 static HAS_PATH_REGEX: LazyLock<Regex> =
@@ -627,59 +626,72 @@ impl TrustDidWebId {
 impl TryFrom<String> for TrustDidWebId {
     type Error = TrustDidWebIdResolutionError;
 
+    /// It basically implements the 'The DID to HTTPS Transformation',
+    /// as specified by https://identity.foundation/didwebvh/v0.3/#the-did-to-https-transformation
     fn try_from(did_tdw: String) -> Result<Self, Self::Error> {
-        let split: Vec<&str> = did_tdw.splitn(3, ":").collect();
-        if split.len() < 3 || split[2].is_empty() {
+        let did_tdw_split: Vec<&str> = did_tdw.splitn(4, ":").collect();
+        if did_tdw_split.len() < 4 {
             return Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(
                 did_tdw,
             ));
         };
 
-        let method_name = format!("{}:{}", split[0], split[1]);
+        let method_name = format!("{}:{}", did_tdw_split[0], did_tdw_split[1]);
         if method_name != format!("did:{}", Self::DID_METHOD_NAME) {
             return Err(TrustDidWebIdResolutionError::MethodNotSupported(
                 method_name,
             ));
         };
-        let scid = split[2];
-        /* TODO Ensure the SCID is encoded properly
-        if !scid.starts_with("Q") {
+
+        let scid = did_tdw_split[2];
+        if scid.is_empty() {
+            // the SCID MUST be present in the DID string
             return Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(
-                String::from("Invalid multibase format for SCID. base58btc identifier expected"),
+                String::from("Empty self-certifying identifier (SCID) detected. An object identifier derived from initial data is expected"),
             ));
-        }
-         */
+        };
+
+        if did_tdw_split[3].replace(":", "").is_empty() || did_tdw_split[3].starts_with(":") {
+            return Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(
+                String::from("No fully qualified domain detected"),
+            ));
+        };
+
         let mut decoded_url = String::from("");
-        match scid.split_once(":") {
-            Some((scid, did_tdw_reduced)) => {
-                url_escape::decode_to_string(did_tdw_reduced.replace(":", "/"), &mut decoded_url);
-                let url = match String::from_utf8(decoded_url.into_bytes()) {
-                    Ok(url) => {
-                        format!("https://{}", url)
-                    }
-                    Err(_) => {
-                        return Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(
-                            did_tdw_reduced.to_string(),
-                        ))
-                    }
-                };
-                if HAS_PATH_REGEX.captures(url.as_str()).is_some()
-                    || HAS_PORT_REGEX.captures(url.as_str()).is_some()
-                {
-                    Ok(Self {
-                        scid: scid.to_string(),
-                        url: format!("{}/did.jsonl", url),
-                    })
-                } else {
-                    Ok(Self {
-                        scid: scid.to_string(),
-                        url: format!("{}/.well-known/did.jsonl", url),
-                    })
-                }
+        // https://identity.foundation/didwebvh/v0.3/#the-did-to-https-transformation:
+        // 1. Remove the literal did:tdw: prefix from the DID, leaving the method specific identifier.
+        // 2. Remove the SCID by removing the text up to and including the first colon (<scid>:) from the method-specific identifier and continue processing.
+        // 3. Replace : with / in the method-specific identifier to obtain the fully qualified domain name and optional path.
+        let domain_and_optional_path = did_tdw_split[3..].join(":").replace(":", "/");
+
+        // 5. If the domain contains a port, percent decode the colon.
+        url_escape::decode_to_string(domain_and_optional_path.to_owned(), &mut decoded_url); // Decode percent-encoded bytes such as '%3A' (the percent-encoded semicolon (':') char/byte)
+        let url = match String::from_utf8(decoded_url.into_bytes()) {
+            Ok(url) => {
+                format!("https://{}", url)
             }
-            None => Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(
-                did_tdw,
-            )),
+            Err(_) => {
+                return Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(
+                    domain_and_optional_path.to_string(),
+                ))
+            }
+        };
+
+        if HAS_PATH_REGEX.captures(url.as_str()).is_some()
+            || HAS_PORT_REGEX.captures(url.as_str()).is_some()
+        {
+            // 7. Append /did.jsonl to complete the URL.
+            Ok(Self {
+                scid: scid.to_string(),
+                url: format!("{}/did.jsonl", url),
+            })
+        } else {
+            // 4. If there is no optional path, append '/.well-known' to the URL.
+            // 7. Append /did.jsonl to complete the URL.
+            Ok(Self {
+                scid: scid.to_string(),
+                url: format!("{}/.well-known/did.jsonl", url),
+            })
         }
     }
 }
@@ -707,13 +719,7 @@ impl TryFrom<(String, Option<bool>)> for TrustDidWebId {
             ));
         };
         let scid = split[2];
-        /* TODO Ensure the SCID is encoded properly
-        if !scid.starts_with("Q") {
-            return Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(
-                String::from("Invalid multibase format for SCID. base58btc identifier expected"),
-            ));
-        }
-         */
+
         let mut decoded_url = String::from("");
         match scid.split_once(":") {
             Some((scid, did_tdw_reduced)) => {

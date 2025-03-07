@@ -123,17 +123,15 @@ mod test {
         }
     }
 
-    /* TODO
     #[rstest]
-    #[case("did:tdw:MySCID:localhost%3A8000:123:456")]
-    #[should_panic(expected = "Invalid multibase format for SCID. base58btc identifier expected")]
-    fn test_tdw_to_url_conversion_error_invalid_scid_multibase(#[case] tdw: String) {
-        TrustDidWebId::parse_did_tdw(tdw, Some(true)).unwrap();
-    }
-     */
-
-    #[rstest]
-    #[case("did:tdw:")]
+    #[case("did:tdw")] // method only
+    #[case("did:tdw::")] // method only
+    #[case("did:tdw:::")] // method only
+    #[case("did:tdw::::")] // method only
+    #[case("did:tdw:SCID")] // no fully qualified domain
+    #[case("did:tdw:SCID:::")] // no fully qualified domain
+    #[case("did:tdw:SCID::123:")] // no fully qualified domain
+    #[case("did:tdw::localhost%3A8000:123:456")] // empty/missing SCID
     fn test_tdw_to_url_conversion_error_kind_invalid_method_specific_id(#[case] tdw: String) {
         match TrustDidWebId::parse_did(tdw) {
             Err(e) => assert_eq!(
