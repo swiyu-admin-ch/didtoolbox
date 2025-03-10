@@ -256,6 +256,132 @@ mod test {
         Ok(())
     }
 
+    /// A rather trivial assertion helper around TrustDidWebError.
+    fn assert_trust_did_web_error<T>(
+        res: Result<T, TrustDidWebError>,
+        expected_kind: TrustDidWebErrorKind,
+        error_contains: &str,
+    ) {
+        assert!(res.is_err());
+        let err = res.err();
+        assert!(err.is_some());
+        let err = err.unwrap();
+        assert_eq!(err.kind(), expected_kind);
+
+        let err_to_string = err.to_string();
+        assert!(
+            err_to_string.contains(error_contains),
+            "expected '{}' is not mentioned in '{}'",
+            error_contains,
+            err_to_string
+        );
+    }
+
+    /// A rather trivial unit testing helper.
+    fn build_valid_params_json_string() -> String {
+        json!(DidMethodParameters::for_genesis_did_doc(
+            "123".to_string(),
+            "123".to_string()
+        ))
+        .to_string()
+    }
+
+    #[rstest]
+    // doc needs 5 entries
+    #[case("[1,2,3]", "Invalid did log entry")]
+    // invalid version id
+    #[case("[\"1\",2,3,4,5]", "Invalid entry hash format")]
+    #[case(
+        "[\"invalidNumber-hash\",2,3,4,5]",
+        "the <versionNumber> is not an (unsigned) integer."
+    )]
+    // invalid time
+    #[case("[\"1-hash\",[1234],3,4,5]", "Invalid versionTime.")]
+    #[case("[\"1-hash\",\"invalidTime\",3,4,5]", "Invalid versionTime.")]
+    // missing params
+    #[case(
+        "[\"1-hash\",\"2012-12-12T12:12:12Z\",{},4,5]",
+        "Missing DID Document parameters"
+    )]
+    // JSON 'patch' is not supported
+    #[case(format!("[\"1-hash\",\"2012-12-12T12:12:12Z\",{},{{\"patch\":0}},5]", build_valid_params_json_string()), "JSON 'patch' is not supported")]
+    // JSON 'value' needs to be a valid did doc
+    #[case(format!("[\"1-hash\",\"2012-12-12T12:12:12Z\",{},{{\"value\":\"invalidDoc\"}},5]", build_valid_params_json_string()), "Missing DID document: invalid type")]
+    fn test_invalid_did_log(
+        #[case] input_str: String,
+        #[case] error_string: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        assert_trust_did_web_error(
+            DidDocumentState::from(input_str),
+            TrustDidWebErrorKind::DeserializationFailed,
+            error_string,
+        );
+        Ok(())
+    }
+
+    #[rstest]
+    // emtpy proof
+    #[case("[]", "Empty proof array detected")]
+    // two proofs
+    #[case("[\"proof1\", \"proof2\"]", "A single proof is currently supported")]
+    // invalid json
+    #[case("[{\"key:}]", "Malformed proof format, expected single-element JSON array")]
+    // invalid type
+    #[case(
+        "[{\"type\":\"invalidType\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\"}]", 
+        "Unsupported proof's type"
+    )]
+    // unsupported cryptosuite
+    #[case(
+        "[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"unsupportedCrypto\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\"}]",
+        "Unsupported proof's cryptosuite"
+    )]
+    // invalid created date
+    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"invalidDate\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\"}]",
+        "Invalid proof's creation datetime format"
+    )]
+    // invalid verification method
+    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"invalidMethod\", \"proofPurpose\":\"authentication\"}]",
+        "Unsupported proof's verificationMethod"
+    )]
+    // invalid proof purpose
+    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"invalidPurpose\"}]",
+        "Unsupported proof's proofPurpose"
+    )]
+    // invalid @context
+    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\", \"@context\":\"invalidContext\"}]",
+        "Invalid format of 'context' entry"
+    )]
+    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\", \"@context\":[\"validContext\", true, 3]}]",
+        "Invalid type of 'context' entry"
+    )]
+    // invalid proof challenge
+    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\"}]",
+        "Missing proof's challenge parameter."
+    )]
+    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\", \"challenge\":[false, 2]}]",
+        "Wrong format of proof's challenge parameter"
+    )]
+    // invalid proof challenge
+    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\", \"challenge\":\"1-hash\"}]",
+        "Missing proofValue parameter"
+    )]
+    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\", \"challenge\":\"1-hash\", \"proofValue\":5}]",
+        "Wrong format of proofValue parameter"
+    )]
+    fn test_invalid_proof_parsing(
+        #[case] input_str: String,
+        #[case] error_string: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        assert_trust_did_web_error(
+            DataIntegrityProof::from(input_str),
+            TrustDidWebErrorKind::InvalidIntegrityProof,
+            error_string,
+        );
+
+        Ok(())
+    }
+
     #[rstest]
     fn test_cryptosuite_add_and_verify_proof() -> Result<(), Box<dyn std::error::Error>> {
         // From https://www.w3.org/TR/vc-di-eddsa/#example-credential-without-proof-0
@@ -337,27 +463,6 @@ mod test {
         );
 
         Ok(())
-    }
-
-    /// A rather trivial assertion helper around TrustDidWebError.
-    fn assert_trust_did_web_error(
-        res: Result<(), TrustDidWebError>,
-        expected_kind: TrustDidWebErrorKind,
-        error_contains: &str,
-    ) {
-        assert!(res.is_err());
-        let err = res.err();
-        assert!(err.is_some());
-        let err = err.unwrap();
-        assert_eq!(err.kind(), expected_kind);
-
-        let err_to_string = err.to_string();
-        assert!(
-            err_to_string.contains(error_contains),
-            "expected '{}' is not mentioned in '{}'",
-            error_contains,
-            err_to_string
-        );
     }
 
     #[rstest]
@@ -576,6 +681,23 @@ mod test {
         assert!(old_params.merge_from(&new_params).is_ok());
         new_params.witnesses = None;
         assert!(old_params.merge_from(&new_params).is_ok());
+    }
+
+    #[rstest]
+    #[case("test_data/generated_by_didtoolbox_java/did_1.jsonl")]
+    #[case("test_data/generated_by_didtoolbox_java/did_2.jsonl")]
+    #[case("test_data/generated_by_didtoolbox_java/did_3.jsonl")]
+    #[case("test_data/generated_by_tdw_js/unique_update_keys.jsonl")]
+    fn test_generate_version_id(
+        #[case] did_log_raw_filepath: String,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let did_log_raw = fs::read_to_string(Path::new(&did_log_raw_filepath))?;
+        let did_document = DidDocumentState::from(did_log_raw)?;
+        for did_log in did_document.did_log_entries {
+            let generated_version_id = did_log.build_version_id()?;
+            assert!(generated_version_id == did_log.version_id);
+        }
+        Ok(())
     }
 
     #[rstest]
