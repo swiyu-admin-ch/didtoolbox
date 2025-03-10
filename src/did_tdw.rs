@@ -259,23 +259,17 @@ impl DidDocumentState {
 
         let mut current_params: Option<DidMethodParameters> = None;
         let mut prev_entry: Option<Box<DidLogEntry>> = None;
+
         let mut is_deactivated: bool = false;
-        let mut is_initial: bool = false;
-        // https://identity.foundation/didwebvh/v0.3/#didtdw-did-method-parameters:
-        // A boolean (true / false) indicating if the DID is portable and thus can be renamed to change the Web location of the DID.
-        let mut is_portable: bool = false;
-        // https://identity.foundation/didwebvh/v0.3/#didtdw-did-method-parameters:
-        // A boolean value indicating that subsequent authentication keys added to the DIDDoc (after this version)
-        // MUST have their hash included in a nextKeyHashes parameter item.
-        let mut prerotation: bool = false;
+
         Ok(DidDocumentState {
             did_log_entries: unescaped.split("\n")
                 .filter(|line| !line.is_empty())
                 .map(|line| {
                     if is_deactivated {
                         return Err(TrustDidWebError::InvalidDidDocument(
-                            "Already deactivated".to_string(),
-                        ));
+                            "This DID document is already deactivated. Therefore no additional DID logs are allowed.".to_string()
+                        ))
                     }
 
                     let entry: JsonValue = match serde_json::from_str(line) {
@@ -308,13 +302,7 @@ impl DidDocumentState {
                     let version_index: usize = match version_id.split_once("-") {
                         Some((index, _)) => {
                             match index.parse::<usize>() {
-                                Ok(index) => {
-                                    is_initial = false;
-                                    if index == 1 {
-                                        is_initial = true;
-                                    }
-                                    index
-                                }
+                                Ok(index) => index,
                                 Err(_) => return Err(TrustDidWebError::DeserializationFailed(
                                     "The entry hash format (<versionNumber>-<entryHash>) is valid. However, the <versionNumber> is not an (unsigned) integer.".to_string(),
                                 ))
@@ -351,7 +339,7 @@ impl DidDocumentState {
                             } else if current_params.is_none() && new_params.is_some() { // possibly valid initial entry
 
                                 new_params.to_owned().unwrap()     // a panic-safe unwrap() call (due to previous is_some check)
-                                    .validate(is_initial, prerotation, is_portable)?; // here equiv. to: validate(true, false, false)
+                                    .validate_initial()?; // here equiv. to: validate(true, false, false)
 
                                 new_params.to_owned() // from the initial log entry
                             } else if current_params.is_some() && new_params.is_none() { // no changes, (current) params remain the same
@@ -359,8 +347,7 @@ impl DidDocumentState {
                             } else { // i.e. current_params.is_some() && new_params.is_some()
                                 let mut _current_params = current_params.to_owned().unwrap(); // a panic-safe unwrap() call (due to previous implicit is_some check)
 
-                                _current_params.merge_from(&new_params.to_owned().unwrap());
-                                _current_params.validate(is_initial, prerotation, is_portable)?;
+                                _current_params.merge_from(&new_params.to_owned().unwrap())?;
 
                                 Some(_current_params)
                             }
@@ -388,8 +375,6 @@ impl DidDocumentState {
                             current_params = Some(_current_params);
                         }
                     }
-                    is_portable = current_params.to_owned().is_some_and(|p| p.portable.is_some_and(|d| d));
-                    prerotation = current_params.to_owned().is_some_and(|p| p.prerotation.is_some_and(|d| d));
 
                     let mut did_doc_hash: String = "".to_string();
                     let mut current_did_doc: Option<DidDoc> = None;
@@ -665,7 +650,7 @@ impl TryFrom<String> for TrustDidWebId {
         let domain_and_optional_path = did_tdw_split[3..].join(":").replace(":", "/");
 
         // 5. If the domain contains a port, percent decode the colon.
-        url_escape::decode_to_string(domain_and_optional_path.to_owned(), &mut decoded_url); // Decode percent-encoded bytes such as '%3A' (the percent-encoded semicolon (':') char/byte)
+        url_escape::decode_to_string(&domain_and_optional_path, &mut decoded_url); // Decode percent-encoded bytes such as '%3A' (the percent-encoded semicolon (':') char/byte)
         let url = match String::from_utf8(decoded_url.into_bytes()) {
             Ok(url) => {
                 format!("https://{}", url)

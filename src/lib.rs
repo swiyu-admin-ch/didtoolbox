@@ -312,7 +312,7 @@ mod test {
     fn assert_trust_did_web_error(
         res: Result<(), TrustDidWebError>,
         expected_kind: TrustDidWebErrorKind,
-        error_contains: String,
+        error_contains: &str,
     ) {
         assert!(res.is_err());
         let err = res.err();
@@ -322,7 +322,7 @@ mod test {
 
         let err_to_string = err.to_string();
         assert!(
-            err_to_string.contains(error_contains.as_str()),
+            err_to_string.contains(error_contains),
             "expected '{}' is not mentioned in '{}'",
             error_contains,
             err_to_string
@@ -330,94 +330,221 @@ mod test {
     }
 
     #[rstest]
-    fn test_did_tdw_parameters_validate() {
+    fn test_did_tdw_parameters_validate_initial() {
         let params_for_genesis_did_doc =
             DidMethodParameters::for_genesis_did_doc("scid".to_string(), "update_key".to_string());
-        assert!(params_for_genesis_did_doc
-            .validate(true, false, false) // MUT
-            .is_ok());
-        assert!(params_for_genesis_did_doc
-            .validate(false, false, false) // MUT
-            .is_ok());
+        assert!(params_for_genesis_did_doc.validate_initial().is_ok());
 
-        let mut params = params_for_genesis_did_doc.to_owned(); // reset to minimum
-        params.portable = Some(true); // all it takes to reproduce the behaviour
-        assert!(params.validate(true, false, false).is_ok()); // MUT
+        let mut params = params_for_genesis_did_doc.clone();
+
+        // Test "method" DID parameter
+        params.method = Some("invalidVersion".to_string());
         assert_trust_did_web_error(
-            params.validate(false, false, true), // MUT
+            params.validate_initial(),
             TrustDidWebErrorKind::InvalidDidParameter,
-            "Invalid 'portable' DID parameter. The value can ONLY be set to true in the first log entry, the initial version of the DID.".to_string(),
+            "Invalid 'method' DID parameter.",
         );
+        params.method = None;
         assert_trust_did_web_error(
-            params.validate(false, false, false), // MUT
+            params.validate_initial(),
             TrustDidWebErrorKind::InvalidDidParameter,
-            "Invalid 'portable' DID parameter. Once the value has been set to false, it cannot be set back to true.".to_string(),
+            "Missing 'method' DID parameter.",
         );
 
-        params = params_for_genesis_did_doc.to_owned(); // reset to minimum
-        params.prerotation = Some(false); // all it takes to reproduce the behaviour
+        // Test "scid" DID parameter
+        params = params_for_genesis_did_doc.clone();
+        params.scid = Some("".to_string());
         assert_trust_did_web_error(
-            params.validate(false, true, false), // MUT
+            params.validate_initial(),
             TrustDidWebErrorKind::InvalidDidParameter,
-            // Invalid 'prerotation' DID parameter. Once the value is set to true in a DID log entry it MUST NOT be set to false in a subsequent entry.
-            "Invalid 'prerotation' DID parameter".to_string(),
+            "Invalid 'scid' DID parameter.",
+        );
+        params.scid = None;
+        assert_trust_did_web_error(
+            params.validate_initial(),
+            TrustDidWebErrorKind::InvalidDidParameter,
+            "Missing 'scid' DID parameter.",
         );
 
-        params = DidMethodParameters::empty(); // complete reset
+        // Test "update_keys" DID parameter
+        params = params_for_genesis_did_doc.clone();
+        params.update_keys = Some(vec![]);
         assert_trust_did_web_error(
-            params.validate(true, false, false), // MUT
+            params.validate_initial(),
             TrustDidWebErrorKind::InvalidDidParameter,
-            // Missing 'method' DID parameter. This item MUST appear in the first DID log entry.
-            "Missing 'method' DID parameter".to_string(),
+            "Empty 'updateKeys' DID parameter.",
+        );
+        params.update_keys = None;
+        assert_trust_did_web_error(
+            params.validate_initial(),
+            TrustDidWebErrorKind::InvalidDidParameter,
+            "Missing 'updateKeys' DID parameter.",
         );
 
-        params.method = Some("".to_string()); // all it takes to reproduce the behaviour
+        // Test "portable" DID parameter
+        params = params_for_genesis_did_doc.clone();
+        params.portable = Some(true);
         assert_trust_did_web_error(
-            params.validate(true, false, false), // MUT
+            params.validate_initial(),
             TrustDidWebErrorKind::InvalidDidParameter,
-            // Invalid 'method' DID parameter. Expected '{DID_METHOD_PARAMETER_VERSION}'
-            "Invalid 'method' DID parameter".to_string(),
+            "Unsupported 'portable' DID parameter",
+        );
+        params.portable = Some(false);
+        assert!(params.validate_initial().is_ok());
+        params.portable = None;
+        assert!(params.validate_initial().is_ok());
+
+        // Test "prerotation" DID parameter
+        params = params_for_genesis_did_doc.clone();
+        params.prerotation = Some(true);
+        assert_trust_did_web_error(
+            params.validate_initial(),
+            TrustDidWebErrorKind::InvalidDidParameter,
+            "Unsupported 'prerotation' DID parameter",
+        );
+        params.prerotation = Some(false);
+        assert!(params.validate_initial().is_ok());
+        params.prerotation = None;
+        assert!(params.validate_initial().is_ok());
+
+        // Test "next_keys" DID parameter
+        params = params_for_genesis_did_doc.clone();
+        params.next_keys = Some(vec!["some_valid_key".to_string()]);
+        assert_trust_did_web_error(
+            params.validate_initial(),
+            TrustDidWebErrorKind::InvalidDidParameter,
+            "Unsupported non-empty 'nextKeyHashes' DID parameter",
+        );
+        params.next_keys = Some(vec![]);
+        assert!(params.validate_initial().is_ok());
+        params.next_keys = None;
+        assert!(params.validate_initial().is_ok());
+
+        // Test "witnesses" DID parameter
+        params = params_for_genesis_did_doc.clone();
+        params.witnesses = Some(vec!["some_valid_witness".to_string()]);
+        assert_trust_did_web_error(
+            params.validate_initial(),
+            TrustDidWebErrorKind::InvalidDidParameter,
+            "Unsupported non-empty 'witnesses' DID parameter.",
+        );
+        params.witnesses = Some(vec![]);
+        assert!(params.validate_initial().is_ok());
+        params.witnesses = None;
+        assert!(params.validate_initial().is_ok());
+    }
+
+    #[rstest]
+    fn test_did_tdw_parameters_validate_transition() {
+        let base_params =
+            DidMethodParameters::for_genesis_did_doc("scid".to_string(), "update_key".to_string());
+
+        let mut old_params = base_params.clone();
+        let mut new_params = base_params.clone();
+        assert!(old_params.merge_from(&new_params).is_ok());
+
+        // Test "method" DID parameter
+        old_params = base_params.clone();
+        new_params = base_params.clone();
+        new_params.method = Some("invalidVersion".to_string());
+        assert_trust_did_web_error(
+            old_params.merge_from(&new_params),
+            TrustDidWebErrorKind::InvalidDidParameter,
+            "Invalid 'method' DID parameter.",
+        );
+        new_params.method = None;
+        assert!(old_params.merge_from(&new_params).is_ok());
+        // Test "scid" DID parameter
+        old_params = old_params.clone();
+        new_params = new_params.clone();
+        new_params.scid = Some("otherSCID".to_string());
+        assert_trust_did_web_error(
+            old_params.merge_from(&new_params),
+            TrustDidWebErrorKind::InvalidDidParameter,
+            "Invalid 'scid' DID parameter.",
+        );
+        new_params.scid = None;
+        assert!(old_params.merge_from(&new_params).is_ok());
+        new_params.scid = Some("scid".to_string()); // SAME scid value
+        assert!(old_params.merge_from(&new_params).is_ok());
+
+        // Test "update_keys" DID parameter
+        old_params = base_params.clone();
+        new_params = base_params.clone();
+        new_params.update_keys = Some(vec!["newUpdateKey".to_string()]);
+        assert!(old_params.merge_from(&new_params).is_ok());
+        new_params.update_keys = None;
+        assert!(old_params.merge_from(&new_params).is_ok());
+        new_params.update_keys = Some(vec![]);
+        assert!(old_params.merge_from(&new_params).is_ok());
+
+        // Test "portable" DID parameter
+        old_params = base_params.clone();
+        new_params = base_params.clone();
+
+        new_params.portable = Some(true);
+        assert_trust_did_web_error(
+            old_params.merge_from(&new_params),
+            TrustDidWebErrorKind::InvalidDidParameter,
+            "Invalid 'portable' DID parameter.",
+        );
+        new_params.portable = Some(false);
+        assert!(old_params.merge_from(&new_params).is_ok());
+        new_params.portable = None;
+        assert!(old_params.merge_from(&new_params).is_ok());
+        new_params.portable = Some(true);
+        old_params.portable = Some(true);
+        assert_trust_did_web_error(
+            old_params.merge_from(&new_params),
+            TrustDidWebErrorKind::InvalidDidParameter,
+            "Unsupported 'portable' DID parameter.",
         );
 
-        params = params_for_genesis_did_doc.to_owned(); // reset to minimum
-        params.scid = None; // all it takes to reproduce the behaviour
+        // Test "prerotation" DID parameter
+        old_params = base_params.clone();
+        new_params = base_params.clone();
+        old_params.prerotation = Some(true);
+        new_params.prerotation = Some(false);
         assert_trust_did_web_error(
-            params.validate(true, false, false), // MUT
+            old_params.merge_from(&new_params),
             TrustDidWebErrorKind::InvalidDidParameter,
-            // Missing 'scid' DID parameter. This item MUST appear in the first DID log entry.
-            "Missing 'scid' DID parameter".to_string(),
+            "Invalid 'prerotation' DID parameter.",
         );
+        old_params.prerotation = Some(true);
+        new_params.prerotation = Some(true);
+        assert!(old_params.merge_from(&new_params).is_ok());
+        old_params.prerotation = Some(false);
+        new_params.prerotation = Some(false);
+        assert!(old_params.merge_from(&new_params).is_ok());
+        old_params.prerotation = Some(false);
+        new_params.prerotation = Some(true);
+        assert!(old_params.merge_from(&new_params).is_ok());
+        new_params.prerotation = None;
+        assert!(old_params.merge_from(&new_params).is_ok());
 
-        params = params_for_genesis_did_doc.to_owned(); // reset to minimum
-        params.update_keys = None; // all it takes to reproduce the behaviour
-        assert_trust_did_web_error(
-            params.validate(true, false, false), // MUT
-            TrustDidWebErrorKind::InvalidDidParameter,
-            // Missing 'updateKeys' DID parameter. This item MUST appear in the first DID log entry.
-            "Missing 'updateKeys' DID parameter".to_string(),
-        );
+        // Test "next_keys" DID parameter
+        old_params = base_params.clone();
+        new_params = base_params.clone();
+        new_params.next_keys = Some(vec!["newUpdateKeyHash".to_string()]);
+        assert!(old_params.merge_from(&new_params).is_ok());
+        new_params.next_keys = None;
+        assert!(old_params.merge_from(&new_params).is_ok());
+        new_params.next_keys = Some(vec![]);
+        assert!(old_params.merge_from(&new_params).is_ok());
 
-        params = params_for_genesis_did_doc.to_owned(); // reset to minimum
-        params.update_keys = Some(vec![]); // all it takes to reproduce the behaviour
+        // Test "witnesses" DID parameter
+        old_params = base_params.clone();
+        new_params = base_params.clone();
+        new_params.witnesses = Some(vec!["some_valid_witness".to_string()]);
         assert_trust_did_web_error(
-            params.validate(true, false, false), // MUT
+            old_params.merge_from(&new_params),
             TrustDidWebErrorKind::InvalidDidParameter,
-            // Empty 'updateKeys' DID parameter detected. This item MUST appear in the first DID log entry.
-            "Empty 'updateKeys' DID parameter".to_string(),
+            "Unsupported non-empty 'witnesses' DID parameter.",
         );
-
-        params = params_for_genesis_did_doc.to_owned(); // reset to minimum
-        params.witnesses = Some(vec![]); // unsupported, but empty and therefore OK
-        assert!(params
-            .validate(true, false, false) // MUT (the method args are irrelevant for the parameter)
-            .is_ok());
-        params.witnesses = Some(vec!["witness".to_string()]); // all it takes to reproduce the behaviour
-        assert_trust_did_web_error(
-            params.validate(true, false, false), // MUT (the method args are irrelevant for the parameter)
-            TrustDidWebErrorKind::InvalidDidParameter,
-            // Unsupported non-empty 'witnesses' DID parameter
-            "Unsupported non-empty 'witnesses' DID parameter".to_string(),
-        );
+        new_params.witnesses = Some(vec![]);
+        assert!(old_params.merge_from(&new_params).is_ok());
+        new_params.witnesses = None;
+        assert!(old_params.merge_from(&new_params).is_ok());
     }
 
     #[rstest]
@@ -573,6 +700,8 @@ mod test {
         let err = err.unwrap();
         assert_eq!(err.kind(), TrustDidWebErrorKind::InvalidDidDocument);
         // e.g. "invalid DID log integration proof: Key extracted from proof is not authorized for update: z6Mkwf4PgXLq8sRfucTggtZXmigKZP7gQhFamk3XHGV54QvF"
-        assert!(err.to_string().contains("Already deactivated"));
+        assert!(err
+            .to_string()
+            .contains("This DID document is already deactivated"));
     }
 }
