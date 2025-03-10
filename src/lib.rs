@@ -249,6 +249,10 @@ mod test {
             }
         );
 
+        let scid = JcsSha256Hasher::default()
+            .base58btc_encode_multihash(&credential_without_proof)
+            .unwrap();
+
         // From https://www.w3.org/TR/vc-di-eddsa/#example-proof-options-document-1
         let options = CryptoSuiteProofOptions::new(
             None,
@@ -259,7 +263,7 @@ mod test {
                 "https://www.w3.org/ns/credentials/v2".to_string(),
                 "https://www.w3.org/ns/credentials/examples/v2".to_string(),
             ]),
-            None,
+            format!("1-{}", scid),
         );
 
         // From https://www.w3.org/TR/vc-di-eddsa/#example-private-and-public-keys-for-signature-1
@@ -272,7 +276,7 @@ mod test {
             )?),
         };
 
-        let secured_document = suite.add_proof(&credential_without_proof, None, &options)?;
+        let secured_document = suite.add_proof(&credential_without_proof, &options)?;
 
         assert!(
             !secured_document.is_null(),
@@ -299,9 +303,7 @@ mod test {
         let proof_as_string = serde_json::to_string(proof)?;
         let data_integrity_proof = DataIntegrityProof::from(proof_as_string)?;
         assert!(
-            suite
-                .verify_proof(&data_integrity_proof, options.context, &doc_hash)
-                .is_ok(),
+            suite.verify_proof(&data_integrity_proof, &doc_hash).is_ok(),
             "Sanity check failed"
         );
 

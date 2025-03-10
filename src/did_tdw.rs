@@ -138,7 +138,7 @@ impl DidLogEntry {
                         signing_key: None,
                     };
 
-                    cryptosuite.verify_proof(proof, None, self.did_doc_hash.as_str())?
+                    cryptosuite.verify_proof(proof, self.did_doc_hash.as_str())?
                 }
             }
         };
