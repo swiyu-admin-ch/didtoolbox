@@ -29,6 +29,7 @@ regex = "1.11.1"
 url-escape = "0.1.1"
 bs58 = { version = "0.5.1", features = ["check", "cb58"] }
 thiserror = "2.0.11"
+url = "2.5.4"
 
 [build-dependencies]
 uniffi = { version = "0.28.3", features = ["build"] }

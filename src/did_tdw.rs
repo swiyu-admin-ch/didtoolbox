@@ -17,6 +17,7 @@ use serde_json::{
 };
 use std::cmp::PartialEq;
 use std::sync::{Arc, LazyLock};
+use url::Url;
 use url_escape;
 
 pub const SCID_PLACEHOLDER: &str = "{SCID}";
@@ -642,42 +643,51 @@ impl TryFrom<String> for TrustDidWebId {
             ));
         };
 
-        let mut decoded_url = String::from("");
         // https://identity.foundation/didwebvh/v0.3/#the-did-to-https-transformation:
         // 1. Remove the literal did:tdw: prefix from the DID, leaving the method specific identifier.
         // 2. Remove the SCID by removing the text up to and including the first colon (<scid>:) from the method-specific identifier and continue processing.
         // 3. Replace : with / in the method-specific identifier to obtain the fully qualified domain name and optional path.
-        let domain_and_optional_path = did_tdw_split[3..].join(":").replace(":", "/");
+        let domain_and_optional_path = did_tdw_split[3].replace(":", "/");
 
         // 5. If the domain contains a port, percent decode the colon.
-        url_escape::decode_to_string(&domain_and_optional_path, &mut decoded_url); // Decode percent-encoded bytes such as '%3A' (the percent-encoded semicolon (':') char/byte)
-        let url = match String::from_utf8(decoded_url.into_bytes()) {
-            Ok(url) => {
-                format!("https://{}", url)
-            }
-            Err(_) => {
+        let decoded_url = domain_and_optional_path.replace("%3A", ":"); // Decode percent-encoded byte '%3A' (the percent-encoded semicolon (':') char/byte)
+
+        // 6. Generate an HTTPS URL to the expected location of the DIDDoc by prepending https://.
+        let url_string = format!("https://{}", decoded_url);
+
+        let mut url = match Url::parse(&url_string) {
+            Ok(url) => url,
+            Err(err) => {
                 return Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(
-                    domain_and_optional_path.to_string(),
+                    format!("Not a valid URL: {}", err),
                 ))
             }
         };
 
-        if HAS_PATH_REGEX.captures(url.as_str()).is_some()
-            || HAS_PORT_REGEX.captures(url.as_str()).is_some()
-        {
-            // 7. Append /did.jsonl to complete the URL.
-            Ok(Self {
-                scid: scid.to_string(),
-                url: format!("{}/did.jsonl", url),
-            })
-        } else {
-            // 4. If there is no optional path, append '/.well-known' to the URL.
-            // 7. Append /did.jsonl to complete the URL.
-            Ok(Self {
-                scid: scid.to_string(),
-                url: format!("{}/.well-known/did.jsonl", url),
-            })
-        }
+        let has_no_url_path = url.path().is_empty() || url.path() == "/";
+        // get an object with methods to manipulate this URL’s path segments
+        match url.path_segments_mut() {
+            Ok(mut path_segments) => {
+                if has_no_url_path {
+                    // 4. If there is no optional path, append '/.well-known' to the URL.
+                    path_segments.push(".well-known");
+                }
+
+                // 7. Append /did.jsonl to complete the URL.
+                path_segments.push("did.jsonl");
+            }
+            Err(_) => {
+                // path_segments_mut "Return Err(()) if this URL is cannot-be-a-base."
+                return Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(
+                    "This URL cannot-be-a-base".to_string(),
+                ));
+            }
+        };
+
+        Ok(Self {
+            scid: scid.to_string(),
+            url: url.to_string(),
+        })
     }
 }
 

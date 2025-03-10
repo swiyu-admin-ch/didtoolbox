@@ -81,18 +81,41 @@ mod test {
         Ed25519KeyPair::generate()
     }
 
+    // The first four testcases come from: https://identity.foundation/didwebvh/v0.3/#example-7
     #[rstest]
+    #[case(
+        "did:tdw:{SCID}:example.com",
+        "https://example.com/.well-known/did.jsonl"
+    )]
+    #[case(
+        "did:tdw:{SCID}:issuer.example.com",
+        "https://issuer.example.com/.well-known/did.jsonl"
+    )]
+    #[case(
+        "did:tdw:{SCID}:example.com:dids:issuer",
+        "https://example.com/dids/issuer/did.jsonl"
+    )]
+    #[case(
+        "did:tdw:{SCID}:example.com%3A3000:dids:issuer",
+        "https://example.com:3000/dids/issuer/did.jsonl"
+    )]
     #[case(
         "did:tdw:QMySCID:localhost%3A8000:123:456",
         "https://localhost:8000/123/456/did.jsonl"
     )]
-    #[case("did:tdw:QMySCID:localhost%3A8000", "https://localhost:8000/did.jsonl")]
+    #[case(
+        "did:tdw:QMySCID:localhost%3A8000",
+        "https://localhost:8000/.well-known/did.jsonl"
+    )]
     #[case("did:tdw:QMySCID:localhost", "https://localhost/.well-known/did.jsonl")]
     #[case(
         "did:tdw:QMySCID:admin.ch%3A8000:123:456",
         "https://admin.ch:8000/123/456/did.jsonl"
     )]
-    #[case("did:tdw:QMySCID:admin.ch%3A8000", "https://admin.ch:8000/did.jsonl")]
+    #[case(
+        "did:tdw:QMySCID:admin.ch%3A8000",
+        "https://admin.ch:8000/.well-known/did.jsonl"
+    )]
     #[case("did:tdw:QMySCID:admin.ch", "https://admin.ch/.well-known/did.jsonl")]
     #[case(
         "did:tdw:QMySCID:sub.admin.ch",
@@ -102,6 +125,11 @@ mod test {
         "did:tdw:QMySCID:sub.admin.ch:mypath:mytrala",
         "https://sub.admin.ch/mypath/mytrala/did.jsonl"
     )]
+    #[case("did:tdw:QMySCID:localhost:%2A", "https://localhost/%2A/did.jsonl")]
+    #[case(
+        "did:tdw:QMySCID:localhost:.hidden",
+        "https://localhost/.hidden/did.jsonl"
+    )]
     fn test_tdw_to_url_conversion(#[case] tdw: String, #[case] url: String) {
         let tdw = TrustDidWebId::parse_did(tdw).unwrap();
         let resolved_url = tdw.get_url();
@@ -110,6 +138,7 @@ mod test {
 
     #[rstest]
     #[case("did:xyz:QMySCID:localhost%3A8000:123:456")]
+    #[case("url:tdw:QMySCID:localhost%3A8000:123:456")]
     fn test_tdw_to_url_conversion_error_kind_method_not_supported(#[case] tdw: String) {
         match TrustDidWebId::parse_did(tdw) {
             Err(e) => assert_eq!(
