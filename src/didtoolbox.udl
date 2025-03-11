@@ -17,17 +17,10 @@ enum TrustDidWebIdResolutionError {
 /// "The did:tdw method-specific identifier contains both the self-certifying identifier (SCID) for the DID,
 /// and a fully qualified domain name (with an optional path) that is secured by a TLS/SSL certificate."
 interface TrustDidWebId {
-    /// The DEPRECATED (non-empty) constructor in charge of DID parsing.
-    ///
-    /// DEPRECATED: Please, use parse_did method instead.
-    ///
-    /// CAUTION Calling any of the available getters should take place after this method is called, not earlier.
-    [Name=parse_did_tdw, Throws=TrustDidWebIdResolutionError]
-    constructor(string did_tdw, boolean? allow_http);
     /// The only (non-empty) constructor in charge of DID parsing.
     ///
     /// CAUTION Calling any of the available getters should take place after this method is called, not earlier.
-    [Name=parse_did, Throws=TrustDidWebIdResolutionError]
+    [Name=parse_did_tdw, Throws=TrustDidWebIdResolutionError]
     constructor(string did_tdw);
     /// Returns the SCID part from the supplied DID.
     string get_scid();
@@ -58,10 +51,7 @@ enum TrustDidWebError {
 };
 
 interface TrustDidWeb {
-    /// DEPRECATED: Please, use read_log(String, String) method instead.
     [Name=read, Throws=TrustDidWebError]
-    constructor(string did_tdw, string did_log, boolean? allow_http);
-    [Name=read_log, Throws=TrustDidWebError]
     constructor(string did_tdw, string did_log);
     string get_did();
     string get_did_log();
