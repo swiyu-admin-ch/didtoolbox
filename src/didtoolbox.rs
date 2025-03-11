@@ -316,10 +316,11 @@ impl DidDoc {
     }
 
     pub fn normalize(&self) -> DidDocNormalized {
-        let mut controller: Option<String> = None;
-        if !self.controller.is_empty() {
-            controller = Some(self.controller.first().unwrap().clone());
-        }
+        let controller: Option<String> = match self.controller.first() {
+            Some(controller) => Some(controller.clone()),
+            None => None,
+        };
+
         let mut did_doc_norm = DidDocNormalized {
             context: self.context.clone(), // vec![],
             id: self.id.clone(),

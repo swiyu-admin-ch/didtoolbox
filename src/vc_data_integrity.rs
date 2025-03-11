@@ -6,7 +6,9 @@ use crate::jcs_sha256_hasher::JcsSha256Hasher;
 use chrono::{serde::ts_seconds, DateTime, SecondsFormat, Utc};
 use hex;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value::String as JsonString};
+use serde_json::{
+    json, Value::Array as JsonArray, Value::Null as JsonNull, Value::String as JsonString,
+};
 use std::ops::Deref;
 
 #[derive(Clone, Debug)]
@@ -37,11 +39,11 @@ impl std::fmt::Display for CryptoSuiteType {
 pub struct CryptoSuiteProofOptions {
     pub proof_type: String,
     pub crypto_suite: CryptoSuiteType,
-    pub created: Option<DateTime<Utc>>,
+    pub created: DateTime<Utc>,
     pub verification_method: String,
     pub proof_purpose: String,
     pub context: Option<Vec<String>>,
-    pub challenge: Option<String>,
+    pub challenge: String,
 }
 
 impl CryptoSuiteProofOptions {
@@ -54,17 +56,21 @@ impl CryptoSuiteProofOptions {
         verification_method: String,
         proof_purpose: Option<String>,
         context: Option<Vec<String>>,
-        challenge: Option<String>,
+        challenge: String,
     ) -> Self {
         let mut options = Self::default();
         if let Some(crypto_suite) = crypto_suite {
             options.crypto_suite = crypto_suite;
         }
-        options.created = created; // fallback to current datetime
+        if let Some(created) = created {
+            options.created = created; // otherwise take current time
+        }
+
         options.verification_method = verification_method;
         if let Some(purpose) = proof_purpose {
             options.proof_purpose = purpose;
         }
+
         options.context = context;
         options.challenge = challenge;
         options
@@ -80,11 +86,11 @@ impl CryptoSuiteProofOptions {
         CryptoSuiteProofOptions {
             proof_type: "DataIntegrityProof".to_string(),
             crypto_suite: CryptoSuiteType::EddsaJcs2022,
-            created: None, // fallback to current datetime
+            created: Utc::now(), // fallback to current datetime
             verification_method: String::from(""),
             proof_purpose: "authentication".to_string(),
             context: None,
-            challenge: None,
+            challenge: String::from(""),
         }
     }
 }
@@ -107,6 +113,7 @@ pub struct DataIntegrityProof {
     pub verification_method: String,
     #[serde(rename = "proofPurpose")]
     pub proof_purpose: String,
+    pub context: Option<Vec<String>>,
     pub challenge: String,
     #[serde(rename = "proofValue")]
     pub proof_value: String,
@@ -115,23 +122,31 @@ impl DataIntegrityProof {
     /// The non-empty parsing constructor featuring validation in terms of supported type/proofPurpose/cryptosuite
     pub fn from(json: String) -> Result<Self, TrustDidWebError> {
         let value = match serde_json::from_str(&json) {
-            Ok(serde_json::Value::Array(entry)) => {
-                if entry.is_empty() {
+            Ok(JsonArray(entry)) => {
+                if entry.len() > 1 {
                     return Err(TrustDidWebError::InvalidDataIntegrityProof(
-                        "Empty proof array detected".to_string(),
+                        "A single proof is currently supported.".to_string(),
                     ));
                 }
-                entry.first().unwrap().clone()
+
+                match entry.first() {
+                    Some(first) => first.clone(),
+                    None => {
+                        return Err(TrustDidWebError::InvalidDataIntegrityProof(
+                            "Empty proof array detected.".to_string(),
+                        ))
+                    }
+                }
             }
             Err(e) => {
-                return Err(TrustDidWebError::DeserializationFailed(format!(
-                    "Malformed proof array detected: {}",
+                return Err(TrustDidWebError::InvalidDataIntegrityProof(format!(
+                    "Malformed proof format, expected single-element JSON array: {}",
                     e
                 )))
             }
             _ => {
-                return Err(TrustDidWebError::DeserializationFailed(
-                    "Malformed proof format, expected array".to_string(),
+                return Err(TrustDidWebError::InvalidDataIntegrityProof(
+                    "Malformed proof format, expected single-element JSON array".to_string(),
                 ))
             }
         };
@@ -169,8 +184,15 @@ impl DataIntegrityProof {
             },
             crypto_suite_type: Some(CryptoSuiteType::EddsaJcs2022), // the only currently supported cryptosuite
             created: match value["created"] {
-                JsonString(ref s) => DateTime::parse_from_rfc3339(s).unwrap().to_utc(),
-                _ => Utc::now(),
+                JsonString(ref s) => match DateTime::parse_from_rfc3339(s) {
+                    Ok(date) => date.to_utc(),
+                    Err(err) => return Err(TrustDidWebError::InvalidDataIntegrityProof(
+                        format!("Invalid proof's creation datetime format: {}", err),
+                    ))
+                },
+                _ =>  return Err(TrustDidWebError::InvalidDataIntegrityProof(
+                    "Missing proof's creation datetime.".to_string(),
+                )),
             },
             verification_method: match value["verificationMethod"] {
                 JsonString(ref s) => {
@@ -204,26 +226,66 @@ impl DataIntegrityProof {
                     ))
                 }
             },
+            context: match value["@context"].to_owned() {
+                JsonArray(arr) => {
+                    Some(
+                        arr.into_iter()
+                            .try_fold(Vec::new(), |mut acc, val| match val {
+                                JsonString(s) => {
+                                    acc.push(s);
+                                    Ok(acc)
+                                }
+                                _ => Err(TrustDidWebError::InvalidDataIntegrityProof(
+                                    "Invalid type of 'context' entry, expected a string."
+                                        .to_string(),
+                                )),
+                            })?,
+                    )
+                }
+                JsonNull => None,
+                _ => return Err(TrustDidWebError::InvalidDataIntegrityProof(
+                    "Invalid format of 'context' entry, expected array of strings.".to_string(),
+                )),
+            },
             challenge: match value["challenge"] {
                 JsonString(ref s) => s.to_string(),
-                _ => String::from(""), // panic!("Missing proof's challenge"),
+                JsonNull => return Err(TrustDidWebError::InvalidDataIntegrityProof(
+                    "Missing proof's challenge parameter. Expected a challenge of type string.".to_string(),
+                )),
+                _ => return Err(TrustDidWebError::InvalidDataIntegrityProof(
+                    "Wrong format of proof's challenge parameter. Expected a challenge of type string.".to_string(),
+                ))
             },
             proof_value: match value["proofValue"] {
                 JsonString(ref s) => s.to_string(),
-                _ => String::from(""),
+                JsonNull => return Err(TrustDidWebError::InvalidDataIntegrityProof(
+                    "Missing proofValue parameter. Expected a proofValue of type string.".to_string(),
+                )),
+                _ => return Err(TrustDidWebError::InvalidDataIntegrityProof(
+                    "Wrong format of proofValue parameter. Expected a proofValue of type string.".to_string(),
+                ))
             },
         })
     }
 
     /// Construct a serde_json::Value from this DataIntegrityProof
-    pub fn json_value(&self) -> serde_json::Value {
-        let mut value = serde_json::to_value(self).unwrap();
+    pub fn json_value(&self) -> Result<serde_json::Value, TrustDidWebError> {
+        let mut value = match serde_json::to_value(self) {
+            Ok(v) => v,
+            Err(err) => {
+                return Err(TrustDidWebError::SerializationFailed(format!(
+                    "Could not serialize proof:{}",
+                    err
+                )))
+            }
+        };
+
         value["created"] = serde_json::Value::String(
             self.created
                 .to_rfc3339_opts(SecondsFormat::Secs, true)
                 .to_string(),
         );
-        value
+        Ok(value)
     }
 
     /// Delivers first available update key
@@ -283,7 +345,6 @@ pub trait VCDataIntegrity {
     fn verify_proof(
         &self,
         proof: &DataIntegrityProof,
-        context: Option<Vec<String>>,
         doc_hash: &str,
     ) -> Result<(), TrustDidWebError>;
 }
@@ -301,6 +362,9 @@ impl VCDataIntegrity for EddsaJcs2022Cryptosuite {
         unsecured_document: &serde_json::Value,
         options: &CryptoSuiteProofOptions,
     ) -> Result<serde_json::Value, TrustDidWebError> {
+        // According to https://www.w3.org/TR/vc-di-eddsa/#proof-configuration-eddsa-jcs-2022:
+        // If proofConfig.type is not set to DataIntegrityProof or proofConfig.cryptosuite is not set to eddsa-jcs-2022,
+        // an error MUST be raised that SHOULD convey an error type of PROOF_GENERATION_ERROR.
         if !matches!(options.crypto_suite, CryptoSuiteType::EddsaJcs2022) {
             return Err(TrustDidWebError::InvalidDataIntegrityProof(format!(
                 "Unsupported proof's cryptosuite. Only '{}' is supported",
@@ -313,12 +377,10 @@ impl VCDataIntegrity for EddsaJcs2022Cryptosuite {
             ));
         }
 
-        let created = match options.created {
-            None => Utc::now()
-                .to_rfc3339_opts(SecondsFormat::Secs, true)
-                .to_string(),
-            Some(v) => v.to_rfc3339_opts(SecondsFormat::Secs, true).to_string(),
-        };
+        let created = options
+            .created
+            .to_rfc3339_opts(SecondsFormat::Secs, true)
+            .to_string();
 
         // See https://www.w3.org/TR/vc-di-eddsa/#proof-configuration-eddsa-jcs-2022
         let mut proof_without_proof_value = json!({
@@ -327,25 +389,46 @@ impl VCDataIntegrity for EddsaJcs2022Cryptosuite {
             "created": created,
             "verificationMethod": options.verification_method,
             "proofPurpose": options.proof_purpose,
+            "challenge": options.challenge,
         });
+
         if let Some(ctx) = &options.context {
             proof_without_proof_value["@context"] = json!(ctx);
         }
-        if let Some(challenge) = &options.challenge {
-            proof_without_proof_value["challenge"] = json!(challenge);
-        }
 
         // See https://www.w3.org/TR/vc-di-eddsa/#hashing-eddsa-jcs-2022
-        let proof_hash = JcsSha256Hasher::default()
-            .encode_hex(&proof_without_proof_value)
-            .unwrap(); // should never panic
-        let doc_hash = JcsSha256Hasher::default()
-            .encode_hex(unsecured_document)
-            .unwrap();
+        let proof_hash = match JcsSha256Hasher::default().encode_hex(&proof_without_proof_value) {
+            Ok(proof_hash) => proof_hash,
+            Err(err) => {
+                return Err(TrustDidWebError::InvalidDataIntegrityProof(format!(
+                    "Could not serialize proof: {}",
+                    err
+                )))
+            }
+        };
+        let doc_hash = match JcsSha256Hasher::default().encode_hex(unsecured_document) {
+            Ok(doc_hash) => doc_hash,
+            Err(err) => {
+                return Err(TrustDidWebError::InvalidDataIntegrityProof(format!(
+                    "Could not serialize document for hash generation: {}",
+                    err
+                )))
+            }
+        };
+
         let hash_data = proof_hash + &doc_hash; // CAUTION is actually hex-encoded at this point
+        let decoded_hex_data = match hex::decode(hash_data) {
+            Ok(hex_data) => hex_data,
+            Err(err) => {
+                return Err(TrustDidWebError::InvalidDataIntegrityProof(format!(
+                    "Unable to decode created hash: {}",
+                    err
+                )))
+            }
+        };
 
         let signature = match &self.signing_key {
-            Some(signing_key) => signing_key.sign_bytes(hex::decode(hash_data).unwrap().deref()),
+            Some(signing_key) => signing_key.sign_bytes(decoded_hex_data.deref()),
             None => return Err(TrustDidWebError::InvalidDataIntegrityProof(
                 "Invalid eddsa cryptosuite. Signing key is missing but required for proof creation"
                     .to_string(),
@@ -353,7 +436,8 @@ impl VCDataIntegrity for EddsaJcs2022Cryptosuite {
         };
         //let signature_hex = hex::encode(signature.signature.to_bytes()); // checkpoint
 
-        proof_without_proof_value["proofValue"] = JsonString(signature.to_multibase()); // finally, it's got one!
+        let proof_value = signature.to_multibase();
+        proof_without_proof_value["proofValue"] = JsonString(proof_value);
         let mut secured_document = unsecured_document.clone();
         secured_document["proof"] = json!([proof_without_proof_value]);
         Ok(secured_document)
@@ -365,37 +449,50 @@ impl VCDataIntegrity for EddsaJcs2022Cryptosuite {
     fn verify_proof(
         &self,
         proof: &DataIntegrityProof,
-        context: Option<Vec<String>>,
         doc_hash: &str,
     ) -> Result<(), TrustDidWebError> {
         let proof_value = &proof.proof_value;
 
-        // CAUTION Beware that only serde_json::json macro is able to serialize "created" field properly!
+        let created = proof
+            .created
+            .to_rfc3339_opts(SecondsFormat::Secs, true)
+            .to_string();
+
+        // CAUTION Beware that only serde_json::json macro is able to serialize proof.created field properly (if used directly)!
         //         (thanks to #[serde(with = "ts_seconds")])
         let mut proof_without_proof_value = json!({
             "type": proof.proof_type,
             "cryptosuite": proof.crypto_suite,
-            "created": proof.created,
+            // The proof.created is not used directly here, due to more error-prone conversion that requires #[serde(with = "ts_seconds")] attribute
+            "created": created,
             "verificationMethod": proof.verification_method,
             "proofPurpose": proof.proof_purpose,
+            "challenge": proof.challenge, // EIDSYS-429
         });
-        if let Some(ctx) = context {
+        if let Some(ctx) = &proof.context {
             proof_without_proof_value["@context"] = json!(ctx);
-        }
-        if !proof.challenge.is_empty() {
-            proof_without_proof_value["challenge"] = json!(proof.challenge);
         }
 
         // See https://www.w3.org/TR/vc-di-eddsa/#hashing-eddsa-jcs-2022
-        let proof_hash = JcsSha256Hasher::default()
-            .encode_hex(&proof_without_proof_value)
-            .unwrap(); // should never panic
+        let proof_hash = match JcsSha256Hasher::default().encode_hex(&proof_without_proof_value) {
+            Ok(proof_hash) => proof_hash,
+            Err(err) => {
+                return Err(TrustDidWebError::InvalidDataIntegrityProof(format!(
+                    "Could not serialize proof: {}",
+                    err
+                )))
+            }
+        };
         let hash_data = proof_hash + doc_hash;
         let signature = Ed25519Signature::from_multibase(proof_value.as_str())?;
-        //let signature_hex = hex::encode(signature.signature.to_bytes()); // checkpoint
         match self.verifying_key {
             Some(ref verifying_key) => {
-                let hash_data_decoded: [u8; 64] = hex::FromHex::from_hex(hash_data).unwrap();
+                let hash_data_decoded: [u8; 64] = match hex::FromHex::from_hex(hash_data) {
+                    Ok(decoded_hash) => decoded_hash,
+                    Err(_) => return Err(TrustDidWebError::InvalidDataIntegrityProof(
+                        "Cannot decode hash value from hex.".to_string()
+                    ))
+                };
                 // Strictly verify a signature on a message with this keypair's public key.
                 // It may respond with: "signature error: Verification equation was not satisfied"
                 verifying_key.verifying_key.verify_strict(&hash_data_decoded, &signature.signature)
