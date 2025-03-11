@@ -607,7 +607,7 @@ static HAS_PATH_REGEX: LazyLock<Regex> =
 static HAS_PORT_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\:[0-9]+").unwrap());
 
 impl TrustDidWebId {
-    const DID_METHOD_NAME: &'static str = "tdw";
+    pub const DID_METHOD_NAME: &'static str = "tdw";
 
     /// Yet another UniFFI-compliant method.
     ///
@@ -801,7 +801,7 @@ impl TrustDidWeb {
     pub fn get_did_doc_obj(&self) -> Result<Arc<DidDoc>, TrustDidWebError> {
         let did_doc_json = self.did_doc.clone();
         match json_from_str::<DidDoc>(&did_doc_json) {
-            Ok(x) => Ok(x.into()),
+            Ok(doc) => Ok(doc.into()),
             Err(e) => Err(TrustDidWebError::DeserializationFailed(e.to_string())),
         }
     }
