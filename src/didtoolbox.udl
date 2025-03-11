@@ -66,6 +66,8 @@ interface TrustDidWeb {
     string get_did();
     string get_did_log();
     string get_did_doc();
+    [Throws=TrustDidWebError]
+    DidDoc get_did_doc_obj();
 };
 
 interface Ed25519Signature {

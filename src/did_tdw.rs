@@ -820,6 +820,15 @@ impl TrustDidWeb {
         self.did_doc.clone()
     }
 
+    /// Yet another UniFFI-compliant method.
+    pub fn get_did_doc_obj(&self) -> Result<Arc<DidDoc>, TrustDidWebError> {
+        let did_doc_json = self.did_doc.clone();
+        match json_from_str::<DidDoc>(&did_doc_json) {
+            Ok(x) => Ok(x.into()),
+            Err(e) => Err(TrustDidWebError::DeserializationFailed(e.to_string())),
+        }
+    }
+
     #[deprecated(since = "1.0.3", note = "please use the `read_log` method instead")]
     pub fn read(
         did_tdw: String,
