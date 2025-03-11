@@ -21,7 +21,7 @@ interface TrustDidWebId {
     ///
     /// CAUTION Calling any of the available getters should take place after this method is called, not earlier.
     [Name=parse_did_tdw, Throws=TrustDidWebIdResolutionError]
-    constructor(string did_tdw, boolean? allow_http);
+    constructor(string did_tdw);
     /// Returns the SCID part from the supplied DID.
     string get_scid();
     /// Returns the url part from the supplied TDW DID.
@@ -42,6 +42,8 @@ enum TrustDidWebError {
     "DeserializationFailed",
     /// Invalid (or not yet supported) operation against DID doc.
     "InvalidOperation",
+    /// Invalid DID parameter.
+    "InvalidDidParameter",
     /// Invalid DID document.
     "InvalidDidDocument",
     /// Invalid DID log integration proof.
@@ -50,10 +52,12 @@ enum TrustDidWebError {
 
 interface TrustDidWeb {
     [Name=read, Throws=TrustDidWebError]
-    constructor(string did_tdw, string did_log, boolean? allow_http);
+    constructor(string did_tdw, string did_log);
     string get_did();
     string get_did_log();
     string get_did_doc();
+    [Throws=TrustDidWebError]
+    DidDoc get_did_doc_obj();
 };
 
 interface Ed25519Signature {
