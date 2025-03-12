@@ -24,12 +24,13 @@ pub struct Ed25519Signature {
 impl MultiBaseConverter for Ed25519Signature {
     fn to_multibase(&self) -> String {
         let signature_bytes = self.signature.to_bytes();
-        MultibaseEncoderDecoder::default().encode(&signature_bytes)
+        MultibaseEncoderDecoder::default().encode_base58btc(&signature_bytes)
     }
 
     fn from_multibase(multibase: &str) -> Result<Self, TrustDidWebError> {
         let mut signature_bytes: [u8; SIGNATURE_LENGTH] = [0; SIGNATURE_LENGTH];
-        match MultibaseEncoderDecoder::default().decode_onto(multibase, &mut signature_bytes) {
+        match MultibaseEncoderDecoder::default().decode_base58_onto(multibase, &mut signature_bytes)
+        {
             Err(err) => Err(TrustDidWebError::DeserializationFailed(format!("{}", err))),
             Ok(_) => Ok(Ed25519Signature {
                 signature: Signature::from_bytes(&signature_bytes),
@@ -57,7 +58,7 @@ impl MultiBaseConverter for Ed25519SigningKey {
         signing_key_with_prefix[0] = 0x13;
         signing_key_with_prefix[1] = 0x00;
         signing_key_with_prefix[2..].copy_from_slice(&signing_key_bytes);
-        MultibaseEncoderDecoder::default().encode(&signing_key_with_prefix)
+        MultibaseEncoderDecoder::default().encode_base58btc(&signing_key_with_prefix)
     }
 
     /// As specified by https://www.w3.org/TR/controller-document/#Multikey:
@@ -68,9 +69,10 @@ impl MultiBaseConverter for Ed25519SigningKey {
     /// and then prepended with the base-58-btc Multibase header (z).
     fn from_multibase(multibase: &str) -> Result<Self, TrustDidWebError> {
         let mut signing_key_buff: [u8; SECRET_KEY_LENGTH + 2] = [0; SECRET_KEY_LENGTH + 2];
-        match MultibaseEncoderDecoder::default().decode_onto(multibase, &mut signing_key_buff) {
-            Err(err) => return Err(TrustDidWebError::DeserializationFailed(format!("{}", err))),
-            Ok(_) => {}
+        if let Err(err) =
+            MultibaseEncoderDecoder::default().decode_base58_onto(multibase, &mut signing_key_buff)
+        {
+            return Err(TrustDidWebError::DeserializationFailed(format!("{}", err)));
         }
 
         let mut signing_key: [u8; SECRET_KEY_LENGTH] = [0; SECRET_KEY_LENGTH];
@@ -117,7 +119,7 @@ impl MultiBaseConverter for Ed25519VerifyingKey {
         public_key_with_prefix[0] = 0xed;
         public_key_with_prefix[1] = 0x01;
         public_key_with_prefix[2..].copy_from_slice(&public_key_without_prefix);
-        MultibaseEncoderDecoder::default().encode(&public_key_with_prefix)
+        MultibaseEncoderDecoder::default().encode_base58btc(&public_key_with_prefix)
     }
 
     /// As specified by https://www.w3.org/TR/controller-document/#Multikey:
@@ -129,9 +131,10 @@ impl MultiBaseConverter for Ed25519VerifyingKey {
     /// and then prepended with the base-58-btc Multibase header (z).
     fn from_multibase(multibase: &str) -> Result<Self, TrustDidWebError> {
         let mut verifying_key_buff: [u8; PUBLIC_KEY_LENGTH + 2] = [0; PUBLIC_KEY_LENGTH + 2];
-        match MultibaseEncoderDecoder::default().decode_onto(multibase, &mut verifying_key_buff) {
-            Err(err) => return Err(TrustDidWebError::DeserializationFailed(format!("{}", err))),
-            _ => {}
+        if let Err(err) = MultibaseEncoderDecoder::default()
+            .decode_base58_onto(multibase, &mut verifying_key_buff)
+        {
+            return Err(TrustDidWebError::DeserializationFailed(format!("{}", err)));
         }
 
         let mut verifying_key: [u8; PUBLIC_KEY_LENGTH] = [0; PUBLIC_KEY_LENGTH];

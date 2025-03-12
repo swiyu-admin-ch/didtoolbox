@@ -16,10 +16,6 @@ Cargo.lock
 # VS code
 .vscode/
 
-# VS code
-.vscode/
-
-
 # Added by cargo
 
 /target
