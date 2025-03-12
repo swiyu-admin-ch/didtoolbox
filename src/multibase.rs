@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+use crate::errors::TrustDidWebError;
 use bs58::{decode as base58_decode, encode as base58_encode, Alphabet as Alphabet58};
 use std::cmp::PartialEq;
 
@@ -30,10 +31,12 @@ impl MultibaseEncoderDecoder {
     }
 
     /// Encode bytes into a new owned string using the alphabet supplied earlier.
-    pub fn encode(&self, data: &[u8]) -> String {
+    pub fn encode_base58btc(&self, data: &[u8]) -> String {
+        // sanity guard
         if self.algorithm != MultibaseAlgorithm::Base58btc {
             panic!("Unsupported multibase algorithm {:?}", self.algorithm);
         }
+
         let encoded = base58_encode(data)
             .with_alphabet(self.alphabet)
             .into_string();
@@ -48,20 +51,29 @@ impl MultibaseEncoderDecoder {
     ///
     /// If the buffer is not resizeable bytes will be written from the beginning and bytes after
     /// the final encoded byte will not be touched.
-    pub fn decode_onto(&self, multibase: &str, result: &mut [u8]) -> bs58::decode::Result<usize> {
+    pub fn decode_base58_onto(
+        &self,
+        multibase: &str,
+        result: &mut [u8],
+    ) -> Result<(), TrustDidWebError> {
+        // sanity guard
         if self.algorithm != MultibaseAlgorithm::Base58btc {
             panic!("Unsupported multibase algorithm {:?}", self.algorithm);
         }
 
         if !multibase.starts_with(BASE58BTC_MULTIBASE_IDENTIFIER) {
-            panic!(
+            return Err(TrustDidWebError::DeserializationFailed(format!(
                 "Invalid multibase algorithm identifier '{:?}'",
                 self.algorithm
-            );
+            )));
         }
-        let raw = multibase.chars().skip(1).collect::<String>(); // get rid of the multibase code
-        base58_decode(raw)
-            .with_alphabet(self.alphabet)
-            .onto(result) // decode into the given buffer
+
+        let raw = multibase.chars().skip(1).collect::<String>(); // get rid of the multibase identifier
+
+        // decode into the given buffer
+        match base58_decode(raw).with_alphabet(self.alphabet).onto(result) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(TrustDidWebError::DeserializationFailed(format!("{}", err))),
+        }
     }
 }
