@@ -328,6 +328,8 @@ impl DidDocumentState {
                     };
                     // Since v0.2 (see https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
                     //            The new versionId takes the form <versionNumber>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.
+                    // TODO Replace with a jsonschema custom format (https://docs.rs/jsonschema/latest/jsonschema/#custom-formats)
+                    //      according to spec https://confluence.bit.admin.ch/display/EIDTEAM/DID+Log+Conformity+Check
                     let version_index: usize = match version_id.split_once("-") {
                         Some((index, _)) => {
                             match index.parse::<usize>() {
@@ -347,6 +349,8 @@ impl DidDocumentState {
                     // in ISO8601 format (https://identity.foundation/didwebvh/v0.3/#term:iso8601).
                     let version_time = match entry[1] {
                         JsonString(ref dt) => {
+                            // TODO Replace with a jsonschema custom format (https://docs.rs/jsonschema/latest/jsonschema/#custom-formats)
+                            //      according to spec https://confluence.bit.admin.ch/display/EIDTEAM/DID+Log+Conformity+Check
                             match DateTime::parse_from_rfc3339(dt) {
                                 Ok(x) => x.to_utc(),
                                 Err(_) => return Err(TrustDidWebError::DeserializationFailed("Invalid versionTime. String representation of a datetime in ISO8601 format required.".to_string()))

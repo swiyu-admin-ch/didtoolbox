@@ -16,6 +16,7 @@ pub mod errors;
 pub mod jcs_sha256_hasher;
 pub mod multibase;
 pub mod vc_data_integrity;
+pub mod custom_jsonschema_keywords;
 
 // CAUTION All structs required by UniFFI bindings generator (declared in UDL) MUST also be "used" here
 use did_tdw::*;
