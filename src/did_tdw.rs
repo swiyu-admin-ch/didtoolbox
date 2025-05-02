@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+use crate::did_tdw_jsonschema::DidLogEntryValidator;
 use crate::did_tdw_parameters::*;
 use crate::didtoolbox::*;
 use crate::ed25519::*;
@@ -11,7 +12,7 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use regex;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use serde_json::Value::{Array as JsonArray, Object as JsonObject, String as JsonString};
+use serde_json::Value::{Array as JsonArray, Object as JsonObject};
 use serde_json::{
     from_str as json_from_str, json, to_string as json_to_string, Value as JsonValue,
 };
@@ -301,63 +302,34 @@ impl DidDocumentState {
                         ));
                     }
 
-                    let entry: JsonValue = match serde_json::from_str(line) {
-                        Ok(entry) => entry,
-                        Err(err) => return Err(TrustDidWebError::DeserializationFailed(
-                            format!("{}", err)
-                        )),
-                    };
-                    match entry {
-                        JsonArray(ref entry) => {
-                            if entry.len() < 5 {
-                                return Err(TrustDidWebError::DeserializationFailed(
-                                    format!("Invalid did log entry. Expected at least 5 elements but got {}", entry.len()),
-                                ));
-                            }
+                    // Validation w.r.t. https://confluence.bit.admin.ch/display/EIDTEAM/DID+Log+Conformity+Check
+                    match DidLogEntryValidator::default().validate(String::from(line)) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            return Err(TrustDidWebError::DeserializationFailed(
+                                e.to_string(),
+                            ));
                         }
-                        _ => return Err(TrustDidWebError::DeserializationFailed(
-                            "Invalid did log entry. Expected array".to_string(),
-                        ))
                     }
 
-                    let version_id = match entry[0] {
-                        JsonString(ref id) => id.clone(),
-                        _ => return Err(TrustDidWebError::DeserializationFailed(
-                            "Invalid entry hash".to_string(),
-                        ))
-                    };
+                    // IMPORTANT: At this point, the current DID log entry may be considered VALID, so...
+                    let entry: JsonValue = serde_json::from_str(line).unwrap();     // ...no panic is expected here
+                    let version_id = entry[0].as_str().unwrap().to_string(); // ...or here
+
                     // Since v0.2 (see https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
                     //            The new versionId takes the form <versionNumber>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.
-                    // TODO Replace with a jsonschema custom format (https://docs.rs/jsonschema/latest/jsonschema/#custom-formats)
-                    //      according to spec https://confluence.bit.admin.ch/display/EIDTEAM/DID+Log+Conformity+Check
-                    let version_index: usize = match version_id.split_once("-") {
-                        Some((index, _)) => {
-                            match index.parse::<usize>() {
-                                Ok(index) => index,
-                                Err(_) => return Err(TrustDidWebError::DeserializationFailed(
-                                    "The entry hash format (<versionNumber>-<entryHash>) is valid. However, the <versionNumber> is not an (unsigned) integer.".to_string(),
-                                ))
-                            }
-                        }
-                        None => return Err(TrustDidWebError::DeserializationFailed(
-                            "Invalid entry hash format. The valid format is <versionNumber>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.".to_string(),
-                        ))
-                    };
+                    let version_index: usize = version_id.split_once("-")
+                        .map(|(index, _)| index.parse::<usize>().unwrap())// no panic is expected here...
+                        .unwrap(); // ...or here (as the entry has already been validated)
 
                     // https://identity.foundation/didwebvh/v0.3/#the-did-log-file:
-                    // The versionTime (as stated by the DID Controller) of the entry,
+                    // The `versionTime` (as stated by the DID Controller) of the entry,
                     // in ISO8601 format (https://identity.foundation/didwebvh/v0.3/#term:iso8601).
-                    let version_time = match entry[1] {
-                        JsonString(ref dt) => {
-                            // TODO Replace with a jsonschema custom format (https://docs.rs/jsonschema/latest/jsonschema/#custom-formats)
-                            //      according to spec https://confluence.bit.admin.ch/display/EIDTEAM/DID+Log+Conformity+Check
-                            match DateTime::parse_from_rfc3339(dt) {
-                                Ok(x) => x.to_utc(),
-                                Err(_) => return Err(TrustDidWebError::DeserializationFailed("Invalid versionTime. String representation of a datetime in ISO8601 format required.".to_string()))
-                            }
-                        }
-                        _ => return Err(TrustDidWebError::DeserializationFailed("Invalid versionTime. String representation of a datetime in ISO8601 format required.".to_string()))
-                    };
+                    let version_time = entry[1].as_str()
+                        .map(|s| DateTime::parse_from_rfc3339(s)
+                            .unwrap() // no panic is expected here...
+                            .to_utc())
+                        .unwrap(); // ...or here (as the entry has already been validated)
 
                     let mut new_params: Option<DidMethodParameters> = None;
                     current_params = match entry[2] {
@@ -458,19 +430,7 @@ impl DidDocumentState {
                         }
                     };
 
-                    let proof = match entry[4] {
-                        JsonArray(ref obj) => {
-                            if obj.is_empty() {
-                                return Err(TrustDidWebError::DeserializationFailed(
-                                    "Missing DID Document proof.".to_string(),
-                                ));
-                            }
-                            DataIntegrityProof::from(entry[4].to_string())?
-                        }
-                        _ => return Err(TrustDidWebError::DeserializationFailed(
-                            "Missing DID Document proof.".to_string(),
-                        ))
-                    };
+                    let proof = DataIntegrityProof::from(entry[4].to_string())?;
 
                     let parameters = match new_params {
                         Some(new_params) => new_params,
