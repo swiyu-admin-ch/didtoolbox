@@ -43,7 +43,7 @@ pub struct DidLogEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proof: Option<Vec<DataIntegrityProof>>,
     #[serde(skip)]
-    prev_entry: Option<Box<DidLogEntry>>, // Box-ed to prevent "recursive without indirection"
+    prev_entry: Option<Arc<DidLogEntry>>, // Arc-ed to prevent "recursive without indirection"
 }
 
 impl DidLogEntry {
@@ -57,7 +57,7 @@ impl DidLogEntry {
         did_doc_json: String,
         did_doc_hash: String,
         proof: DataIntegrityProof,
-        prev_entry: Option<Box<DidLogEntry>>,
+        prev_entry: Option<Arc<DidLogEntry>>,
     ) -> Self {
         DidLogEntry {
             version_id,
@@ -287,7 +287,7 @@ impl DidDocumentState {
         let unescaped = did_log.clone();
 
         let mut current_params: Option<DidMethodParameters> = None;
-        let mut prev_entry: Option<Box<DidLogEntry>> = None;
+        let mut prev_entry: Option<Arc<DidLogEntry>> = None;
 
         let mut is_deactivated: bool = false;
 
@@ -486,7 +486,7 @@ impl DidDocumentState {
                         proof,
                         prev_entry.clone(),
                     );
-                    prev_entry = Some(Box::from(current_entry.clone()));
+                    prev_entry = Some(Arc::from(current_entry.clone()));
 
                     Ok(current_entry)
                 }).collect::<Result<Vec<DidLogEntry>, TrustDidWebError>>()?
