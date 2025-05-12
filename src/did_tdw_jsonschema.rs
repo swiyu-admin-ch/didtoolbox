@@ -126,7 +126,7 @@ impl DidLogEntryValidator {
     /// - [`DidVersionTimeKeyword`].
     ///
     /// A UniFFI-compliant constructor.
-    pub(crate) fn default() -> Self {
+    pub fn default() -> Self {
         //pub fn new() -> Self {
         match json_from_str(Self::DID_LOG_ENTRY_JSONSCHEMA_V_0_3) {
             Ok(sch) => {
