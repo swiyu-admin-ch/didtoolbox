@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, SamplingMode};
 use didtoolbox::{did_tdw, did_tdw_jsonschema};
 use std::fs;
 use std::path::Path;
@@ -6,9 +6,17 @@ use std::path::Path;
 pub fn criterion_benchmark_did_tdw(c: &mut Criterion) {
     let inputs = [10, 50, 100, 200];
 
-    let mut did_tdw_group = c.benchmark_group("did_tdw");
+    let mut group = c.benchmark_group("did_tdw");
+    group
+        //.significance_level(0.9)
+        //.confidence_level(0.75)
+        //.sampling_mode(SamplingMode::Flat) // intended for long-running benchmarks.
+        .nresamples(2000)
+        .measurement_time(std::time::Duration::from_secs(15))
+        .sample_size(200);
+
     for i in inputs {
-        did_tdw_group.bench_function(BenchmarkId::new("TrustDidWeb_read", i), |b| {
+        group.bench_function(BenchmarkId::new("TrustDidWeb_read", i), |b| {
             b.iter(|| {
                 let did_log_raw_filepath = format!{"test_data/generated_by_didtoolbox_java/v{:03}_did.jsonl", i};
                 let did_url =
@@ -20,13 +28,21 @@ pub fn criterion_benchmark_did_tdw(c: &mut Criterion) {
             })
         });
     }
-    did_tdw_group.finish();
+    group.finish();
 }
 
 pub fn criterion_benchmark_did_tdw_jsonschema(c: &mut Criterion) {
     let inputs = [10, 50, 100, 200];
 
     let mut group = c.benchmark_group("did_tdw_jsonschema");
+    group
+        //.significance_level(0.9)
+        //.confidence_level(0.75)
+        //.sampling_mode(SamplingMode::Flat) // intended for long-running benchmarks.
+        .nresamples(2000)
+        .measurement_time(std::time::Duration::from_secs(15))
+        .sample_size(200);
+
     for i in inputs {
         group.bench_function(BenchmarkId::new("DidLogEntryValidator_validate", i), |b| {
             b.iter(|| {

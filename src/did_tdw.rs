@@ -12,7 +12,7 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use regex;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use serde_json::Value::{Array as JsonArray, Object as JsonObject};
+use serde_json::Value::Object as JsonObject;
 use serde_json::{
     from_str as json_from_str, json, to_string as json_to_string, Value as JsonValue,
 };

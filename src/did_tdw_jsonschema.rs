@@ -52,24 +52,77 @@ impl DidLogEntryValidator {
         "title": "DID log entry schema v0.3",
         "type": "array",
         "did-log-entry": true,
+        "$comment": "As specified by https://identity.foundation/didwebvh/v0.3/#the-did-log-file",
         "allOf": [{
             "prefixItems": [
             {
                 "type": "string",
-                "did-version-id": true
+                "patttern": "^[1-9][0-9]+-Q[1-9a-zA-NP-Z]{45,}$",
+                "did-version-id": true,
+                "$comment": "The entry versionId is a value that combines the version number (starting at 1 and incrementing by one per DID version), a literal dash -, and the entryHash, a hash calculated across the log entry content."
             },
             {
                 "type": "string",
-                "did-version-time": true
+                "did-version-time": true,
+                "$comment": "The versionTime (as stated by the DID Controller) of the entry, in ISO8601 format."
             },
             {
                 "type": "object",
                 "properties": {
                     "method": {
                         "const": "did:tdw:0.3",
-                        "$comment": "Required only within first entry"
+                        "$comment": "Required only within first entry. This item MUST appear in the first DID log entry."
+                    },
+                    "scid": {
+                        "type": "string",
+                        "pattern": "^Q[1-9a-zA-NP-Z]{45,}$",
+                        "$comment": "The self-certifying identifier or SCID is a required parameter in the first DID log entry and is the hash of the DID’s inception event."
+                    },
+                    "updateKeys": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "pattern": "^z[1-9a-zA-NP-Z]{47,}$"
+                        },
+                        "$comment": "A list of one or more multikey formatted public keys associated with the private keys that are authorized to sign the log entries that update the DID from one version to the next. This item MUST appear in the first DID log entry."
+                    },
+                    "portable": {
+                        "type": "boolean",
+                        "$comment": "A boolean flag indicating if the DID is portable and thus can be renamed to change the Web location of the DID. Must be unset or false in the first did log entry (REQUIREMENT)"
+                    },
+                    "prerotation": {
+                        "type": "boolean",
+                        "$comment": "A boolean value indicating that subsequent authentication keys added to the DIDDoc (after this version) MUST have their hash included in a nextKeyHashes parameter item. (warning) Is removed in future versions. Must be a boolean or unset (SPEC)"
+                    },
+                    "nextKeyHashes": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "pattern": "^z[1-9a-zA-NP-Z]{47,}$"
+                        },
+                        "$comment": "An array of strings that are hashes of multikey formatted public keys that MAY be added to the updateKeys list in the log entry of a future version of the DID."
+                    },
+                    "witnesses": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "$comment": "A list of one or more multikey formatted public keys associated with the private keys that are authorized to sign the log entries that update the DID from one version to the next. This item MUST appear in the first DID log entry. Must be unset or null (REQUIREMENT)"
+                    },
+                    "witnessThreshold": {
+                        "type": "integer",
+                        "const": 0
+                    },
+                    "deactivated": {
+                        "type": "boolean",
+                        "$comment": "A JSON boolean that SHOULD be set to true when the DID is to be deactivated. See the deactivate (revoke) section of this specification for more details."
+                    },
+                    "ttl": {
+                        "type": "integer",
+                        "$comment": "A number, the number of seconds that a cache entry for a resolved did:tdw DID SHOULD last, as recommended by the DID Controller."
                     }
-                }
+                },
+                "additionalProperties": false
             },
             {
                 "type": "object",
@@ -94,14 +147,30 @@ impl DidLogEntryValidator {
                 "type": "array",
                 "items": {
                     "type": "object",
+                    "$comment": "As specified by https://www.w3.org/TR/vc-di-eddsa/#eddsa-jcs-2022",
                     "properties": {
+                        "type": {
+                            "const": "DataIntegrityProof"
+                        },
+                        "cryptosuite": {
+                            "const": "eddsa-jcs-2022"
+                        },
+                        "verificationMethod": {
+                            "type": "string",
+                            "pattern": "^did:key:z[1-9a-zA-NP-Z]{47,}#z[1-9a-zA-NP-Z]{47,}$"
+                        },
                         "created": {
                             "type": "string",
                             "did-version-time": true
                         },
+                        "proofPurpose": {
+                            "$comment": "As specified by https://www.w3.org/TR/vc-data-integrity/#proof-purposes",
+                            "enum": ["authentication", "assertionMethod", "keyAgreement", "capabilityDelegation", "capabilityInvocation"]
+                        },
                         "proofValue": {
                             "type": "string",
-                            "minLength": 64
+                            "pattern": "^z[1-9a-zA-NP-Z]{87,}$",
+                            "$comment": "The proofValue property of the proof MUST be a detached EdDSA signature produced according to [RFC8032], encoded using the base-58-btc header and alphabet as described in the Multibase section of Controlled Identifiers v1.0 (https://www.w3.org/TR/cid-1.0)."
                         },
                         "challenge": {
                             "type": "string",
@@ -109,51 +178,19 @@ impl DidLogEntryValidator {
                         }
                     },
                     "required": [
+                        "type",
+                        "cryptosuite",
+                        "verificationMethod",
                         "created",
-                        "challenge",
-                        "proofValue"
+                        "proofPurpose",
+                        "proofValue",
+                        "challenge"
                     ]
                 }
             }
         ]}],
         "additionalItems": false
     }"#;
-
-    /// Create a new JSON Schema validator using `JSON Schema Draft 2020-12` specifications and default options.
-    ///
-    /// Relies heavily on custom `jsonschema::Keyword` trait implementation like:
-    /// - [`DidVersionIdKeyword`] and
-    /// - [`DidVersionTimeKeyword`].
-    ///
-    /// A UniFFI-compliant constructor.
-    pub fn default() -> Self {
-        //pub fn new() -> Self {
-        match json_from_str(Self::DID_LOG_ENTRY_JSONSCHEMA_V_0_3) {
-            Ok(sch) => {
-                let _ = jsch_meta::validate(&sch).is_err_and(|e| panic!("{}", e.to_string()));
-                match jsch_opts()
-                    .with_draft(Draft::Draft202012)
-                    /*.with_keyword(
-                        DidLogEntryKeyword::KEYWORD_NAME,
-                        DidLogEntryKeyword::factory,
-                    )*/
-                    .with_keyword(
-                        DidVersionIdKeyword::KEYWORD_NAME,
-                        DidVersionIdKeyword::factory,
-                    )
-                    .with_keyword(
-                        DidVersionTimeKeyword::KEYWORD_NAME,
-                        DidVersionTimeKeyword::factory,
-                    )
-                    .build(&sch)
-                {
-                    Ok(validator) => DidLogEntryValidator { validator },
-                    Err(e) => panic!("{}", e.to_string()),
-                }
-            }
-            Err(e) => panic!("{}", e.to_string()),
-        }
-    }
 
     /// Validate `instance` against `schema` and return the first error if any.
     ///
@@ -171,6 +208,43 @@ impl DidLogEntryValidator {
     }
 }
 
+impl Default for DidLogEntryValidator {
+    /// Create a new JSON Schema validator using `JSON Schema Draft 2020-12` specifications and default options.
+    ///
+    /// Relies heavily on custom `jsonschema::Keyword` trait implementation like:
+    /// - [`DidVersionIdKeyword`] and
+    /// - [`DidVersionTimeKeyword`].
+    ///
+    /// A UniFFI-compliant constructor.
+    fn default() -> Self {
+        match json_from_str(Self::DID_LOG_ENTRY_JSONSCHEMA_V_0_3) {
+            Ok(sch) => {
+                let _ = jsch_meta::validate(&sch).is_err_and(|e| panic!("{}", e.to_string()));
+                match jsch_opts()
+                    .with_draft(Draft::Draft202012)
+                    .with_keyword(
+                        DidLogEntryKeyword::KEYWORD_NAME,
+                        DidLogEntryKeyword::factory,
+                    )
+                    .with_keyword(
+                        DidVersionIdKeyword::KEYWORD_NAME,
+                        DidVersionIdKeyword::factory,
+                    )
+                    .with_keyword(
+                        DidVersionTimeKeyword::KEYWORD_NAME,
+                        DidVersionTimeKeyword::factory,
+                    )
+                    .build(&sch)
+                {
+                    Ok(validator) => DidLogEntryValidator { validator },
+                    Err(e) => panic!("{}", e.to_string()),
+                }
+            }
+            Err(e) => panic!("{}", e.to_string()),
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::did_tdw_jsonschema::DidLogEntryValidator;
@@ -179,14 +253,31 @@ mod test {
 
     #[rstest]
     #[case(json!([
-        "1-some_entry_hash", 
+        "1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR",
         "2012-12-12T12:12:12Z", 
-        {"method": "did:tdw:0.3"}, 
+        {
+            "method": "did:tdw:0.3",
+            "scid": "QmZ5tnGo1fHNEzHDpG2Bx5dmT3eGNmBY9QATtm6DrFMzcH",
+            "updateKeys": [
+              "z6MkvdAjfVZ2CWa38V2VgZvZVjSkENZpiuiV5gyRKsXDA8UP",
+              "z6Mkwf4PgXLq8sRfucTggtZXmigKZP7gQhFamk3XHGV54QvF"
+            ],
+            "portable": false,
+            "prerotation": false,
+            "nextKeyHashes": [],
+            "witnesses": [],
+            "witnessThreshold": 0,
+            "deactivated": false
+        },
         {"value": {"id": "x"}},
         [{
+            "type": "DataIntegrityProof",
+            "cryptosuite": "eddsa-jcs-2022",
             "created": "2012-12-12T12:12:12Z",
-            "challenge": "1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR",
+            "verificationMethod": "did:key:z6MkvdAjfVZ2CWa38V2VgZvZVjSkENZpiuiV5gyRKsXDA8UP#z6MkvdAjfVZ2CWa38V2VgZvZVjSkENZpiuiV5gyRKsXDA8UP",
+            "proofPurpose": "authentication",
             "proofValue": "z4a92V6EKmWvURx99HXVTEM6KJhbVZZ1s4qN8HJXTMesSoDJx1VpTNtuNUpae2eHpXXKwBGjtCYC2EQK7b6eczmnp",
+            "challenge": "1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR"
         }],]), true)]
     #[case(json!([
         "invalid-version-id", 
@@ -199,7 +290,7 @@ mod test {
             "proofValue": "z4a92V6EKmWvURx99HXVTEM6KJhbVZZ1s4qN8HJXTMesSoDJx1VpTNtuNUpae2eHpXXKwBGjtCYC2EQK7b6eczmnp",
         }],]), false)]
     #[case(json!([
-        "1-some_entry_hash",
+        "1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR",
         "invalid-version-time",
         {"method": "did:tdw:0.3"},
         {"value": {"id": "x"}},
@@ -208,13 +299,13 @@ mod test {
             "challenge": "1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR",
             "proofValue": "z4a92V6EKmWvURx99HXVTEM6KJhbVZZ1s4qN8HJXTMesSoDJx1VpTNtuNUpae2eHpXXKwBGjtCYC2EQK7b6eczmnp",
         }],]), false)]
-    #[case(json!(["1-some_entry_hash","2012-12-12T12:12:12Z",{"":""},{"value":{"id":"x"}},[{"":""}]]), false)]
-    #[case(json!(["1-some_entry_hash","2012-12-12T12:12:12Z",{},{"value":{"id":"x"}},[{"":""}]]), false)] // params may be empty
-    #[case(json!(["1-some_entry_hash","2012-12-12T12:12:12Z",{},{"value":{"id":"x"}},[{}]]), false)] // proof must not be empty
+    #[case(json!(["1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR","2012-12-12T12:12:12Z",{"":""},{"value":{"id":"x"}},[{"":""}]]), false)]
+    #[case(json!(["1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR","2012-12-12T12:12:12Z",{},{"value":{"id":"x"}},[{"":""}]]), false)] // params may be empty
+    #[case(json!(["1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR","2012-12-12T12:12:12Z",{},{"value":{"id":"x"}},[{}]]), false)] // proof must not be empty
     #[case(json!(["","",{},{},[]]), false)] // all empty
     #[case(json!(["","",{},{},[{}]]), false)] // all empty
     #[case(json!(["","","","",""]), false)] // all JSON strings
-    //#[case(json!([]), false)] // empty array
+                                            //#[case(json!([]), false)] // empty array
     fn test_validate_using_custom_schema(#[case] instance: Value, #[case] expected: bool) {
         //-> Result<(), Box<dyn std::error::Error>> {
 

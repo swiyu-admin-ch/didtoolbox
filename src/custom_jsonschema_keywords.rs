@@ -5,10 +5,11 @@ use jsonschema::{
     paths::{LazyLocation, Location},
     Keyword, ValidationError,
 };
+use regex::Regex;
 use serde_json::{Map, Value};
 use std::cmp::Ordering;
+use std::sync::LazyLock;
 
-/*
 /// Yet another custom [`Keyword`] trait implementation able to validate the rule in regard
 /// to DID log entry (as defined by https://confluence.bit.admin.ch/display/EIDTEAM/DID+Log+Conformity+Check).
 ///
@@ -55,7 +56,7 @@ impl Keyword for DidLogEntryKeyword {
         instance: &'i Value,
         location: &LazyLocation,
     ) -> Result<(), ValidationError<'i>> {
-        if let Value::Array(inst) = instance {
+        if let Value::Array(_) = instance {
             if self.is_valid(instance) {
                 Ok(())
             } else {
@@ -111,7 +112,6 @@ impl Keyword for DidLogEntryKeyword {
         })
     }
 }
- */
 
 /// Yet another custom [`Keyword`] trait implementation able to validate the rule in regard
 /// to `versionId` DID log entry item (as defined by https://confluence.bit.admin.ch/display/EIDTEAM/DID+Log+Conformity+Check)
@@ -144,13 +144,17 @@ impl DidVersionIdKeyword {
     }
 }
 
+/// As specified by
+static DID_LOG_ENTRY_HASH_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^Q[1-9a-zA-NP-Z]{45,}$").unwrap());
+
 impl Keyword for DidVersionIdKeyword {
     fn validate<'i>(
         &self,
         instance: &'i Value,
         location: &LazyLocation,
     ) -> Result<(), ValidationError<'i>> {
-        if let Value::String(dt) = instance {
+        if let Value::String(_) = instance {
             if self.is_valid(instance) {
                 Ok(())
             } else {
@@ -173,8 +177,9 @@ impl Keyword for DidVersionIdKeyword {
 
     fn is_valid(&self, instance: &Value) -> bool {
         instance.as_str().is_some_and(|s| {
-            s.split_once("-")
-                .is_some_and(|(index, _)| index.parse::<usize>().is_ok())
+            s.split_once("-").is_some_and(|(index, hash)| {
+                index.parse::<usize>().is_ok() && DID_LOG_ENTRY_HASH_REGEX.is_match(hash)
+            })
         })
     }
 }
@@ -271,7 +276,6 @@ mod test {
     use rstest::rstest;
     use serde_json::{json, Value};
 
-    /*
     #[rstest]
     fn test_did_log_entry_keyword_wrong_keyword() {
         const WRONG_KEYWORD_NAME: &str = "anything-but-proper-keyword-name";
@@ -335,7 +339,6 @@ mod test {
 
         Ok(())
     }
-     */
 
     #[rstest]
     fn test_did_version_id_keyword_wrong_keyword() {
@@ -359,9 +362,9 @@ mod test {
     }
 
     #[rstest]
-    #[case("1-some_entry_hash", true)]
-    #[case("1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR", true)]
+    #[case("123-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR", true)]
     #[case("A-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR", false)]
+    #[case("1-Definitely_Invalid_DID_LOg_Entry_Hash_Due_T0_O_And_0", false)]
     #[case("1_QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR", false)] // wrong separator ('_' instead of '-')
     fn test_did_version_id_keyword_validate(
         #[case] instance: String,
@@ -399,9 +402,9 @@ mod test {
     }
 
     #[rstest]
-    #[case("1-some_entry_hash", true)]
-    #[case("1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR", true)]
+    #[case("123-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR", true)]
     #[case("A-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR", false)]
+    #[case("1-Definitely_Invalid_DID_LOg_Entry_Hash_Due_T0_O_And_0", false)]
     #[case("1_QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR", false)] // wrong separator ('_' instead of '-')
     fn test_did_version_id_keyword_is_valid(
         #[case] instance: String,
