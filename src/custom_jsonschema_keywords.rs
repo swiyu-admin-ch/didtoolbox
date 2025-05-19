@@ -5,10 +5,8 @@ use jsonschema::{
     paths::{LazyLocation, Location},
     Keyword, ValidationError,
 };
-use regex::Regex;
 use serde_json::{Map, Value};
 use std::cmp::Ordering;
-use std::sync::LazyLock;
 
 /// Yet another custom [`Keyword`] trait implementation able to validate the rule in regard
 /// to DID log entry (as defined by https://confluence.bit.admin.ch/display/EIDTEAM/DID+Log+Conformity+Check).
@@ -109,77 +107,6 @@ impl Keyword for DidLogEntryKeyword {
                                 })
                         })
                 })
-        })
-    }
-}
-
-/// Yet another custom [`Keyword`] trait implementation able to validate the rule in regard
-/// to `versionId` DID log entry item (as defined by https://confluence.bit.admin.ch/display/EIDTEAM/DID+Log+Conformity+Check)
-pub struct DidVersionIdKeyword;
-
-impl DidVersionIdKeyword {
-    /// Required to register this custom keyword validator using `jsonschema::ValidationOptions::with_keyword`.
-    pub const KEYWORD_NAME: &'static str = "did-version-id";
-
-    /// Required to register this custom keyword validator using `jsonschema::ValidationOptions::with_keyword`.
-    pub fn factory<'a>(
-        _parent: &'a Map<String, Value>,
-        value: &'a Value,
-        path: Location,
-    ) -> Result<Box<dyn Keyword>, ValidationError<'a>> {
-        // You can use the `value` parameter to configure your validator if needed
-        if value
-            .as_bool()
-            .is_some_and(|_| path.to_string().ends_with(Self::KEYWORD_NAME))
-        {
-            Ok(Box::new(DidVersionIdKeyword))
-        } else {
-            Err(ValidationError::custom(
-                Location::new(),
-                path,
-                value,
-                "The 'did-version-id' keyword must be set to true",
-            ))
-        }
-    }
-}
-
-/// As specified by
-static DID_LOG_ENTRY_HASH_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^Q[1-9a-zA-NP-Z]{45,}$").unwrap());
-
-impl Keyword for DidVersionIdKeyword {
-    fn validate<'i>(
-        &self,
-        instance: &'i Value,
-        location: &LazyLocation,
-    ) -> Result<(), ValidationError<'i>> {
-        if let Value::String(_) = instance {
-            if self.is_valid(instance) {
-                Ok(())
-            } else {
-                Err(ValidationError::custom(
-                    Location::new(),
-                    location.into(),
-                    instance,
-                    "Invalid entry hash format. The valid format is <versionNumber>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.",
-                ))
-            }
-        } else {
-            Err(ValidationError::custom(
-                Location::new(),
-                location.into(),
-                instance,
-                "Value must be a string",
-            ))
-        }
-    }
-
-    fn is_valid(&self, instance: &Value) -> bool {
-        instance.as_str().is_some_and(|s| {
-            s.split_once("-").is_some_and(|(index, hash)| {
-                index.parse::<usize>().is_ok() && DID_LOG_ENTRY_HASH_REGEX.is_match(hash)
-            })
         })
     }
 }
@@ -336,114 +263,6 @@ mod test {
         // should always fail since "type" is wrong ("integer" instead of "array")
         assert!(validate.is_err());
         assert!(validate.err().is_some());
-
-        Ok(())
-    }
-
-    #[rstest]
-    fn test_did_version_id_keyword_wrong_keyword() {
-        const WRONG_KEYWORD_NAME: &str = "anything-but-proper-keyword-name";
-        let schema = json!({WRONG_KEYWORD_NAME: true, "type": "string"});
-
-        let validator = jsch_opts()
-            /*
-            .with_keyword(WRONG_KEYWORD_NAME, |_, _, _| {
-                Ok(Box::new(DidVersionTimeKeyword))
-            }) // using closure
-             */
-            .with_keyword(WRONG_KEYWORD_NAME, DidVersionIdKeyword::factory) // using factory
-            .build(&schema);
-
-        assert!(validator.is_err());
-        assert!(validator.err().is_some_and(|t| {
-            t.to_string()
-                .contains("The 'did-version-id' keyword must be set to true")
-        }));
-    }
-
-    #[rstest]
-    #[case("123-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR", true)]
-    #[case("A-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR", false)]
-    #[case("1-Definitely_Invalid_DID_LOg_Entry_Hash_Due_T0_O_And_0", false)]
-    #[case("1_QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR", false)] // wrong separator ('_' instead of '-')
-    fn test_did_version_id_keyword_validate(
-        #[case] instance: String,
-        #[case] expected: bool,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let schema = json!({DidVersionIdKeyword::KEYWORD_NAME: true, "type": "string"});
-
-        let validator = jsch_opts()
-            .with_keyword(DidVersionIdKeyword::KEYWORD_NAME, |_, _, _| {
-                Ok(Box::new(DidVersionIdKeyword))
-            }) // using closure
-            .build(&schema)?;
-
-        let instance_value = json!(instance);
-        let validate = validator.validate(&instance_value);
-
-        assert_eq!(expected, validate.is_ok());
-
-        let schema = json!({DidVersionIdKeyword::KEYWORD_NAME: true, "type": "integer"}); // CAUTION wrong "type"
-
-        let validator = jsch_opts()
-            .with_keyword(DidVersionIdKeyword::KEYWORD_NAME, |_, _, _| {
-                Ok(Box::new(DidVersionIdKeyword))
-            }) // using closure
-            .build(&schema)?;
-
-        let instance_value = json!(instance);
-        let validate = validator.validate(&instance_value);
-
-        // should always fail since "type" is wrong ("integer" instead of "string")
-        assert!(validate.is_err());
-        assert!(validate.err().is_some());
-
-        Ok(())
-    }
-
-    #[rstest]
-    #[case("123-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR", true)]
-    #[case("A-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR", false)]
-    #[case("1-Definitely_Invalid_DID_LOg_Entry_Hash_Due_T0_O_And_0", false)]
-    #[case("1_QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR", false)] // wrong separator ('_' instead of '-')
-    fn test_did_version_id_keyword_is_valid(
-        #[case] instance: String,
-        #[case] expected: bool,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let schema = json!({DidVersionIdKeyword::KEYWORD_NAME: true, "type": "string"});
-
-        let validator = jsch_opts()
-            .with_keyword(DidVersionIdKeyword::KEYWORD_NAME, |_, _, _| {
-                Ok(Box::new(DidVersionIdKeyword))
-            }) // using closure
-            .build(&schema)?;
-
-        assert_eq!(expected, validator.is_valid(&json!(instance)));
-
-        assert!(!validator.is_valid(&json!(1234)));
-
-        let validator = jsch_opts()
-            .with_keyword(
-                DidVersionIdKeyword::KEYWORD_NAME,
-                DidVersionIdKeyword::factory,
-            ) // using factory
-            .build(&schema)?;
-
-        assert_eq!(expected, validator.is_valid(&json!(instance)));
-
-        assert!(!validator.is_valid(&json!(1234)));
-
-        let schema = json!({DidVersionIdKeyword::KEYWORD_NAME: true, "type": "integer"}); // CAUTION wrong "type"
-
-        let validator = jsch_opts()
-            .with_keyword(
-                DidVersionIdKeyword::KEYWORD_NAME,
-                DidVersionIdKeyword::factory,
-            ) // using factory
-            .build(&schema)?;
-
-        // should always fail since "type" is wrong ("integer" instead of "string")
-        assert_eq!(false, validator.is_valid(&json!(instance)));
 
         Ok(())
     }
