@@ -700,9 +700,6 @@ mod test {
     }
 
     #[rstest]
-    //#[case("test_data/generated_by_didtoolbox_java/did_1.jsonl")]
-    //#[case("test_data/generated_by_didtoolbox_java/did_2.jsonl")]
-    //#[case("test_data/generated_by_didtoolbox_java/did_3.jsonl")]
     #[case("test_data/generated_by_didtoolbox_java/v010_did.jsonl")]
     #[case("test_data/generated_by_tdw_js/unique_update_keys.jsonl")]
     fn test_generate_version_id(
@@ -718,10 +715,6 @@ mod test {
     }
 
     #[rstest]
-    /*#[case(
-        "test_data/example_did.jsonl",
-        "did:tdw:Qma6mc1qZw3NqxwX6SB5GPQYzP4pGN2nXD15Jwi4bcDBKu:domain.example"
-    )]*/
     #[case(
         "test_data/generated_by_tdw_js/single_update_key.jsonl",
         "did:tdw:QmXjp5qhSEvm8oXip43cDX62hZhHZdAMYv7Magy1tkffSz:example.com"
@@ -735,22 +728,10 @@ mod test {
         "did:tdw:QmdSU7F2rF8r4m6GZK7Evi2tthfDDxhw3NppU8pJMbd2hB:example.com"
     )]
     #[case(
-        "test_data/generated_by_didtoolbox_java/v010_did.jsonl",
+        "test_data/generated_by_didtoolbox_java/v100_did.jsonl",
         "did:tdw:QmT7BM5RsM9SoaqAQKkNKHBzSEzpS2NRzT2oKaaaPYPpGr:identifier-reg.trust-infra.swiyu-int.admin.ch:api:v1:did:18fa7c77-9dd1-4e20-a147-fb1bec146085"
     )]
     /*
-    #[case(
-        "test_data/generated_by_didtoolbox_java/did_1.jsonl",
-        "did:tdw:QmPJ85fz4FMocjsm6qqHkN2DqJLYJLQwvXAcNDFemM1Jgg:127.0.0.1%3A54858"
-    )]
-    #[case(
-        "test_data/generated_by_didtoolbox_java/did_2.jsonl",
-        "did:tdw:QmUSyQohHF4tcRhdkJYoamuMQAXQmYBoFLCot35xd7dPda:127.0.0.1%3A54858:123456789"
-    )]
-    #[case(
-        "test_data/generated_by_didtoolbox_java/did_3.jsonl",
-        "did:tdw:QmcTh4ghpn5HHuubeGzt5JMS9PfAyxZLVPn3zTq3TYP69v:127.0.0.1%3A54858:123456789:123456789"
-    )]
     #[case(
         "test_data/generated_by_didtoolbox_java/empty_did_params.jsonl",
         "did:tdw:QmeLapUpgZeyyCmjG8vRKjXYwEAXaYJyAT4ohzR73jZf1A:127.0.0.1%3A54858"

@@ -1,14 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "DID log entry schema v0.3 (BIT-conform)",
+  "title": "DID log entry schema v0.3 (eID-conform)",
   "type": "array",
   "did-log-entry": true,
-  "$comment": "As specified by https://identity.foundation/didwebvh/v0.3/#the-did-log-file w.r.t. to BIT conformity",
+  "$comment": "As specified by https://identity.foundation/didwebvh/v0.3/#the-did-log-file w.r.t. to eID conformity",
   "allOf": [{
     "prefixItems": [
       {
         "type": "string",
-        "pattern": "^[1-9][0-9]?+-Q[1-9a-zA-NP-Z]{45,}$",
+        "pattern": "^[1-9][0-9]*-Q[1-9a-zA-NP-Z]{45,}$",
         "$comment": "The entry versionId is a value that combines the version number (starting at 1 and incrementing by one per DID version), a literal dash -, and the entryHash, a hash calculated across the log entry content."
       },
       {
@@ -242,7 +242,7 @@
             },
             "challenge": {
               "type": "string",
-              "pattern": "^[1-9][0-9]?+-Q[1-9a-zA-NP-Z]{45,}$"
+              "pattern": "^[1-9][0-9]*-Q[1-9a-zA-NP-Z]{45,}$"
             }
           },
           "required": [

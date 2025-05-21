@@ -8,17 +8,17 @@ use jsonschema::{
 use serde_json::{Map, Value};
 use std::cmp::Ordering;
 
-/// Yet another custom [`Keyword`] trait implementation able to validate the rule in regard
-/// to DID log entry (as defined by https://confluence.bit.admin.ch/display/EIDTEAM/DID+Log+Conformity+Check).
+/// Yet another custom [`Keyword`] trait implementation able to validate if a JSON array represents
+/// a regular `didwebvh` DID log entry (as defined by https://identity.foundation/didwebvh/v0.3/#overview).
 ///
 /// This [`Keyword`] trait implementation validates instances according to https://identity.foundation/didwebvh/v0.3/#overview
 pub struct DidLogEntryKeyword;
 
 impl DidLogEntryKeyword {
-    /// Required to register this custom keyword validator using `jsonschema::ValidationOptions::with_keyword`.
+    /// The constant required to register this custom keyword validator using `jsonschema::ValidationOptions::with_keyword`.
     pub const KEYWORD_NAME: &'static str = "did-log-entry";
 
-    /// Required to register this custom keyword validator using `jsonschema::ValidationOptions::with_keyword`.
+    /// The factory method required to register this custom keyword validator using `jsonschema::ValidationOptions::with_keyword`.
     pub fn factory<'a>(
         _parent: &'a Map<String, Value>,
         value: &'a Value,
@@ -98,11 +98,11 @@ impl Keyword for DidLogEntryKeyword {
                 && inst
                     .get(3)
                     .is_some_and(|v| v.is_object() && v.as_object().is_some_and(|m| !m.is_empty()))
-                && inst.last().is_some_and(|v| {
+                && inst.get(4).is_some_and(|v| {
                     v.is_array()
                         && v.as_array().is_some_and(|vec| {
                             !vec.is_empty()
-                                && vec.first().is_some_and(|t| {
+                                && vec.iter().all(|t| {
                                     t.is_object() && t.as_object().is_some_and(|m| !m.is_empty())
                                 })
                         })
@@ -178,7 +178,7 @@ impl Keyword for DidVersionTimeKeyword {
                 Location::new(),
                 location.into(),
                 instance,
-                "Value must be a string",
+                "Value must be a string representing some datetime in ISO8601 format",
             ))
         }
     }
@@ -227,7 +227,7 @@ mod test {
     #[rstest]
     #[case(json!(["some-version-id","some-version-time",{"":""},{"":""},[{"":""}]]), true)]
     #[case(json!(["some-version-id","some-version-time",{},{"":""},[{"":""}]]), true)] // params may be empty
-    #[case(json!(["some-version-id","some-version-time",{},{"":""},[{}]]), false)] // proof must not be empty
+    #[case(json!(["some-version-id","some-version-time",{},{"":""},[{"":""},{}]]), false)] // proof must not be empty
     #[case(json!(["","",{},{},[]]), false)] // all empty
     #[case(json!(["","",{},{},[{}]]), false)] // all empty
     #[case(json!(["","","","",""]), false)] // all JSON strings

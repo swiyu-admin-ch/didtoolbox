@@ -8,12 +8,15 @@ pub fn criterion_benchmark_did_tdw(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("did_tdw");
     group
-        //.significance_level(0.9)
-        //.confidence_level(0.75)
-        //.sampling_mode(SamplingMode::Flat) // intended for long-running benchmarks.
-        .nresamples(2000)
-        .measurement_time(std::time::Duration::from_secs(15))
-        .sample_size(200);
+        .significance_level(0.01)
+        .confidence_level(0.99)
+        //.noise_threshold(0.01)
+        //sampling_mode(SamplingMode::Auto) // intended for long-running benchmarks.
+        //.nresamples(4000)
+        //.measurement_time(std::time::Duration::from_secs(10))
+        //.sample_size(100)
+        //.warm_up_time(Duration::from_secs(5))
+    ;
 
     for i in inputs {
         group.bench_function(BenchmarkId::new("TrustDidWeb_read", i), |b| {
@@ -36,12 +39,15 @@ pub fn criterion_benchmark_did_tdw_jsonschema(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("did_tdw_jsonschema");
     group
-        //.significance_level(0.9)
-        //.confidence_level(0.75)
-        //.sampling_mode(SamplingMode::Flat) // intended for long-running benchmarks.
-        .nresamples(2000)
-        .measurement_time(std::time::Duration::from_secs(15))
-        .sample_size(200);
+        .significance_level(0.01)
+        .confidence_level(0.99)
+        //.noise_threshold(0.01)
+        //sampling_mode(SamplingMode::Auto) // intended for long-running benchmarks.
+        //.nresamples(4000)
+        //.measurement_time(std::time::Duration::from_secs(10))
+        //.sample_size(100)
+        //.warm_up_time(Duration::from_secs(5))
+    ;
 
     for i in inputs {
         group.bench_function(BenchmarkId::new("DidLogEntryValidator_validate", i), |b| {

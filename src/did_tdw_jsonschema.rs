@@ -48,11 +48,11 @@ struct DidLogJsonSchemaEmbedFolder;
 ///
 /// # CAUTION The single currently supported version is: v0.3
 #[derive(Debug, Clone, PartialEq)]
-pub enum DidLogJsonSchema {
-    /// As defined by both https://identity.foundation/didwebvh/v0.3 and (BIT conformity) addendum:
+pub enum DidLogEntryJsonSchema {
+    /// As defined by both https://identity.foundation/didwebvh/v0.3 and (eID-conformity) addendum:
     /// - https://confluence.bit.admin.ch/display/EIDTEAM/DID+Log+Conformity+Check
     /// - https://confluence.bit.admin.ch/display/EIDTEAM/DID+Doc+Conformity+Check
-    V03BitConform,
+    V03EidConform,
     /// As (strictly) specified by https://identity.foundation/didwebvh/v0.3
     V03,
     /*
@@ -61,15 +61,15 @@ pub enum DidLogJsonSchema {
      */
 }
 
-impl DidLogJsonSchema {
+impl DidLogEntryJsonSchema {
     /// As defined by https://identity.foundation/didwebvh/v0.3
     const DID_LOG_ENTRY_JSONSCHEMA_V_0_3_FILENAME: &'static str = "did_log_jsonschema_v_0_3.json";
 
-    /// As defined by both https://identity.foundation/didwebvh/v0.3 and (addendum):
+    /// As defined by both https://identity.foundation/didwebvh/v0.3 and (eID-conformity) addendum:
     /// - https://confluence.bit.admin.ch/display/EIDTEAM/DID+Log+Conformity+Check
     /// - https://confluence.bit.admin.ch/display/EIDTEAM/DID+Doc+Conformity+Check
-    const DID_LOG_ENTRY_JSONSCHEMA_V_0_3_BIT_CONFORM_FILENAME: &'static str =
-        "did_log_jsonschema_v_0_3_BIT_conform.json";
+    const DID_LOG_ENTRY_JSONSCHEMA_V_0_3_EID_CONFORM_FILENAME: &'static str =
+        "did_log_jsonschema_v_0_3_eid_conform.json";
 
     /// Converts this type into a corresponding JSON schema in UTF-8 format.
     fn as_schema(&self) -> String {
@@ -84,10 +84,10 @@ impl DidLogJsonSchema {
                     .unwrap()
                     .to_string()
             }
-            Self::V03BitConform => {
+            Self::V03EidConform => {
                 // CAUTION This (i.e. unwrap() call) will panic only if file denoted by DID_LOG_ENTRY_JSONSCHEMA_V_0_3_BIT_CONFORM_FILENAME does not exist
                 let jsonschema_file = DidLogJsonSchemaEmbedFolder::get(
-                    Self::DID_LOG_ENTRY_JSONSCHEMA_V_0_3_BIT_CONFORM_FILENAME,
+                    Self::DID_LOG_ENTRY_JSONSCHEMA_V_0_3_EID_CONFORM_FILENAME,
                 )
                 .unwrap();
                 // CAUTION This (i.e. unwrap() call) will panic only if file denoted by DID_LOG_ENTRY_JSONSCHEMA_V_0_3_BIT_CONFORM_FILENAME is not UTF-8
@@ -127,8 +127,8 @@ impl DidLogEntryValidator {
     }
 }
 
-impl From<DidLogJsonSchema> for DidLogEntryValidator {
-    fn from(ver: DidLogJsonSchema) -> Self {
+impl From<DidLogEntryJsonSchema> for DidLogEntryValidator {
+    fn from(ver: DidLogEntryJsonSchema) -> Self {
         Self::from(ver.as_schema().as_str())
     }
 }
@@ -144,12 +144,6 @@ impl From<&str> for DidLogEntryValidator {
                         DidLogEntryKeyword::KEYWORD_NAME,
                         DidLogEntryKeyword::factory,
                     )
-                    /*
-                    .with_keyword(
-                        DidVersionIdKeyword::KEYWORD_NAME,
-                        DidVersionIdKeyword::factory,
-                    )
-                     */
                     .with_keyword(
                         DidVersionTimeKeyword::KEYWORD_NAME,
                         DidVersionTimeKeyword::factory,
@@ -174,18 +168,21 @@ impl Default for DidLogEntryValidator {
     ///
     /// A UniFFI-compliant constructor.
     fn default() -> Self {
-        Self::from(DidLogJsonSchema::V03)
+        Self::from(DidLogEntryJsonSchema::V03)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::did_tdw_jsonschema::{DidLogEntryValidator, DidLogJsonSchema};
+    use crate::did_tdw_jsonschema::{
+        DidLogEntryJsonSchema, DidLogEntryValidator, DidLogEntryValidatorErrorKind,
+    };
     use rstest::rstest;
     use serde_json::{json, Value};
 
     #[rstest]
-    #[case(json!([
+    // CAUTION V03-specific case
+    #[case(vec!(DidLogEntryJsonSchema::V03), json!([
         "1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR",
         "2012-12-12T12:12:12Z", 
         {
@@ -227,51 +224,11 @@ mod test {
             "proofPurpose": "authentication",
             "proofValue": "z4a92V6EKmWvURx99HXVTEM6KJhbVZZ1s4qN8HJXTMesSoDJx1VpTNtuNUpae2eHpXXKwBGjtCYC2EQK7b6eczmnp",
             "challenge": "1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR"
-        }],]), true)]
-    #[case(json!([
-        "invalid-version-id", 
+        }],]), true, "")]
+    // CAUTION V03EidConform-specific case
+    #[case(vec!(DidLogEntryJsonSchema::V03EidConform), json!([
+        "1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR",
         "2012-12-12T12:12:12Z",
-        {"method": "did:tdw:0.3"}, 
-        {"value": {"id": "x"}},
-        [{
-            "created": "2012-12-12T12:12:12Z",
-            "challenge": "1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR",
-            "proofValue": "z4a92V6EKmWvURx99HXVTEM6KJhbVZZ1s4qN8HJXTMesSoDJx1VpTNtuNUpae2eHpXXKwBGjtCYC2EQK7b6eczmnp",
-        }],]), false)]
-    #[case(json!([
-        "1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR",
-        "invalid-version-time",
-        {"method": "did:tdw:0.3"},
-        {"value": {"id": "x"}},
-        [{
-            "created": "2012-12-12T12:12:12Z",
-            "challenge": "1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR",
-            "proofValue": "z4a92V6EKmWvURx99HXVTEM6KJhbVZZ1s4qN8HJXTMesSoDJx1VpTNtuNUpae2eHpXXKwBGjtCYC2EQK7b6eczmnp",
-        }],]), false)]
-    #[case(json!(["1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR","2012-12-12T12:12:12Z",{"":""},{"value":{"id":"x"}},[{"":""}]]), false)]
-    #[case(json!(["1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR","2012-12-12T12:12:12Z",{},{"value":{"id":"x"}},[{"":""}]]), false)] // params may be empty
-    #[case(json!(["1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR","2012-12-12T12:12:12Z",{},{"value":{"id":"x"}},[{}]]), false)] // proof must not be empty
-    #[case(json!(["","",{},{},[]]), false)] // all empty
-    #[case(json!(["","",{},{},[{}]]), false)] // all empty
-    #[case(json!(["","","","",""]), false)] // all JSON strings
-    #[case(json!([]), false)] // empty array
-    fn test_validate_using_default_schema(#[case] instance: Value, #[case] expected: bool) {
-        //-> Result<(), Box<dyn std::error::Error>> {
-
-        let validator = DidLogEntryValidator::default();
-
-        let is_valid = validator.validate(instance.to_string());
-
-        assert_eq!(expected, is_valid.is_ok());
-        assert_eq!(!expected, is_valid.is_err());
-
-        //Ok(())
-    }
-
-    #[rstest]
-    #[case(json!([
-        "1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR",
-        "2012-12-12T12:12:12Z", 
         {
             "method": "did:tdw:0.3",
             "scid": "QmZ5tnGo1fHNEzHDpG2Bx5dmT3eGNmBY9QATtm6DrFMzcH",
@@ -287,7 +244,7 @@ mod test {
             "deactivated": false
         },
         {"value": {
-            "id": "did:tdw:QmZ5tnGo1fHNEzHDpG2Bx5dmT3eGNmBY9QATtm6DrFMzcH:example.com", 
+            "id": "did:tdw:QmZ5tnGo1fHNEzHDpG2Bx5dmT3eGNmBY9QATtm6DrFMzcH:example.com",
             "@context": ["https://www.w3.org/ns/did/v1", "https://w3id.org/security/jwk/v1"],
             "verificationMethod": [{
                 "id": "did:tdw:QmT7BM5RsM9SoaqAQKkNKHBzSEzpS2NRzT2oKaaaPYPpGr:identifier-reg.trust-infra.swiyu-int.admin.ch:api:v1:did:18fa7c77-9dd1-4e20-a147-fb1bec146085#auth-key-01",
@@ -309,43 +266,62 @@ mod test {
             "proofPurpose": "authentication",
             "proofValue": "z4a92V6EKmWvURx99HXVTEM6KJhbVZZ1s4qN8HJXTMesSoDJx1VpTNtuNUpae2eHpXXKwBGjtCYC2EQK7b6eczmnp",
             "challenge": "1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR"
-        }],]), true)]
-    #[case(json!([
+        }],]), true, "")]
+    #[case(vec!(DidLogEntryJsonSchema::V03, DidLogEntryJsonSchema::V03EidConform), json!([
         "invalid-version-id", 
         "2012-12-12T12:12:12Z",
         {"method": "did:tdw:0.3"}, 
-        {"value": {"id": "x"}},
+        {"value": {}},
         [{
             "created": "2012-12-12T12:12:12Z",
             "challenge": "1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR",
             "proofValue": "z4a92V6EKmWvURx99HXVTEM6KJhbVZZ1s4qN8HJXTMesSoDJx1VpTNtuNUpae2eHpXXKwBGjtCYC2EQK7b6eczmnp",
-        }],]), false)]
-    #[case(json!([
+        }],]), false, "\"invalid-version-id\" does not match \"^[1-9][0-9]*-Q[1-9a-zA-NP-Z]{45,}$\"")]
+    #[case(vec!(DidLogEntryJsonSchema::V03, DidLogEntryJsonSchema::V03EidConform), json!([
         "1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR",
         "invalid-version-time",
         {"method": "did:tdw:0.3"},
-        {"value": {"id": "x"}},
+        {"value": {}},
         [{
             "created": "2012-12-12T12:12:12Z",
             "challenge": "1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR",
             "proofValue": "z4a92V6EKmWvURx99HXVTEM6KJhbVZZ1s4qN8HJXTMesSoDJx1VpTNtuNUpae2eHpXXKwBGjtCYC2EQK7b6eczmnp",
-        }],]), false)]
-    #[case(json!(["1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR","2012-12-12T12:12:12Z",{"":""},{"value":{"id":"x"}},[{"":""}]]), false)]
-    #[case(json!(["1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR","2012-12-12T12:12:12Z",{},{"value":{"id":"x"}},[{"":""}]]), false)] // params may be empty
-    #[case(json!(["1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR","2012-12-12T12:12:12Z",{},{"value":{"id":"x"}},[{}]]), false)] // proof must not be empty
-    #[case(json!(["","",{},{},[]]), false)] // all empty
-    #[case(json!(["","",{},{},[{}]]), false)] // all empty
-    #[case(json!(["","","","",""]), false)] // all JSON strings
-    #[case(json!([]), false)] // empty array
-    fn test_validate_using_v03_bit_conform_schema(#[case] instance: Value, #[case] expected: bool) {
+        }],]), false, "Datetime not in ISO8601 format")]
+    #[case(vec!(DidLogEntryJsonSchema::V03, DidLogEntryJsonSchema::V03EidConform), json!(["1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR","2012-12-12T12:12:12Z",{"":""},{"value":{}},[{"":""}]]), false, "Additional properties are not allowed ('' was unexpected)")]
+    #[case(vec!(DidLogEntryJsonSchema::V03, DidLogEntryJsonSchema::V03EidConform), json!(["1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR","2012-12-12T12:12:12Z",{},{"value":{"id":""}},[{"":""}]]), false, "\"@context\" is a required property")] // params may be empty, but DID doc must be complete
+    #[case(vec!(DidLogEntryJsonSchema::V03, DidLogEntryJsonSchema::V03EidConform), json!(["1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR","2012-12-12T12:12:12Z",{},{"value":{}},[{}]]), false, "A DID log entry must include a JSON array of five items")] // proof must not be empty
+    #[case(vec!(DidLogEntryJsonSchema::V03, DidLogEntryJsonSchema::V03EidConform), json!(["","",{},{},[]]), false, "A DID log entry must include a JSON array of five items")] // all empty
+    #[case(vec!(DidLogEntryJsonSchema::V03, DidLogEntryJsonSchema::V03EidConform), json!(["","",{},{},[{}]]), false, "A DID log entry must include a JSON array of five items")] // all empty
+    #[case(vec!(DidLogEntryJsonSchema::V03, DidLogEntryJsonSchema::V03EidConform), json!(["","","","",""]), false, "A DID log entry must include a JSON array of five items")] // all JSON strings
+    #[case(vec!(DidLogEntryJsonSchema::V03, DidLogEntryJsonSchema::V03EidConform), json!([]), false, "A DID log entry must include a JSON array of five items")] // empty array
+    fn test_validate_using_schema(
+        #[case] schemata: Vec<DidLogEntryJsonSchema>,
+        #[case] instance: Value,
+        #[case] expected: bool,
+        #[case] err_contains_pattern: &str,
+    ) {
         //-> Result<(), Box<dyn std::error::Error>> {
 
-        let validator = DidLogEntryValidator::from(DidLogJsonSchema::V03BitConform);
+        schemata.iter().for_each(|schema| {
+            let validator = DidLogEntryValidator::from(schema.to_owned());
 
-        let is_valid = validator.validate(instance.to_string());
+            let is_valid = validator.validate(instance.to_string());
 
-        assert_eq!(expected, is_valid.is_ok());
-        assert_eq!(!expected, is_valid.is_err());
+            assert_eq!(expected, is_valid.is_ok());
+            assert_eq!(!expected, is_valid.is_err());
+            if !expected {
+                assert!(is_valid.is_err_and(|err| {
+                    assert_eq!(err.kind(), DidLogEntryValidatorErrorKind::ValidationError);
+                    assert!(
+                        err.to_string().contains(err_contains_pattern),
+                        "got: '{}', expected '{}'",
+                        err.to_string(),
+                        err_contains_pattern
+                    );
+                    true
+                }));
+            }
+        });
 
         //Ok(())
     }

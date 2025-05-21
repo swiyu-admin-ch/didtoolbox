@@ -8,7 +8,7 @@
     "prefixItems": [
       {
         "type": "string",
-        "pattern": "^[1-9][0-9]?+-Q[1-9a-zA-NP-Z]{45,}$",
+        "pattern": "^[1-9][0-9]*-Q[1-9a-zA-NP-Z]{45,}$",
         "$comment": "The entry versionId is a value that combines the version number (starting at 1 and incrementing by one per DID version), a literal dash -, and the entryHash, a hash calculated across the log entry content."
       },
       {
@@ -278,7 +278,7 @@
             },
             "challenge": {
               "type": "string",
-              "pattern": "^[1-9][0-9]?+-Q[1-9a-zA-NP-Z]{45,}$"
+              "pattern": "^[1-9][0-9]*-Q[1-9a-zA-NP-Z]{45,}$"
             }
           },
           "required": [

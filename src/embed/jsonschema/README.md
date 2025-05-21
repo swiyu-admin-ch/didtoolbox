@@ -5,10 +5,10 @@ It helps you standardize and define expectations for JSON data.
 
 This directory features various [JSON schema (Draft 2020-12)](https://json-schema.org/draft/2020-12) designed for the sake of validating [didwebvh](https://identity.foundation/didwebvh) DID logs:
 
-- [v03BitConform](did_log_jsonschema_v_0_3_BIT_conform.json), as defined by both [did:tdw:0.3](https://identity.foundation/didwebvh/v0.3) and (addendum):
+- [`V03EidConform`](did_log_jsonschema_v_0_3_eid_conform.json), as defined by both [did:tdw:0.3](https://identity.foundation/didwebvh/v0.3) and (eID-conformity) addendum:
   - https://confluence.bit.admin.ch/display/EIDTEAM/DID+Log+Conformity+Check
   - https://confluence.bit.admin.ch/display/EIDTEAM/DID+Doc+Conformity+Check
-- [V03](did_log_jsonschema_v_0_3.json), as (strictly) specified by [did:tdw:0.3](https://identity.foundation/didwebvh/v0.3)
+- [`V03`](did_log_jsonschema_v_0_3.json), as (strictly) specified by [did:tdw:0.3](https://identity.foundation/didwebvh/v0.3)
 
 
 Both these schemata are indeed different, not substantially, though. To explore their differences, feel free to run either:

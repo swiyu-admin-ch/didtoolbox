@@ -137,11 +137,11 @@ interface DidDoc {
 /// W.r.t. corresponding specification version available at https://identity.foundation/didwebvh
 ///
 /// # CAUTION The single currently supported version is: v0.3
-enum DidLogJsonSchema {
-    /// As defined by both https://identity.foundation/didwebvh/v0.3 and (BIT conformity) addendum:
+enum DidLogEntryJsonSchema {
+    /// As defined by both https://identity.foundation/didwebvh/v0.3 and (eID-conformity) addendum:
     /// - https://confluence.bit.admin.ch/display/EIDTEAM/DID+Log+Conformity+Check
     /// - https://confluence.bit.admin.ch/display/EIDTEAM/DID+Doc+Conformity+Check
-    "V03BitConform",
+    "V03EidConform",
     /// As specified by https://identity.foundation/didwebvh/v0.3
     "V03",
 };
@@ -165,7 +165,7 @@ interface DidLogEntryValidator {
     [Name=default]
     constructor();
     [Name=from]
-    constructor(DidLogJsonSchema ver);
+    constructor(DidLogEntryJsonSchema ver);
     /// Validate `instance` against `schema` and return the first error if any.
     [Throws=DidLogEntryValidatorError]
     void validate(string instance);

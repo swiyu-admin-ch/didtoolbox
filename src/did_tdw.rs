@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-use crate::did_tdw_jsonschema::DidLogEntryValidator;
+use crate::did_tdw_jsonschema::{DidLogEntryValidator, DidLogEntryValidatorError};
 use crate::did_tdw_parameters::*;
 use crate::didtoolbox::*;
 use crate::ed25519::*;
@@ -292,6 +292,8 @@ impl DidDocumentState {
 
         let mut is_deactivated: bool = false;
 
+        let validator = DidLogEntryValidator::default();
+
         Ok(DidDocumentState {
             did_log_entries: unescaped.split("\n")
                 .filter(|line| !line.is_empty())
@@ -302,14 +304,13 @@ impl DidDocumentState {
                         ));
                     }
 
-                    // Validation w.r.t. https://confluence.bit.admin.ch/display/EIDTEAM/DID+Log+Conformity+Check
-                    match DidLogEntryValidator::default().validate(String::from(line)) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            return Err(TrustDidWebError::DeserializationFailed(
-                                e.to_string(),
-                            ));
-                        }
+                    // Ensure conformity with did:tdw JSON schema standard
+                    // CAUTION Beware of a slight (typically 5-20%) overall performance
+                    //         regression imposed by this call.
+                    if let Err(e) = validator.validate(String::from(line)) {
+                        return Err(TrustDidWebError::DeserializationFailed(
+                            e.to_string(),
+                        ));
                     }
 
                     // IMPORTANT: At this point, the current DID log entry may be considered VALID, so...
@@ -319,7 +320,7 @@ impl DidDocumentState {
                     // Since v0.2 (see https://identity.foundation/trustdidweb/v0.3/#didtdw-version-changelog):
                     //            The new versionId takes the form <versionNumber>-<entryHash>, where <version number> is the incrementing integer of version of the entry: 1, 2, 3, etc.
                     let version_index: usize = version_id.split_once("-")
-                        .map(|(index, _)| index.parse::<usize>().unwrap())// no panic is expected here...
+                        .map(|(index, _)| index.parse::<usize>().unwrap()) // no panic is expected here...
                         .unwrap(); // ...or here (as the entry has already been validated)
 
                     // https://identity.foundation/didwebvh/v0.3/#the-did-log-file:
