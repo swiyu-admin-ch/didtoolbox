@@ -240,7 +240,6 @@ mod test {
             "prerotation": false,
             "nextKeyHashes": [],
             "witnesses": [],
-            "witnessThreshold": 0,
             "deactivated": false
         },
         {"value": {

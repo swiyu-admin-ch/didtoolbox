@@ -59,10 +59,6 @@
             },
             "$comment": "A list of one or more multikey formatted public keys associated with the private keys that are authorized to sign the log entries that update the DID from one version to the next. This item MUST appear in the first DID log entry. Must be unset or null (REQUIREMENT)"
           },
-          "witnessThreshold": {
-            "type": "integer",
-            "const": 0
-          },
           "deactivated": {
             "type": "boolean",
             "$comment": "A JSON boolean that SHOULD be set to true when the DID is to be deactivated. See the deactivate (revoke) section of this specification for more details."
