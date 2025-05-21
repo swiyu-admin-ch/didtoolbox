@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-use crate::did_tdw_jsonschema::{DidLogEntryValidator, DidLogEntryValidatorError};
+use crate::did_tdw_jsonschema::{DidLogEntryValidator};
 use crate::did_tdw_parameters::*;
 use crate::didtoolbox::*;
 use crate::ed25519::*;
