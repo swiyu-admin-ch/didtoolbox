@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use didtoolbox::did_tdw;
 use std::fs;
@@ -6,9 +8,20 @@ use std::path::Path;
 pub fn criterion_benchmark_did_tdw(c: &mut Criterion) {
     let inputs = [10, 50, 100, 200];
 
-    let mut did_tdw_group = c.benchmark_group("did_tdw");
+    let mut group = c.benchmark_group("did_tdw");
+    group
+        .significance_level(0.01)
+        .confidence_level(0.99)
+    //.noise_threshold(0.01)
+    //sampling_mode(SamplingMode::Auto) // intended for long-running benchmarks.
+    //.nresamples(4000)
+    //.measurement_time(std::time::Duration::from_secs(10))
+    //.sample_size(100)
+    //.warm_up_time(Duration::from_secs(5))
+    ;
+
     for i in inputs {
-        did_tdw_group.bench_function(BenchmarkId::new("TrustDidWeb_read", i), |b| {
+        group.bench_function(BenchmarkId::new("TrustDidWeb_read", i), |b| {
             b.iter(|| {
                 let did_log_raw_filepath = format!{"test_data/generated_by_didtoolbox_java/v{:03}_did.jsonl", i};
                 let did_url =
@@ -20,7 +33,7 @@ pub fn criterion_benchmark_did_tdw(c: &mut Criterion) {
             })
         });
     }
-    did_tdw_group.finish();
+    group.finish();
 }
 
 criterion_group!(benches, criterion_benchmark_did_tdw);
