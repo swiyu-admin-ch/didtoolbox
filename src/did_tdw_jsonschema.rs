@@ -181,7 +181,7 @@ mod test {
     use serde_json::{json, Value};
 
     #[rstest]
-    // CAUTION V03-specific case
+    // CAUTION V03-specific (happy path) case
     #[case(vec!(DidLogEntryJsonSchema::V03), json!([
         "1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR",
         "2012-12-12T12:12:12Z", 
@@ -225,7 +225,7 @@ mod test {
             "proofValue": "z4a92V6EKmWvURx99HXVTEM6KJhbVZZ1s4qN8HJXTMesSoDJx1VpTNtuNUpae2eHpXXKwBGjtCYC2EQK7b6eczmnp",
             "challenge": "1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR"
         }],]), true, "")]
-    // CAUTION V03EidConform-specific case
+    // CAUTION V03EidConform-specific (happy path) case
     #[case(vec!(DidLogEntryJsonSchema::V03EidConform), json!([
         "1-QmcykRx2WnZz2L9s5ACN34E4ADEYGiCde4BJSzoxrhYoiR",
         "2012-12-12T12:12:12Z",

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-use crate::did_tdw_jsonschema::{DidLogEntryValidator};
+use crate::did_tdw_jsonschema::DidLogEntryValidator;
 use crate::did_tdw_parameters::*;
 use crate::didtoolbox::*;
 use crate::ed25519::*;
@@ -293,6 +293,7 @@ impl DidDocumentState {
         let mut is_deactivated: bool = false;
 
         let validator = DidLogEntryValidator::default();
+        let now: DateTime<Utc> = Utc::now();
 
         Ok(DidDocumentState {
             did_log_entries: unescaped.split("\n")
@@ -323,6 +324,11 @@ impl DidDocumentState {
                         .map(|(index, _)| index.parse::<usize>().unwrap()) // no panic is expected here...
                         .unwrap(); // ...or here (as the entry has already been validated)
 
+                    if prev_entry.is_none() && version_index != 1
+                        || prev_entry.is_some() && (version_index - 1).ne(&prev_entry.to_owned().unwrap().version_index) {
+                        return Err(TrustDidWebError::DeserializationFailed("Version numbers (`versionId`) must be in a sequence of positive consecutive integers.".to_string()));
+                    }
+
                     // https://identity.foundation/didwebvh/v0.3/#the-did-log-file:
                     // The `versionTime` (as stated by the DID Controller) of the entry,
                     // in ISO8601 format (https://identity.foundation/didwebvh/v0.3/#term:iso8601).
@@ -331,6 +337,14 @@ impl DidDocumentState {
                             .unwrap() // no panic is expected here...
                             .to_utc())
                         .unwrap(); // ...or here (as the entry has already been validated)
+
+                    if version_time.ge(&now) {
+                        return Err(TrustDidWebError::DeserializationFailed("`versionTime` must be before the current datetime.".to_string()));
+                    }
+
+                    if prev_entry.is_some() && version_time.lt(&prev_entry.to_owned().unwrap().version_time) {
+                        return Err(TrustDidWebError::DeserializationFailed("`versionTime` must be greater then the `versionTime` of the previous entry.".to_string()));
+                    }
 
                     let mut new_params: Option<DidMethodParameters> = None;
                     current_params = match entry[2] {

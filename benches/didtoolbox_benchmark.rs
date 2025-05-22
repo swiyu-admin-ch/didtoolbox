@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, SamplingMode};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use didtoolbox::{did_tdw, did_tdw_jsonschema};
 use std::fs;
 use std::path::Path;
@@ -49,6 +49,8 @@ pub fn criterion_benchmark_did_tdw_jsonschema(c: &mut Criterion) {
         //.warm_up_time(Duration::from_secs(5))
     ;
 
+    let validator = did_tdw_jsonschema::DidLogEntryValidator::default();
+
     for i in inputs {
         group.bench_function(BenchmarkId::new("DidLogEntryValidator_validate", i), |b| {
             b.iter(|| {
@@ -58,7 +60,9 @@ pub fn criterion_benchmark_did_tdw_jsonschema(c: &mut Criterion) {
 
                 let did_log_raw = fs::read_to_string(Path::new(&did_log_raw_filepath)).unwrap();
 
-                let _ = did_tdw_jsonschema::DidLogEntryValidator::default().validate(black_box(did_log_raw));
+                let _ = did_log_raw.split("\n")
+                    .filter(|line| !line.is_empty())
+                    .map(|line| validator.validate(black_box(String::from(line))));
             })
         });
     }
