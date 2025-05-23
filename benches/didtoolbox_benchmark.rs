@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use didtoolbox::{did_tdw, did_tdw_jsonschema};
 use std::fs;

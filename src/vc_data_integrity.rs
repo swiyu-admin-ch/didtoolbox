@@ -504,3 +504,77 @@ impl VCDataIntegrity for EddsaJcs2022Cryptosuite {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::errors::TrustDidWebErrorKind;
+    use crate::test::assert_trust_did_web_error;
+    use crate::vc_data_integrity::DataIntegrityProof;
+    use rstest::rstest;
+
+    #[rstest]
+    // emtpy proof
+    #[case("[]", "Empty proof array detected")]
+    // two proofs
+    #[case("[\"proof1\", \"proof2\"]", "A single proof is currently supported")]
+    // invalid json
+    #[case(
+        "[{\"key:}]",
+        "Malformed proof format, expected single-element JSON array"
+    )]
+    // invalid type
+    #[case(
+        "[{\"type\":\"invalidType\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\"}]",
+        "Unsupported proof's type"
+    )]
+    // unsupported cryptosuite
+    #[case(
+        "[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"unsupportedCrypto\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\"}]",
+        "Unsupported proof's cryptosuite"
+    )]
+    // invalid created date
+    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"invalidDate\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\"}]",
+        "Invalid proof's creation datetime format"
+    )]
+    // invalid verification method
+    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"invalidMethod\", \"proofPurpose\":\"authentication\"}]",
+        "Unsupported proof's verificationMethod"
+    )]
+    // invalid proof purpose
+    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"invalidPurpose\"}]",
+        "Unsupported proof's proofPurpose"
+    )]
+    // invalid @context
+    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\", \"@context\":\"invalidContext\"}]",
+        "Invalid format of 'context' entry"
+    )]
+    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\", \"@context\":[\"validContext\", true, 3]}]",
+        "Invalid type of 'context' entry"
+    )]
+    // invalid proof challenge
+    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\"}]",
+        "Missing proof's challenge parameter."
+    )]
+    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\", \"challenge\":[false, 2]}]",
+        "Wrong format of proof's challenge parameter"
+    )]
+    // invalid proof challenge
+    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\", \"challenge\":\"1-hash\"}]",
+        "Missing proofValue parameter"
+    )]
+    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\", \"challenge\":\"1-hash\", \"proofValue\":5}]",
+        "Wrong format of proofValue parameter"
+    )]
+    fn test_invalid_proof_parsing(
+        #[case] input_str: String,
+        #[case] error_string: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        assert_trust_did_web_error(
+            DataIntegrityProof::from(input_str),
+            TrustDidWebErrorKind::InvalidIntegrityProof,
+            error_string,
+        );
+
+        Ok(())
+    }
+}

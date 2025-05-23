@@ -35,7 +35,6 @@ mod test {
     use super::ed25519::*;
     use super::jcs_sha256_hasher::*;
     use super::multibase::*;
-    use crate::did_tdw_parameters::*;
     use crate::errors::*;
     use crate::vc_data_integrity::*;
     use chrono::DateTime;
@@ -270,7 +269,7 @@ mod test {
     }
 
     /// A rather trivial assertion helper around TrustDidWebError.
-    fn assert_trust_did_web_error<T>(
+    pub fn assert_trust_did_web_error<T>(
         res: Result<T, TrustDidWebError>,
         expected_kind: TrustDidWebErrorKind,
         error_contains: &str,
@@ -288,114 +287,6 @@ mod test {
             error_contains,
             err_to_string
         );*/
-    }
-
-    /// A rather trivial unit testing helper.
-    fn build_valid_params_json_string() -> String {
-        json!(DidMethodParameters::for_genesis_did_doc(
-            "123".to_string(),
-            "123".to_string()
-        ))
-        .to_string()
-    }
-
-    #[rstest]
-    // doc needs 5 entries
-    #[case("[1,2,3]", "Invalid did log entry")]
-    // invalid version id
-    #[case("[\"1\",2,3,4,5]", "Invalid entry hash format")]
-    #[case(
-        "[\"invalidNumber-hash\",2,3,4,5]",
-        "the <versionNumber> is not an (unsigned) integer."
-    )]
-    // invalid time
-    #[case("[\"1-hash\",[1234],3,4,5]", "Invalid versionTime.")]
-    #[case("[\"1-hash\",\"invalidTime\",3,4,5]", "Invalid versionTime.")]
-    // missing params
-    #[case(
-        "[\"1-hash\",\"2012-12-12T12:12:12Z\",{},4,5]",
-        "Missing DID Document parameters"
-    )]
-    // JSON 'patch' is not supported
-    #[case(format!("[\"1-hash\",\"2012-12-12T12:12:12Z\",{},{{\"patch\":0}},5]", build_valid_params_json_string()), "JSON 'patch' is not supported")]
-    // JSON 'value' needs to be a valid did doc
-    #[case(format!("[\"1-hash\",\"2012-12-12T12:12:12Z\",{},{{\"value\":\"invalidDoc\"}},5]", build_valid_params_json_string()), "Missing DID document: invalid type")]
-    fn test_invalid_did_log(
-        #[case] input_str: String,
-        #[case] error_string: &str,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        assert_trust_did_web_error(
-            DidDocumentState::from(input_str),
-            TrustDidWebErrorKind::DeserializationFailed,
-            error_string,
-        );
-        Ok(())
-    }
-
-    #[rstest]
-    // emtpy proof
-    #[case("[]", "Empty proof array detected")]
-    // two proofs
-    #[case("[\"proof1\", \"proof2\"]", "A single proof is currently supported")]
-    // invalid json
-    #[case(
-        "[{\"key:}]",
-        "Malformed proof format, expected single-element JSON array"
-    )]
-    // invalid type
-    #[case(
-        "[{\"type\":\"invalidType\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\"}]", 
-        "Unsupported proof's type"
-    )]
-    // unsupported cryptosuite
-    #[case(
-        "[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"unsupportedCrypto\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\"}]",
-        "Unsupported proof's cryptosuite"
-    )]
-    // invalid created date
-    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"invalidDate\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\"}]",
-        "Invalid proof's creation datetime format"
-    )]
-    // invalid verification method
-    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"invalidMethod\", \"proofPurpose\":\"authentication\"}]",
-        "Unsupported proof's verificationMethod"
-    )]
-    // invalid proof purpose
-    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"invalidPurpose\"}]",
-        "Unsupported proof's proofPurpose"
-    )]
-    // invalid @context
-    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\", \"@context\":\"invalidContext\"}]",
-        "Invalid format of 'context' entry"
-    )]
-    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\", \"@context\":[\"validContext\", true, 3]}]",
-        "Invalid type of 'context' entry"
-    )]
-    // invalid proof challenge
-    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\"}]",
-        "Missing proof's challenge parameter."
-    )]
-    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\", \"challenge\":[false, 2]}]",
-        "Wrong format of proof's challenge parameter"
-    )]
-    // invalid proof challenge
-    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\", \"challenge\":\"1-hash\"}]",
-        "Missing proofValue parameter"
-    )]
-    #[case("[{\"type\":\"DataIntegrityProof\", \"cryptosuite\":\"eddsa-jcs-2022\", \"created\":\"2012-12-12T12:12:12Z\", \"verificationMethod\": \"did:key:123\", \"proofPurpose\":\"authentication\", \"challenge\":\"1-hash\", \"proofValue\":5}]",
-        "Wrong format of proofValue parameter"
-    )]
-    fn test_invalid_proof_parsing(
-        #[case] input_str: String,
-        #[case] error_string: &str,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        assert_trust_did_web_error(
-            DataIntegrityProof::from(input_str),
-            TrustDidWebErrorKind::InvalidIntegrityProof,
-            error_string,
-        );
-
-        Ok(())
     }
 
     #[rstest]
@@ -482,224 +373,6 @@ mod test {
     }
 
     #[rstest]
-    fn test_did_tdw_parameters_validate_initial() {
-        let params_for_genesis_did_doc =
-            DidMethodParameters::for_genesis_did_doc("scid".to_string(), "update_key".to_string());
-        assert!(params_for_genesis_did_doc.validate_initial().is_ok());
-
-        let mut params = params_for_genesis_did_doc.clone();
-
-        // Test "method" DID parameter
-        params.method = Some("invalidVersion".to_string());
-        assert_trust_did_web_error(
-            params.validate_initial(),
-            TrustDidWebErrorKind::InvalidDidParameter,
-            "Invalid 'method' DID parameter.",
-        );
-        params.method = None;
-        assert_trust_did_web_error(
-            params.validate_initial(),
-            TrustDidWebErrorKind::InvalidDidParameter,
-            "Missing 'method' DID parameter.",
-        );
-
-        // Test "scid" DID parameter
-        params = params_for_genesis_did_doc.clone();
-        params.scid = Some("".to_string());
-        assert_trust_did_web_error(
-            params.validate_initial(),
-            TrustDidWebErrorKind::InvalidDidParameter,
-            "Invalid 'scid' DID parameter.",
-        );
-        params.scid = None;
-        assert_trust_did_web_error(
-            params.validate_initial(),
-            TrustDidWebErrorKind::InvalidDidParameter,
-            "Missing 'scid' DID parameter.",
-        );
-
-        // Test "update_keys" DID parameter
-        params = params_for_genesis_did_doc.clone();
-        params.update_keys = Some(vec![]);
-        assert_trust_did_web_error(
-            params.validate_initial(),
-            TrustDidWebErrorKind::InvalidDidParameter,
-            "Empty 'updateKeys' DID parameter.",
-        );
-        params.update_keys = None;
-        assert_trust_did_web_error(
-            params.validate_initial(),
-            TrustDidWebErrorKind::InvalidDidParameter,
-            "Missing 'updateKeys' DID parameter.",
-        );
-
-        // Test "portable" DID parameter
-        params = params_for_genesis_did_doc.clone();
-        params.portable = Some(true);
-        assert_trust_did_web_error(
-            params.validate_initial(),
-            TrustDidWebErrorKind::InvalidDidParameter,
-            "Unsupported 'portable' DID parameter",
-        );
-        params.portable = Some(false);
-        assert!(params.validate_initial().is_ok());
-        params.portable = None;
-        assert!(params.validate_initial().is_ok());
-
-        // Test "prerotation" DID parameter
-        params = params_for_genesis_did_doc.clone();
-        params.prerotation = Some(true);
-        assert_trust_did_web_error(
-            params.validate_initial(),
-            TrustDidWebErrorKind::InvalidDidParameter,
-            "Unsupported 'prerotation' DID parameter",
-        );
-        params.prerotation = Some(false);
-        assert!(params.validate_initial().is_ok());
-        params.prerotation = None;
-        assert!(params.validate_initial().is_ok());
-
-        // Test "next_keys" DID parameter
-        params = params_for_genesis_did_doc.clone();
-        params.next_keys = Some(vec!["some_valid_key".to_string()]);
-        assert_trust_did_web_error(
-            params.validate_initial(),
-            TrustDidWebErrorKind::InvalidDidParameter,
-            "Unsupported non-empty 'nextKeyHashes' DID parameter",
-        );
-        params.next_keys = Some(vec![]);
-        assert!(params.validate_initial().is_ok());
-        params.next_keys = None;
-        assert!(params.validate_initial().is_ok());
-
-        // Test "witnesses" DID parameter
-        params = params_for_genesis_did_doc.clone();
-        params.witnesses = Some(vec!["some_valid_witness".to_string()]);
-        assert_trust_did_web_error(
-            params.validate_initial(),
-            TrustDidWebErrorKind::InvalidDidParameter,
-            "Unsupported non-empty 'witnesses' DID parameter.",
-        );
-        params.witnesses = Some(vec![]);
-        assert!(params.validate_initial().is_ok());
-        params.witnesses = None;
-        assert!(params.validate_initial().is_ok());
-    }
-
-    #[rstest]
-    fn test_did_tdw_parameters_validate_transition() {
-        let base_params =
-            DidMethodParameters::for_genesis_did_doc("scid".to_string(), "update_key".to_string());
-
-        let mut old_params = base_params.clone();
-        let mut new_params = base_params.clone();
-        assert!(old_params.merge_from(&new_params).is_ok());
-
-        // Test "method" DID parameter
-        old_params = base_params.clone();
-        new_params = base_params.clone();
-        new_params.method = Some("invalidVersion".to_string());
-        assert_trust_did_web_error(
-            old_params.merge_from(&new_params),
-            TrustDidWebErrorKind::InvalidDidParameter,
-            "Invalid 'method' DID parameter.",
-        );
-        new_params.method = None;
-        assert!(old_params.merge_from(&new_params).is_ok());
-        // Test "scid" DID parameter
-        old_params = old_params.clone();
-        new_params = new_params.clone();
-        new_params.scid = Some("otherSCID".to_string());
-        assert_trust_did_web_error(
-            old_params.merge_from(&new_params),
-            TrustDidWebErrorKind::InvalidDidParameter,
-            "Invalid 'scid' DID parameter.",
-        );
-        new_params.scid = None;
-        assert!(old_params.merge_from(&new_params).is_ok());
-        new_params.scid = Some("scid".to_string()); // SAME scid value
-        assert!(old_params.merge_from(&new_params).is_ok());
-
-        // Test "update_keys" DID parameter
-        old_params = base_params.clone();
-        new_params = base_params.clone();
-        new_params.update_keys = Some(vec!["newUpdateKey".to_string()]);
-        assert!(old_params.merge_from(&new_params).is_ok());
-        new_params.update_keys = None;
-        assert!(old_params.merge_from(&new_params).is_ok());
-        new_params.update_keys = Some(vec![]);
-        assert!(old_params.merge_from(&new_params).is_ok());
-
-        // Test "portable" DID parameter
-        old_params = base_params.clone();
-        new_params = base_params.clone();
-
-        new_params.portable = Some(true);
-        assert_trust_did_web_error(
-            old_params.merge_from(&new_params),
-            TrustDidWebErrorKind::InvalidDidParameter,
-            "Invalid 'portable' DID parameter.",
-        );
-        new_params.portable = Some(false);
-        assert!(old_params.merge_from(&new_params).is_ok());
-        new_params.portable = None;
-        assert!(old_params.merge_from(&new_params).is_ok());
-        new_params.portable = Some(true);
-        old_params.portable = Some(true);
-        assert_trust_did_web_error(
-            old_params.merge_from(&new_params),
-            TrustDidWebErrorKind::InvalidDidParameter,
-            "Unsupported 'portable' DID parameter.",
-        );
-
-        // Test "prerotation" DID parameter
-        old_params = base_params.clone();
-        new_params = base_params.clone();
-        old_params.prerotation = Some(true);
-        new_params.prerotation = Some(false);
-        assert_trust_did_web_error(
-            old_params.merge_from(&new_params),
-            TrustDidWebErrorKind::InvalidDidParameter,
-            "Invalid 'prerotation' DID parameter.",
-        );
-        old_params.prerotation = Some(true);
-        new_params.prerotation = Some(true);
-        assert!(old_params.merge_from(&new_params).is_ok());
-        old_params.prerotation = Some(false);
-        new_params.prerotation = Some(false);
-        assert!(old_params.merge_from(&new_params).is_ok());
-        old_params.prerotation = Some(false);
-        new_params.prerotation = Some(true);
-        assert!(old_params.merge_from(&new_params).is_ok());
-        new_params.prerotation = None;
-        assert!(old_params.merge_from(&new_params).is_ok());
-
-        // Test "next_keys" DID parameter
-        old_params = base_params.clone();
-        new_params = base_params.clone();
-        new_params.next_keys = Some(vec!["newUpdateKeyHash".to_string()]);
-        assert!(old_params.merge_from(&new_params).is_ok());
-        new_params.next_keys = None;
-        assert!(old_params.merge_from(&new_params).is_ok());
-        new_params.next_keys = Some(vec![]);
-        assert!(old_params.merge_from(&new_params).is_ok());
-
-        // Test "witnesses" DID parameter
-        old_params = base_params.clone();
-        new_params = base_params.clone();
-        new_params.witnesses = Some(vec!["some_valid_witness".to_string()]);
-        assert_trust_did_web_error(
-            old_params.merge_from(&new_params),
-            TrustDidWebErrorKind::InvalidDidParameter,
-            "Unsupported non-empty 'witnesses' DID parameter.",
-        );
-        new_params.witnesses = Some(vec![]);
-        assert!(old_params.merge_from(&new_params).is_ok());
-        new_params.witnesses = None;
-        assert!(old_params.merge_from(&new_params).is_ok());
-    }
-
-    #[rstest]
     #[case("test_data/generated_by_didtoolbox_java/v010_did.jsonl")]
     #[case("test_data/generated_by_tdw_js/unique_update_keys.jsonl")]
     fn test_generate_version_id(
@@ -731,12 +404,6 @@ mod test {
         "test_data/generated_by_didtoolbox_java/v100_did.jsonl",
         "did:tdw:QmT7BM5RsM9SoaqAQKkNKHBzSEzpS2NRzT2oKaaaPYPpGr:identifier-reg.trust-infra.swiyu-int.admin.ch:api:v1:did:18fa7c77-9dd1-4e20-a147-fb1bec146085"
     )]
-    /*
-    #[case(
-        "test_data/generated_by_didtoolbox_java/empty_did_params.jsonl",
-        "did:tdw:QmeLapUpgZeyyCmjG8vRKjXYwEAXaYJyAT4ohzR73jZf1A:127.0.0.1%3A54858"
-    )]
-     */
     fn test_read_did_tdw(
         #[case] did_log_raw_filepath: String,
         #[case] did_url: String,
@@ -765,34 +432,6 @@ mod test {
         //assert!(!did_doc_v1_obj.controller.is_empty());
 
         Ok(())
-    }
-
-    #[rstest]
-    #[case(
-        "test_data/generated_by_tdw_js/unhappy_path/not_authorized.jsonl",
-        "did:tdw:QmXjp5qhSEvm8oXip43cDX62hZhHZdAMYv7Magy1tkffSz:example.com"
-    )]
-    fn test_read_did_tdw_unauthorized_key(
-        #[case] did_log_raw_filepath: String,
-        #[case] did_url: String,
-    ) {
-        //let did_log_raw_filepath = "test_data/generated_by_tdw_js/unhappy_path/not_authorized.jsonl";
-        //let did_url: String = String::from("did:tdw:QmXjp5qhSEvm8oXip43cDX62hZhHZdAMYv7Magy1tkffSz:example.com");
-
-        let did_log_raw = fs::read_to_string(Path::new(&did_log_raw_filepath)).unwrap();
-
-        // CAUTION No ? operator required here as we want to inspect the expected error
-        let tdw_v1 = TrustDidWeb::read(did_url.clone(), did_log_raw);
-
-        assert!(tdw_v1.is_err());
-        let err = tdw_v1.err();
-        assert!(err.is_some());
-        let err = err.unwrap();
-        assert_eq!(err.kind(), TrustDidWebErrorKind::InvalidIntegrityProof);
-        // e.g. "invalid DID log integration proof: Key extracted from proof is not authorized for update: z6Mkwf4PgXLq8sRfucTggtZXmigKZP7gQhFamk3XHGV54QvF"
-        assert!(err
-            .to_string()
-            .contains("Key extracted from proof is not authorized for update"));
     }
 
     #[rstest]
@@ -832,33 +471,5 @@ mod test {
         //assert!(!did_doc_v1_obj.controller.is_empty());
 
         Ok(())
-    }
-
-    #[rstest]
-    #[case(
-        "test_data/generated_by_tdw_js/already_deactivated.jsonl",
-        "did:tdw:QmdSU7F2rF8r4m6GZK7Evi2tthfDDxhw3NppU8pJMbd2hB:example.com"
-    )]
-    fn test_read_did_tdw_already_deactivated(
-        #[case] did_log_raw_filepath: String,
-        #[case] did_url: String,
-    ) {
-        //let did_log_raw_filepath = "test_data/generated_by_tdw_js/already_deactivated.jsonl";
-        //let did_url: String = String::from("did:tdw:QmdSU7F2rF8r4m6GZK7Evi2tthfDDxhw3NppU8pJMbd2hB:example.com");
-
-        let did_log_raw = fs::read_to_string(Path::new(&did_log_raw_filepath)).unwrap();
-
-        // CAUTION No ? operator required here as we want to inspect the expected error
-        let tdw_v1 = TrustDidWeb::read(did_url.clone(), did_log_raw);
-
-        assert!(tdw_v1.is_err());
-        let err = tdw_v1.err();
-        assert!(err.is_some());
-        let err = err.unwrap();
-        assert_eq!(err.kind(), TrustDidWebErrorKind::InvalidDidDocument);
-        // e.g. "invalid DID log integration proof: Key extracted from proof is not authorized for update: z6Mkwf4PgXLq8sRfucTggtZXmigKZP7gQhFamk3XHGV54QvF"
-        assert!(err
-            .to_string()
-            .contains("This DID document is already deactivated"));
     }
 }

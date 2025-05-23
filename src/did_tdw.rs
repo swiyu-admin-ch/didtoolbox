@@ -9,6 +9,7 @@ use crate::jcs_sha256_hasher::JcsSha256Hasher;
 use crate::vc_data_integrity::*;
 use chrono::serde::ts_seconds;
 use chrono::{DateTime, SecondsFormat, Utc};
+use rayon::prelude::*;
 use regex;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -48,6 +49,7 @@ pub struct DidLogEntry {
 }
 
 impl DidLogEntry {
+    #[allow(clippy::too_many_arguments)]
     /// Import of existing log entry
     pub fn new(
         version_id: String,
@@ -285,18 +287,23 @@ impl DidDocumentState {
      */
 
     pub fn from(did_log: String) -> Result<Self, TrustDidWebError> {
-        let unescaped = did_log.clone();
+        // CAUTION Despite parallelism, beware of a possibly significant (according to benchmarks, at least),
+        //         overall performance regression induced/imposed by this call, especially for smaller logs:
+        //               10% (for larger 100+ entries logs)
+        //         up to 90% (for smaller 10+ entries logs).
+        if let Some(err) = Self::validate_against_json_schema(&did_log).err() {
+            return Err(err);
+        }
 
         let mut current_params: Option<DidMethodParameters> = None;
         let mut prev_entry: Option<Arc<DidLogEntry>> = None;
 
         let mut is_deactivated: bool = false;
-
-        let validator = DidLogEntryValidator::default();
-        let now: DateTime<Utc> = Utc::now();
+        //let now= Local::now();
+        let now = Utc::now();
 
         Ok(DidDocumentState {
-            did_log_entries: unescaped.split("\n")
+            did_log_entries: did_log.split("\n")
                 .filter(|line| !line.is_empty())
                 .map(|line| {
                     if is_deactivated {
@@ -305,16 +312,9 @@ impl DidDocumentState {
                         ));
                     }
 
-                    // Ensure conformity with did:tdw JSON schema standard
-                    // CAUTION Beware of a slight (typically 5-20%) overall performance
-                    //         regression imposed by this call.
-                    if let Err(e) = validator.validate(String::from(line)) {
-                        return Err(TrustDidWebError::DeserializationFailed(
-                            e.to_string(),
-                        ));
-                    }
-
-                    // IMPORTANT: At this point, the current DID log entry may be considered VALID, so...
+                    // CAUTION: It is assumed that the did:tdw JSON schema conformity check (see above) 
+                    //          have already been ensured at this point! 
+                    //          Therefore, at this point, the current DID log entry may be considered fully JSON-schema-compliant, so...
                     let entry: JsonValue = serde_json::from_str(line).unwrap();     // ...no panic is expected here
                     let version_id = entry[0].as_str().unwrap().to_string(); // ...or here
 
@@ -338,8 +338,9 @@ impl DidDocumentState {
                             .to_utc())
                         .unwrap(); // ...or here (as the entry has already been validated)
 
+                    // CAUTION This check is not really required as it has been already implemented by the JSON schema validator
                     if version_time.ge(&now) {
-                        return Err(TrustDidWebError::DeserializationFailed("`versionTime` must be before the current datetime.".to_string()));
+                        return Err(TrustDidWebError::DeserializationFailed(format!("`versionTime` '{}' must be before the current datetime '{}'.", version_time, now)));
                     }
 
                     if prev_entry.is_some() && version_time.lt(&prev_entry.to_owned().unwrap().version_time) {
@@ -470,6 +471,26 @@ impl DidDocumentState {
                     Ok(current_entry)
                 }).collect::<Result<Vec<DidLogEntry>, TrustDidWebError>>()?
         })
+    }
+
+    /// Ensure conformity with did:tdw JSON schema standard.
+    ///
+    /// The entire DID log is processed in parallelized fashion. Hence, the `Error` object that
+    /// might be returned may not be necessarily the first non-None `Error` object produced in the
+    /// parallel sequence, since the entire sequence is mapped over in parallel.
+    fn validate_against_json_schema(did_log: &str) -> Result<(), TrustDidWebError> {
+        let validator = DidLogEntryValidator::default();
+        let validator_error = did_log
+            .split("\n")
+            .filter(|line| !line.is_empty())
+            .par_bridge() // possible thanks to 'use rayon::prelude::*;'
+            .find_map_any(|line| validator.validate(line.to_string()).err());
+        if let Some(err) = validator_error {
+            // The supplied DID log contains at least one entry that violates the JSON schema
+            return Err(TrustDidWebError::DeserializationFailed(err.to_string()));
+        }
+
+        Ok(())
     }
 
     /// Checks if all entries in the did log are valid (data integrity, versioning etc.)
@@ -802,5 +823,120 @@ impl TrustDidWeb {
             did_log: did_doc_state.to_string(), // DidDocumentState implements std::fmt::Display trait
             did_doc: did_doc_str,
         })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::did_tdw::{DidDocumentState, TrustDidWeb};
+    use crate::did_tdw_parameters::DidMethodParameters;
+    use crate::errors::TrustDidWebErrorKind;
+    use crate::test::assert_trust_did_web_error;
+    use rstest::rstest;
+    use serde_json::json;
+    use std::fs;
+    use std::path::Path;
+
+    /// A rather trivial unit testing helper.
+    fn build_valid_params_json_string() -> String {
+        json!(DidMethodParameters::for_genesis_did_doc(
+            "123".to_string(),
+            "123".to_string()
+        ))
+        .to_string()
+    }
+
+    #[rstest]
+    // doc needs 5 entries
+    #[case("[1,2,3]", "Invalid did log entry")]
+    // invalid version id
+    #[case("[\"1\",2,3,4,5]", "Invalid entry hash format")]
+    #[case(
+        "[\"invalidNumber-hash\",2,3,4,5]",
+        "the <versionNumber> is not an (unsigned) integer."
+    )]
+    // invalid time
+    #[case("[\"1-hash\",[1234],3,4,5]", "Invalid versionTime.")]
+    #[case("[\"1-hash\",\"invalidTime\",3,4,5]", "Invalid versionTime.")]
+    // missing params
+    #[case(
+        "[\"1-hash\",\"2012-12-12T12:12:12Z\",{},4,5]",
+        "Missing DID Document parameters"
+    )]
+    // JSON 'patch' is not supported
+    #[case(format!("[\"1-hash\",\"2012-12-12T12:12:12Z\",{},{{\"patch\":0}},5]", build_valid_params_json_string()), "JSON 'patch' is not supported")]
+    // JSON 'value' needs to be a valid did doc
+    #[case(format!("[\"1-hash\",\"2012-12-12T12:12:12Z\",{},{{\"value\":\"invalidDoc\"}},5]", build_valid_params_json_string()), "Missing DID document: invalid type")]
+    fn test_invalid_did_log(
+        #[case] input_str: String,
+        #[case] error_string: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        assert_trust_did_web_error(
+            DidDocumentState::from(input_str),
+            TrustDidWebErrorKind::DeserializationFailed,
+            error_string,
+        );
+        Ok(())
+    }
+
+    #[rstest]
+    #[case(
+        "test_data/generated_by_didtoolbox_java/unhappy_path/descending_version_datetime_did.jsonl",
+        "did:tdw:QmT7BM5RsM9SoaqAQKkNKHBzSEzpS2NRzT2oKaaaPYPpGr:identifier-reg.trust-infra.swiyu-int.admin.ch:api:v1:did:18fa7c77-9dd1-4e20-a147-fb1bec146085",
+        TrustDidWebErrorKind::DeserializationFailed,
+        "`versionTime` must be greater then the `versionTime` of the previous entry"
+    )]
+    #[case(
+        "test_data/generated_by_didtoolbox_java/unhappy_path/invalid_initial_version_number_did.jsonl",
+        "did:tdw:QmT7BM5RsM9SoaqAQKkNKHBzSEzpS2NRzT2oKaaaPYPpGr:identifier-reg.trust-infra.swiyu-int.admin.ch:api:v1:did:18fa7c77-9dd1-4e20-a147-fb1bec146085",
+        TrustDidWebErrorKind::DeserializationFailed,
+        "Version numbers (`versionId`) must be in a sequence of positive consecutive integers"
+    )]
+    #[case(
+        "test_data/generated_by_didtoolbox_java/unhappy_path/inconsecutive_version_numbers_did.jsonl",
+        "did:tdw:QmT7BM5RsM9SoaqAQKkNKHBzSEzpS2NRzT2oKaaaPYPpGr:identifier-reg.trust-infra.swiyu-int.admin.ch:api:v1:did:18fa7c77-9dd1-4e20-a147-fb1bec146085",
+        TrustDidWebErrorKind::DeserializationFailed,
+        "Version numbers (`versionId`) must be in a sequence of positive consecutive integers"
+    )]
+    #[case(
+        "test_data/generated_by_didtoolbox_java/unhappy_path/version_time_in_the_future_did.jsonl",
+        "did:tdw:QmT7BM5RsM9SoaqAQKkNKHBzSEzpS2NRzT2oKaaaPYPpGr:identifier-reg.trust-infra.swiyu-int.admin.ch:api:v1:did:18fa7c77-9dd1-4e20-a147-fb1bec146085",
+        TrustDidWebErrorKind::DeserializationFailed,
+        "must be before the current datetime"
+    )]
+    #[case(
+        "test_data/generated_by_tdw_js/already_deactivated.jsonl",
+        "did:tdw:QmdSU7F2rF8r4m6GZK7Evi2tthfDDxhw3NppU8pJMbd2hB:example.com",
+        TrustDidWebErrorKind::InvalidDidDocument,
+        "This DID document is already deactivated"
+    )]
+    #[case(
+        "test_data/generated_by_tdw_js/unhappy_path/not_authorized.jsonl",
+        "did:tdw:QmXjp5qhSEvm8oXip43cDX62hZhHZdAMYv7Magy1tkffSz:example.com",
+        TrustDidWebErrorKind::InvalidIntegrityProof,
+        "Key extracted from proof is not authorized for update"
+    )]
+    fn test_read_invalid_did_log(
+        #[case] did_log_raw_filepath: String,
+        #[case] did_url: String,
+        #[case] error_kind: TrustDidWebErrorKind,
+        #[case] err_contains_pattern: String,
+    ) {
+        let did_log_raw = fs::read_to_string(Path::new(&did_log_raw_filepath)).unwrap();
+
+        // CAUTION No ? operator required here as we want to inspect the expected error
+        let tdw = TrustDidWeb::read(did_url.clone(), did_log_raw);
+
+        assert!(tdw.is_err());
+        let err = tdw.err();
+        assert!(err.is_some());
+        let err = err.unwrap();
+        assert_eq!(err.kind(), error_kind);
+        assert!(
+            err.to_string().contains(&err_contains_pattern),
+            "err message should contain '{}', but got '{}'",
+            err_contains_pattern,
+            err.to_string()
+        );
     }
 }

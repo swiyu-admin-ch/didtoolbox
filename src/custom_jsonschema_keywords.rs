@@ -18,6 +18,7 @@ impl DidLogEntryKeyword {
     /// The constant required to register this custom keyword validator using `jsonschema::ValidationOptions::with_keyword`.
     pub const KEYWORD_NAME: &'static str = "did-log-entry";
 
+    #[allow(clippy::result_large_err)] // "the `Err`-variant is at least 224 bytes" (default: 128)
     /// The factory method required to register this custom keyword validator using `jsonschema::ValidationOptions::with_keyword`.
     pub fn factory<'a>(
         _parent: &'a Map<String, Value>,
@@ -119,6 +120,7 @@ impl DidVersionTimeKeyword {
     /// Required to register this custom keyword validator using `jsonschema::ValidationOptions::with_keyword`.
     pub const KEYWORD_NAME: &'static str = "did-version-time";
 
+    #[allow(clippy::result_large_err)] // "the `Err`-variant is at least 224 bytes" (default: 128)
     /// Required to register this custom keyword validator using `jsonschema::ValidationOptions::with_keyword`.
     pub fn factory<'a>(
         _parent: &'a Map<String, Value>,
@@ -157,15 +159,18 @@ impl Keyword for DidVersionTimeKeyword {
             // 2. datetime is before the current time
 
             match DateTime::parse_from_rfc3339(dt) {
-                Ok(dt) => match dt.cmp(&Local::now().fixed_offset()) {
-                    Ordering::Less => Ok(()),
-                    _ => Err(ValidationError::custom(
-                        Location::new(),
-                        location.into(),
-                        instance,
-                        "Datetime not before current time",
-                    )),
-                },
+                Ok(dt) => {
+                    let now = Local::now();
+                    if dt.ge(&now) {
+                        return Err(ValidationError::custom(
+                            Location::new(),
+                            location.into(),
+                            instance,
+                            format! {"`versionTime` '{}' must be before the current datetime '{}'", dt, now},
+                        ));
+                    }
+                    Ok(())
+                }
                 Err(_) => Err(ValidationError::custom(
                     Location::new(),
                     location.into(),
