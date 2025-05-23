@@ -3,7 +3,7 @@
 use crate::errors::TrustDidWebError;
 use serde::{Deserialize, Serialize};
 
-/// Entry in an did log file as shown here
+/// An entry in DID log file as shown here
 /// https://bcgov.github.io/trustdidweb/#term:did-log-entry
 
 // Implement basic properties related to EC algorithm

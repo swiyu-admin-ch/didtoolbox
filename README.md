@@ -14,7 +14,7 @@ This project has been superseded by [DID Toolbox](https://github.com/swiyu-admin
 
 ## Using the library
 
-The library can be used either directly in rust as is.
+The library can be used either directly in Rust as is.
 
 ### Rust
 
@@ -27,6 +27,10 @@ didtoolbox = { git = "https://github.com/swiyu-admin-ch/didtoolbox", branch = "m
 # Optional: For manipulating the json content in the example
 serde_json = "1.0.133"
 ````
+
+## Benchmarks
+
+All the relevant reports are available [here](criterion/README.md).
 
 ## License
 
