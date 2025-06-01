@@ -401,8 +401,8 @@ mod test {
         "did:tdw:QmdSU7F2rF8r4m6GZK7Evi2tthfDDxhw3NppU8pJMbd2hB:example.com"
     )]
     #[case(
-        "test_data/generated_by_didtoolbox_java/v100_did.jsonl",
-        "did:tdw:QmT7BM5RsM9SoaqAQKkNKHBzSEzpS2NRzT2oKaaaPYPpGr:identifier-reg.trust-infra.swiyu-int.admin.ch:api:v1:did:18fa7c77-9dd1-4e20-a147-fb1bec146085"
+        "test_data/generated_by_didtoolbox_java/v400_did.jsonl",
+        "did:tdw:QmPsui8ffosRTxUBP8vJoejauqEUGvhmWe77BNo1StgLk7:identifier-reg.trust-infra.swiyu-int.admin.ch:api:v1:did:18fa7c77-9dd1-4e20-a147-fb1bec146085"
     )]
     fn test_read_did_tdw(
         #[case] did_log_raw_filepath: String,

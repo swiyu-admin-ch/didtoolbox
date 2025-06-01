@@ -287,12 +287,18 @@ impl DidDocumentState {
      */
 
     pub fn from(did_log: String) -> Result<Self, TrustDidWebError> {
-        // CAUTION Despite parallelism, beware of a possibly significant (according to benchmarks, at least),
-        //         overall performance regression induced/imposed by this call, especially for smaller logs:
-        //               10% (for larger 100+ entries logs)
-        //         up to 90% (for smaller 10+ entries logs).
-        if let Some(err) = Self::validate_against_json_schema(&did_log).err() {
-            return Err(err);
+        // CAUTION Despite parallelization, bear in mind that (according to benchmarks) the overall
+        //         performance improvement will be considerable only in case of larger DID logs,
+        //         featuring at least as many entries as `std::thread::available_parallelism()` would return.
+        let validator = DidLogEntryValidator::default();
+        if let Some(err) = did_log
+            .par_lines() // engage a parallel iterator (thanks to 'use rayon::prelude::*;' import)
+            // Once a non-None value is produced from the map operation,
+            // `find_map_any` will attempt to stop processing the rest of the items in the iterator as soon as possible.
+            .find_map_any(|line| validator.validate_str(line).err())
+        {
+            // The supplied DID log contains at least one entry that violates the JSON schema
+            return Err(TrustDidWebError::DeserializationFailed(err.to_string()));
         }
 
         let mut current_params: Option<DidMethodParameters> = None;
@@ -303,7 +309,8 @@ impl DidDocumentState {
         let now = Utc::now();
 
         Ok(DidDocumentState {
-            did_log_entries: did_log.split("\n")
+            did_log_entries: did_log
+                .lines()
                 .filter(|line| !line.is_empty())
                 .map(|line| {
                     if is_deactivated {
@@ -471,26 +478,6 @@ impl DidDocumentState {
                     Ok(current_entry)
                 }).collect::<Result<Vec<DidLogEntry>, TrustDidWebError>>()?
         })
-    }
-
-    /// Ensure conformity with did:tdw JSON schema standard.
-    ///
-    /// The entire DID log is processed in parallelized fashion. Hence, the `Error` object that
-    /// might be returned may not be necessarily the first non-None `Error` object produced in the
-    /// parallel sequence, since the entire sequence is mapped over in parallel.
-    fn validate_against_json_schema(did_log: &str) -> Result<(), TrustDidWebError> {
-        let validator = DidLogEntryValidator::default();
-        let validator_error = did_log
-            .split("\n")
-            .filter(|line| !line.is_empty())
-            .par_bridge() // possible thanks to 'use rayon::prelude::*;'
-            .find_map_any(|line| validator.validate(line.to_string()).err());
-        if let Some(err) = validator_error {
-            // The supplied DID log contains at least one entry that violates the JSON schema
-            return Err(TrustDidWebError::DeserializationFailed(err.to_string()));
-        }
-
-        Ok(())
     }
 
     /// Checks if all entries in the did log are valid (data integrity, versioning etc.)

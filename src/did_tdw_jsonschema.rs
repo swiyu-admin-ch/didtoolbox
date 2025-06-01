@@ -115,7 +115,12 @@ impl DidLogEntryValidator {
     ///
     /// A UniFFI-compliant method.
     pub fn validate(&self, instance: String) -> Result<(), DidLogEntryValidatorError> {
-        match json_from_str(&instance) {
+        self.validate_str(&instance)
+    }
+
+    /// Validate `instance` against `schema` and return the first error if any.
+    pub fn validate_str(&self, instance: &str) -> Result<(), DidLogEntryValidatorError> {
+        match json_from_str(instance) {
             Ok(val) => match self.validator.validate(&val) {
                 Ok(_) => Ok(()),
                 Err(e) => Err(DidLogEntryValidatorError::ValidationError(e.to_string())),
@@ -304,7 +309,8 @@ mod test {
         schemata.iter().for_each(|schema| {
             let validator = DidLogEntryValidator::from(schema.to_owned());
 
-            let is_valid = validator.validate(instance.to_string());
+            //let is_valid = validator.validate(instance.to_string());
+            let is_valid = validator.validate_str(instance.to_string().as_str());
 
             assert_eq!(expected, is_valid.is_ok());
             assert_eq!(!expected, is_valid.is_err());

@@ -315,6 +315,7 @@ impl DidDoc {
         Ok(did_doc)
     }
 
+    /* TODO remove as unused
     pub fn normalize(&self) -> DidDocNormalized {
         let controller: Option<String> = match self.controller.first() {
             Some(controller) => Some(controller.clone()),
@@ -371,4 +372,5 @@ impl DidDoc {
         }
         did_doc_norm
     }
+     */
 }
