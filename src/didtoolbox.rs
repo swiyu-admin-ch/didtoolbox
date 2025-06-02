@@ -3,7 +3,7 @@
 use crate::errors::TrustDidWebError;
 use serde::{Deserialize, Serialize};
 
-/// Entry in an did log file as shown here
+/// An entry in DID log file as shown here
 /// https://bcgov.github.io/trustdidweb/#term:did-log-entry
 
 // Implement basic properties related to EC algorithm
@@ -315,6 +315,7 @@ impl DidDoc {
         Ok(did_doc)
     }
 
+    /* TODO remove as unused
     pub fn normalize(&self) -> DidDocNormalized {
         let controller: Option<String> = match self.controller.first() {
             Some(controller) => Some(controller.clone()),
@@ -371,4 +372,5 @@ impl DidDoc {
         }
         did_doc_norm
     }
+     */
 }

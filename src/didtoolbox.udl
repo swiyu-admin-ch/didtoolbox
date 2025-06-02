@@ -133,3 +133,40 @@ interface DidDoc {
     sequence<string> get_controller();
     boolean get_deactivated();
 };
+
+/// W.r.t. corresponding specification version available at https://identity.foundation/didwebvh
+///
+/// # CAUTION The single currently supported version is: v0.3
+enum DidLogEntryJsonSchema {
+    /// As defined by both https://identity.foundation/didwebvh/v0.3 and (eID-conformity) addendum:
+    /// - https://confluence.bit.admin.ch/display/EIDTEAM/DID+Log+Conformity+Check
+    /// - https://confluence.bit.admin.ch/display/EIDTEAM/DID+Doc+Conformity+Check
+    "V03EidConform",
+    /// As specified by https://identity.foundation/didwebvh/v0.3
+    "V03",
+};
+
+/// Represents any error condition that might occur in conjunction with `DidLogEntryValidator`
+[Error]
+enum DidLogEntryValidatorError {
+    /// The supplied JSON instance is not a valid DID log.
+    "ValidationError",
+    /// The supplied JSON instance cannot be deserialized.
+    "DeserializationError",
+};
+
+/// A compiled JSON Schema validator.
+///
+/// This structure represents a JSON Schema that has been parsed and compiled into
+/// an efficient internal representation for validation. It contains the root node
+/// of the schema tree and the configuration options used during compilation.
+interface DidLogEntryValidator {
+    /// Create a new JSON Schema validator using `JSON Schema Draft 2020-12` specifications and default options.
+    [Name=default]
+    constructor();
+    [Name=from]
+    constructor(DidLogEntryJsonSchema ver);
+    /// Validate `instance` against `schema` and return the first error if any.
+    [Throws=DidLogEntryValidatorError]
+    void validate(string instance);
+};
