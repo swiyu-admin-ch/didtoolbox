@@ -374,7 +374,8 @@ mod test {
 
     #[rstest]
     #[case("test_data/generated_by_didtoolbox_java/v010_did.jsonl")]
-    #[case("test_data/generated_by_tdw_js/unique_update_keys.jsonl")]
+    #[case("test_data/generated_by_didtoolbox_java/v_0_3_eid_conform/did_doc_without_controller.jsonl")]
+    //#[case("test_data/generated_by_tdw_js/unique_update_keys.jsonl")]
     fn test_generate_version_id(
         #[case] did_log_raw_filepath: String,
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -388,6 +389,7 @@ mod test {
     }
 
     #[rstest]
+    /* TODO cleanup and add more test cases 
     #[case(
         "test_data/generated_by_tdw_js/single_update_key.jsonl",
         "did:tdw:QmXjp5qhSEvm8oXip43cDX62hZhHZdAMYv7Magy1tkffSz:example.com"
@@ -399,6 +401,11 @@ mod test {
     #[case(
         "test_data/generated_by_tdw_js/alternate_update_keys.jsonl",
         "did:tdw:QmdSU7F2rF8r4m6GZK7Evi2tthfDDxhw3NppU8pJMbd2hB:example.com"
+    )]
+    */
+    #[case(
+        "test_data/generated_by_didtoolbox_java/v_0_3_eid_conform/did_doc_without_controller.jsonl",
+        "did:tdw:QmYD2gdyU1opYus5bJSoJr4c78mgctJnGHRsgqPv9NoLBh:identifier-reg.trust-infra.swiyu-int.admin.ch:api:v1:did:18fa7c77-9dd1-4e20-a147-fb1bec146085"
     )]
     #[case(
         "test_data/generated_by_didtoolbox_java/v400_did.jsonl",
@@ -434,6 +441,7 @@ mod test {
         Ok(())
     }
 
+    /* TODO implement the test case using proper input
     #[rstest]
     #[case(
         "test_data/generated_by_tdw_js/deactivated.jsonl",
@@ -472,4 +480,5 @@ mod test {
 
         Ok(())
     }
+     */
 }

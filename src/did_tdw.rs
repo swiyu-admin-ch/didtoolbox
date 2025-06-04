@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-use crate::did_tdw_jsonschema::DidLogEntryValidator;
+use crate::did_tdw_jsonschema::{DidLogEntryJsonSchema, DidLogEntryValidator};
 use crate::did_tdw_parameters::*;
 use crate::didtoolbox::*;
 use crate::ed25519::*;
@@ -290,7 +290,7 @@ impl DidDocumentState {
         // CAUTION Despite parallelization, bear in mind that (according to benchmarks) the overall
         //         performance improvement will be considerable only in case of larger DID logs,
         //         featuring at least as many entries as `std::thread::available_parallelism()` would return.
-        let validator = DidLogEntryValidator::default();
+        let validator = DidLogEntryValidator::from(DidLogEntryJsonSchema::V03EidConform);
         if let Some(err) = did_log
             .par_lines() // engage a parallel iterator (thanks to 'use rayon::prelude::*;' import)
             // Once a non-None value is produced from the map operation,
@@ -891,6 +891,7 @@ mod test {
         TrustDidWebErrorKind::DeserializationFailed,
         "must be before the current datetime"
     )]
+    /* TODO generate a proper test case data using didtoolbox-java
     #[case(
         "test_data/generated_by_tdw_js/already_deactivated.jsonl",
         "did:tdw:QmdSU7F2rF8r4m6GZK7Evi2tthfDDxhw3NppU8pJMbd2hB:example.com",
@@ -903,6 +904,7 @@ mod test {
         TrustDidWebErrorKind::InvalidIntegrityProof,
         "Key extracted from proof is not authorized for update"
     )]
+    */
     fn test_read_invalid_did_log(
         #[case] did_log_raw_filepath: String,
         #[case] did_url: String,

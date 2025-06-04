@@ -189,9 +189,9 @@
                     "type",
                     "publicKeyJwk"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": true
                 },
-                "$comment": "The verificationMethod property is OPTIONAL. If present, the value MUST be a set of verification methods, where each verification method is expressed using a map. As specified by https://www.w3.org/TR/did-1.0/#verification-methods"
+                "$comment": "The verificationMethod property is OPTIONAL. If present, the value MUST be a set of verification methods, where each verification method is expressed using a map. As specified by https://www.w3.org/TR/did-1.0/#verification-methods. CAUTION (EID conformity): 'additionalProperties' set to 'true' for the sake of backward compatibility i.e. to avoid ''controller' was unexpected' error"
               }
             },
             "required": [

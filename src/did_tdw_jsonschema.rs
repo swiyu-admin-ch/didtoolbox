@@ -49,7 +49,7 @@ struct DidLogJsonSchemaEmbedFolder;
 /// # CAUTION The single currently supported version is: v0.3
 #[derive(Debug, Clone, PartialEq)]
 pub enum DidLogEntryJsonSchema {
-    /// As defined by both https://identity.foundation/didwebvh/v0.3 and (eID-conformity) addendum:
+    /// As defined by https://identity.foundation/didwebvh/v0.3 but w.r.t. (eID-conformity) addendum:
     /// - https://confluence.bit.admin.ch/display/EIDTEAM/DID+Log+Conformity+Check
     /// - https://confluence.bit.admin.ch/display/EIDTEAM/DID+Doc+Conformity+Check
     V03EidConform,
@@ -65,7 +65,7 @@ impl DidLogEntryJsonSchema {
     /// As defined by https://identity.foundation/didwebvh/v0.3
     const DID_LOG_ENTRY_JSONSCHEMA_V_0_3_FILENAME: &'static str = "did_log_jsonschema_v_0_3.json";
 
-    /// As defined by both https://identity.foundation/didwebvh/v0.3 and (eID-conformity) addendum:
+    /// As defined by https://identity.foundation/didwebvh/v0.3 bzt w.r.t. (eID-conformity) addendum:
     /// - https://confluence.bit.admin.ch/display/EIDTEAM/DID+Log+Conformity+Check
     /// - https://confluence.bit.admin.ch/display/EIDTEAM/DID+Doc+Conformity+Check
     const DID_LOG_ENTRY_JSONSCHEMA_V_0_3_EID_CONFORM_FILENAME: &'static str =
@@ -133,12 +133,26 @@ impl DidLogEntryValidator {
 }
 
 impl From<DidLogEntryJsonSchema> for DidLogEntryValidator {
+    /// Create a new JSON Schema validator using `JSON Schema Draft 2020-12` specifications
+    /// and supplied [`DidLogEntryJsonSchema`].
+    ///
+    /// Relies heavily on custom [`jsonschema::Keyword`] trait implementation like:
+    /// - [`DidVersionIdKeyword`] and
+    /// - [`DidVersionTimeKeyword`].
+    ///
+    /// A UniFFI-compliant constructor.
     fn from(ver: DidLogEntryJsonSchema) -> Self {
         Self::from(ver.as_schema().as_str())
     }
 }
 
 impl From<&str> for DidLogEntryValidator {
+    /// Create a new JSON Schema validator using `JSON Schema Draft 2020-12` specifications
+    /// and a schema supplied as `&str`.
+    ///
+    /// Relies heavily on custom [`jsonschema::Keyword`] trait implementation like:
+    /// - [`DidVersionIdKeyword`] and
+    /// - [`DidVersionTimeKeyword`].
     fn from(s: &str) -> Self {
         match json_from_str(s) {
             Ok(sch) => {
@@ -165,7 +179,8 @@ impl From<&str> for DidLogEntryValidator {
 }
 
 impl Default for DidLogEntryValidator {
-    /// Create a new JSON Schema validator using `JSON Schema Draft 2020-12` specifications and default options.
+    /// Create a new JSON Schema validator using `JSON Schema Draft 2020-12` specifications
+    /// and default options. The schema used is [`DidLogEntryJsonSchema::V03`].
     ///
     /// Relies heavily on custom `jsonschema::Keyword` trait implementation like:
     /// - [`DidVersionIdKeyword`] and

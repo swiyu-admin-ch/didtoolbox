@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use didtoolbox::{did_tdw, did_tdw_jsonschema};
+use didtoolbox::did_tdw::TrustDidWeb;
+use didtoolbox::did_tdw_jsonschema::{DidLogEntryJsonSchema, DidLogEntryValidator};
 use rayon::prelude::*;
 use std::fs;
 use std::path::Path;
@@ -50,7 +51,7 @@ pub fn criterion_benchmark_did_tdw(c: &mut Criterion) {
 
                 let did_log_raw = fs::read_to_string(Path::new(&did_log_raw_filepath)).unwrap();
 
-                if let Some(err) = did_tdw::TrustDidWeb::read(black_box(did_url.to_string()), black_box(did_log_raw)).err() {
+                if let Some(err) = TrustDidWeb::read(black_box(did_url.to_string()), black_box(did_log_raw)).err() {
                     panic!("{}", err.to_string());
                 }
             })
@@ -74,7 +75,7 @@ pub fn criterion_benchmark_did_tdw_jsonschema(c: &mut Criterion) {
         //.warm_up_time(Duration::from_secs(5))
     ;
 
-    let validator = did_tdw_jsonschema::DidLogEntryValidator::default();
+    let validator = DidLogEntryValidator::from(DidLogEntryJsonSchema::V03EidConform);
 
     let function_name_base = "DidLogEntryValidator_validate";
 
