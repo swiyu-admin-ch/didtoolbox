@@ -3,7 +3,7 @@
 use crate::errors::TrustDidWebError;
 use serde::{Deserialize, Serialize};
 
-/// Entry in an did log file as shown here
+/// An entry in DID log file as shown here
 /// https://bcgov.github.io/trustdidweb/#term:did-log-entry
 
 // Implement basic properties related to EC algorithm
@@ -29,9 +29,18 @@ pub struct Jwk {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct VerificationMethod {
     pub id: String,
+    // CAUTION The "controller" property must not be present w.r.t.:
+    // - https://jira.bit.admin.ch/browse/EIDSYS-352
+    // - https://confluence.bit.admin.ch/display/EIDTEAM/DID+Doc+Conformity+Check
+    // It is kept for the sake of backward compatibility only.
+    #[serde(skip_serializing_if = "String::is_empty", default)]
     pub controller: String,
     #[serde(rename = "type")]
     pub verification_type: VerificationType,
+    // CAUTION The "publicKeyMultibase" property must not be present w.r.t.:
+    // - https://jira.bit.admin.ch/browse/EIDOMNI-35
+    // - https://confluence.bit.admin.ch/display/EIDTEAM/DID+Doc+Conformity+Check
+    // It is kept for the sake of backward compatibility only.
     #[serde(rename = "publicKeyMultibase", skip_serializing_if = "Option::is_none")]
     pub public_key_multibase: Option<String>,
     #[serde(rename = "publicKeyJwk", skip_serializing_if = "Option::is_none")]
@@ -124,8 +133,11 @@ pub struct DidDoc {
         default
     )]
     pub key_agreement: Vec<VerificationMethod>,
-    //#[serde(skip_serializing_if = "Vec::is_empty", default)]
-    #[serde(skip)]
+    // CAUTION The "controller" property must not be present w.r.t.:
+    // - https://jira.bit.admin.ch/browse/EIDSYS-352
+    // - https://confluence.bit.admin.ch/display/EIDTEAM/DID+Doc+Conformity+Check
+    // It is kept for the sake of backward compatibility only.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub controller: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deactivated: Option<bool>,
@@ -173,8 +185,11 @@ pub struct DidDocNormalized {
     pub key_agreement: Vec<String>,
     //#[serde(skip_serializing_if = "Vec::is_empty", default)]
     //pub controller: Vec<String>,
-    //#[serde(skip_serializing_if = "String::is_empty", default)]
-    #[serde(skip)]
+    // CAUTION The "controller" property must not be present w.r.t.:
+    // - https://jira.bit.admin.ch/browse/EIDSYS-352
+    // - https://confluence.bit.admin.ch/display/EIDTEAM/DID+Doc+Conformity+Check
+    // It is kept for the sake of backward compatibility only.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub controller: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deactivated: Option<bool>,
@@ -315,6 +330,7 @@ impl DidDoc {
         Ok(did_doc)
     }
 
+    /* TODO remove as unused
     pub fn normalize(&self) -> DidDocNormalized {
         let controller: Option<String> = match self.controller.first() {
             Some(controller) => Some(controller.clone()),
@@ -371,4 +387,5 @@ impl DidDoc {
         }
         did_doc_norm
     }
+     */
 }
