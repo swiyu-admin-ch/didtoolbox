@@ -1,9 +1,9 @@
 [package]
 name = "didtoolbox"
-version = "2.0.0"
+version = "2.1.0"
 edition = "2021"
 license = "MIT"
-description = "Toolbox containing did:tdw"
+description = "A set of tools required to implement Trust DID Web - did:tdw - v0.3 specification"
 authors = ["Frithjof Hoppe", "Vladica Stojic"]
 homepage = "https://github.com/swiyu-admin-ch/didtoolbox"
 readme = "README.md"
@@ -17,8 +17,8 @@ include = [
 
 [dependencies]
 uniffi = { version = "0.28.3", features = ["cli"] }
-serde = { version = "1.0.218", features = ["derive"] }
-serde_json = { version = "1.0.139", features = ["preserve_order"] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = { version = "1.0.140", features = ["preserve_order"] }
 serde_json_canonicalizer = "0.3.0"
 chrono = { version = "0.4.41", features = ["serde"] }
 ed25519-dalek = { version = "2.1.1", features = ["rand_core"] }
@@ -28,7 +28,7 @@ hex = "0.4.3"
 regex = "1.11.1"
 url-escape = "0.1.1"
 bs58 = { version = "0.5.1", features = ["check", "cb58"] }
-thiserror = "2.0.11"
+thiserror = "2.0.12"
 url = "2.5.4"
 jsonschema = { version = "0.30.0" }
 rust-embed = { version = "8.7.2" , features = ["include-exclude", "compression"]}
