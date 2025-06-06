@@ -85,14 +85,14 @@
               },
               "id": {
                 "type": "string",
-                "pattern": "^did:tdw:Q[1-9a-zA-NP-Z]{45,}(:[0-9a-z_.-]+)+$",
+                "pattern": "^did:tdw:Q[1-9a-zA-NP-Z]{45,}(:[0-9a-z%A_.-]+)+$",
                 "$comment": "The DID for a particular DID subject is expressed using the id property in the DID document. As specified by https://www.w3.org/TR/did-1.0/#did-subject"
               },
               "authentication": {
                 "type": "array",
                 "items": {
                   "type": "string",
-                  "pattern": "^did:tdw:Q[1-9a-zA-NP-Z]{45,}(:[0-9a-z_.-]+)+#[0-9a-zA-Z_-]+$"
+                  "pattern": "^did:tdw:Q[1-9a-zA-NP-Z]{45,}(:[0-9a-z%A_.-]+)+#[0-9a-zA-Z_-]+$"
                 },
                 "$comment": "The authentication verification relationship is used to specify how the subject is expected to be authenticated, for purposes such as logging into a website or engaging in any sort of challenge-response protocol. The processing performed following authentication is application-specific."
               },
@@ -100,7 +100,7 @@
                 "type": "array",
                 "items": {
                   "type": "string",
-                  "pattern": "^did:tdw:Q[1-9a-zA-NP-Z]{45,}(:[0-9a-z_.-]+)+#[0-9a-zA-Z_-]+$"
+                  "pattern": "^did:tdw:Q[1-9a-zA-NP-Z]{45,}(:[0-9a-z%A_.-]+)+#[0-9a-zA-Z_-]+$"
                 },
                 "$comment": "The assertionMethod verification relationship is used to specify verification methods that a controller authorizes for use when expressing assertions or claims, such as in verifiable credentials."
               },
@@ -108,7 +108,7 @@
                 "type": "array",
                 "items": {
                   "type": "string",
-                  "pattern": "^did:tdw:Q[1-9a-zA-NP-Z]{45,}(:[0-9a-z_.-]+)+#[0-9a-zA-Z_-]+$"
+                  "pattern": "^did:tdw:Q[1-9a-zA-NP-Z]{45,}(:[0-9a-z%A_.-]+)+#[0-9a-zA-Z_-]+$"
                 },
                 "$comment": "The keyAgreement verification relationship is used to specify how an entity can perform encryption in order to transmit confidential information intended for the controller, such as for the purposes of establishing a secure communication channel with the recipient."
               },
@@ -116,7 +116,7 @@
                 "type": "array",
                 "items": {
                   "type": "string",
-                  "pattern": "^did:tdw:Q[1-9a-zA-NP-Z]{45,}(:[0-9a-z_.-]+)+#[0-9a-zA-Z_-]+$"
+                  "pattern": "^did:tdw:Q[1-9a-zA-NP-Z]{45,}(:[0-9a-z%A_.-]+)+#[0-9a-zA-Z_-]+$"
                 },
                 "$comment": "The capabilityInvocation verification relationship is used to specify a verification method that might be used by the controller to invoke a cryptographic capability, such as the authorization to update the controlled identifier document."
               },
@@ -124,7 +124,7 @@
                 "type": "array",
                 "items": {
                   "type": "string",
-                  "pattern": "^did:tdw:Q[1-9a-zA-NP-Z]{45,}(:[0-9a-z_.-]+)+#[0-9a-zA-Z_-]+$"
+                  "pattern": "^did:tdw:Q[1-9a-zA-NP-Z]{45,}(:[0-9a-z%A_.-]+)+#[0-9a-zA-Z_-]+$"
                 },
                 "$comment": "The capabilityDelegation verification relationship is used to specify a mechanism that might be used to delegate a cryptographic capability to another party."
               },
@@ -135,8 +135,13 @@
                   "properties": {
                     "id": {
                       "type": "string",
-                      "pattern": "^did:tdw:Q[1-9a-zA-NP-Z]{45,}(:[0-9a-z_.-]+)+#[0-9a-zA-Z_-]+$",
+                      "pattern": "^did:tdw:Q[1-9a-zA-NP-Z]{45,}(:[0-9a-z%A_.-]+)+#[0-9a-zA-Z_-]+$",
                       "$comment": "The value of the id property for a verification method MUST be a string that conforms to the [URL] syntax."
+                    },
+                    "controller": {
+                      "type": "string",
+                      "pattern": "^did:tdw:Q[1-9a-zA-NP-Z]{45,}(:[0-9a-z%A_.-]+)+$",
+                      "$comment": "The value of the controller property MUST be a string that conforms to the [URL] syntax. Kept for the sake of backward compatibility. CAUTION (EID conformity): Left for the sake of backward compatibility only i.e. to avoid ''controller' was unexpected' error."
                     },
                     "type": {
                       "enum": [ "JsonWebKey2020", "Multikey" ],
@@ -189,9 +194,9 @@
                     "type",
                     "publicKeyJwk"
                   ],
-                  "additionalProperties": true
+                  "additionalProperties": false
                 },
-                "$comment": "The verificationMethod property is OPTIONAL. If present, the value MUST be a set of verification methods, where each verification method is expressed using a map. As specified by https://www.w3.org/TR/did-1.0/#verification-methods. CAUTION (EID conformity): 'additionalProperties' set to 'true' for the sake of backward compatibility i.e. to avoid ''controller' was unexpected' error"
+                "$comment": "The verificationMethod property is OPTIONAL. If present, the value MUST be a set of verification methods, where each verification method is expressed using a map. As specified by https://www.w3.org/TR/did-1.0/#verification-methods."
               }
             },
             "required": [
