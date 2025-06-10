@@ -1,6 +1,6 @@
 [package]
 name = "didtoolbox"
-version = "2.1.0"
+version = "2.1.1"
 edition = "2021"
 license = "MIT"
 description = "A set of tools required to implement Trust DID Web - did:tdw - v0.3 specification"
