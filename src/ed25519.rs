@@ -31,7 +31,7 @@ impl MultiBaseConverter for Ed25519Signature {
         let mut signature_bytes: [u8; SIGNATURE_LENGTH] = [0; SIGNATURE_LENGTH];
         match MultibaseEncoderDecoder::default().decode_base58_onto(multibase, &mut signature_bytes)
         {
-            Err(err) => Err(TrustDidWebError::DeserializationFailed(format!("{}", err))),
+            Err(err) => Err(TrustDidWebError::DeserializationFailed(format!("{err}"))),
             Ok(_) => Ok(Ed25519Signature {
                 signature: Signature::from_bytes(&signature_bytes),
             }),
@@ -72,7 +72,7 @@ impl MultiBaseConverter for Ed25519SigningKey {
         if let Err(err) =
             MultibaseEncoderDecoder::default().decode_base58_onto(multibase, &mut signing_key_buff)
         {
-            return Err(TrustDidWebError::DeserializationFailed(format!("{}", err)));
+            return Err(TrustDidWebError::DeserializationFailed(format!("{err}")));
         }
 
         let mut signing_key: [u8; SECRET_KEY_LENGTH] = [0; SECRET_KEY_LENGTH];
@@ -134,7 +134,7 @@ impl MultiBaseConverter for Ed25519VerifyingKey {
         if let Err(err) = MultibaseEncoderDecoder::default()
             .decode_base58_onto(multibase, &mut verifying_key_buff)
         {
-            return Err(TrustDidWebError::DeserializationFailed(format!("{}", err)));
+            return Err(TrustDidWebError::DeserializationFailed(format!("{err}")));
         }
 
         let mut verifying_key: [u8; PUBLIC_KEY_LENGTH] = [0; PUBLIC_KEY_LENGTH];
@@ -143,8 +143,7 @@ impl MultiBaseConverter for Ed25519VerifyingKey {
         match VerifyingKey::from_bytes(&verifying_key) {
             Ok(verifying_key) => Ok(Ed25519VerifyingKey { verifying_key }),
             Err(_) => Err(TrustDidWebError::InvalidDataIntegrityProof(format!(
-                "{} is an invalid ed25519 verifying key",
-                multibase
+                "{multibase} is an invalid ed25519 verifying key"
             ))),
         }
     }

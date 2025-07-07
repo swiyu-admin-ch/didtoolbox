@@ -138,10 +138,9 @@ impl DataIntegrityProof {
                     }
                 }
             }
-            Err(e) => {
+            Err(err) => {
                 return Err(TrustDidWebError::InvalidDataIntegrityProof(format!(
-                    "Malformed proof format, expected single-element JSON array: {}",
-                    e
+                    "Malformed proof format, expected single-element JSON array: {err}"
                 )))
             }
             _ => {
@@ -187,7 +186,7 @@ impl DataIntegrityProof {
                 JsonString(ref s) => match DateTime::parse_from_rfc3339(s) {
                     Ok(date) => date.to_utc(),
                     Err(err) => return Err(TrustDidWebError::InvalidDataIntegrityProof(
-                        format!("Invalid proof's creation datetime format: {}", err),
+                        format!("Invalid proof's creation datetime format: {err}"),
                     ))
                 },
                 _ =>  return Err(TrustDidWebError::InvalidDataIntegrityProof(
@@ -274,8 +273,7 @@ impl DataIntegrityProof {
             Ok(v) => v,
             Err(err) => {
                 return Err(TrustDidWebError::SerializationFailed(format!(
-                    "Could not serialize proof:{}",
-                    err
+                    "Could not serialize proof: {err}"
                 )))
             }
         };
@@ -401,8 +399,7 @@ impl VCDataIntegrity for EddsaJcs2022Cryptosuite {
             Ok(proof_hash) => proof_hash,
             Err(err) => {
                 return Err(TrustDidWebError::InvalidDataIntegrityProof(format!(
-                    "Could not serialize proof: {}",
-                    err
+                    "Could not serialize proof: {err}"
                 )))
             }
         };
@@ -410,8 +407,7 @@ impl VCDataIntegrity for EddsaJcs2022Cryptosuite {
             Ok(doc_hash) => doc_hash,
             Err(err) => {
                 return Err(TrustDidWebError::InvalidDataIntegrityProof(format!(
-                    "Could not serialize document for hash generation: {}",
-                    err
+                    "Could not serialize document for hash generation: {err}"
                 )))
             }
         };
@@ -421,8 +417,7 @@ impl VCDataIntegrity for EddsaJcs2022Cryptosuite {
             Ok(hex_data) => hex_data,
             Err(err) => {
                 return Err(TrustDidWebError::InvalidDataIntegrityProof(format!(
-                    "Unable to decode created hash: {}",
-                    err
+                    "Unable to decode created hash: {err}"
                 )))
             }
         };
@@ -478,8 +473,7 @@ impl VCDataIntegrity for EddsaJcs2022Cryptosuite {
             Ok(proof_hash) => proof_hash,
             Err(err) => {
                 return Err(TrustDidWebError::InvalidDataIntegrityProof(format!(
-                    "Could not serialize proof: {}",
-                    err
+                    "Could not serialize proof: {err}"
                 )))
             }
         };
@@ -496,7 +490,7 @@ impl VCDataIntegrity for EddsaJcs2022Cryptosuite {
                 // Strictly verify a signature on a message with this keypair's public key.
                 // It may respond with: "signature error: Verification equation was not satisfied"
                 verifying_key.verifying_key.verify_strict(&hash_data_decoded, &signature.signature)
-                    .map_err(|err| TrustDidWebError::InvalidDataIntegrityProof(format!("{}", err)))
+                    .map_err(|err| TrustDidWebError::InvalidDataIntegrityProof(format!("{err}")))
             }
             None => Err(TrustDidWebError::InvalidDataIntegrityProof(
                 "Invalid eddsa cryptosuite. Verifying key is missing but required for proof verification".to_string()

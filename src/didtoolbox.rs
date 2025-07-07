@@ -65,7 +65,7 @@ impl std::fmt::Display for VerificationType {
                 String::from("Ed25519VerificationKey2020")
             }
         };
-        write!(f, "{}", string_representation)
+        write!(f, "{string_representation}")
     }
 }
 
@@ -223,7 +223,7 @@ impl DidDocNormalized {
                         did_doc.authentication.push(obj.clone());
                         Ok(())
                     }
-                    None => Err(TrustDidWebError::InvalidDidDocument(format!("Authentication (reference) key refers to non-existing verification method: {}", id)))
+                    None => Err(TrustDidWebError::InvalidDidDocument(format!("Authentication (reference) key refers to non-existing verification method: {id}")))
                 }
             })?;
         }
@@ -235,7 +235,7 @@ impl DidDocNormalized {
                         did_doc.capability_invocation.push(obj.clone());
                         Ok(())
                     }
-                    None => Err(TrustDidWebError::InvalidDidDocument(format!("Capability invocation (reference) key refers to non-existing verification method: {}", id)))
+                    None => Err(TrustDidWebError::InvalidDidDocument(format!("Capability invocation (reference) key refers to non-existing verification method: {id}")))
                 }
             })?;
         }
@@ -247,7 +247,7 @@ impl DidDocNormalized {
                         did_doc.capability_delegation.push(obj.clone());
                         Ok(())
                     }
-                    None => Err(TrustDidWebError::InvalidDidDocument(format!("Capability delegation (reference) key refers to non-existing verification method: {}", id)))
+                    None => Err(TrustDidWebError::InvalidDidDocument(format!("Capability delegation (reference) key refers to non-existing verification method: {id}")))
                 }
             })?;
         }
@@ -260,7 +260,7 @@ impl DidDocNormalized {
                         did_doc.assertion_method.push(obj.clone());
                         Ok(())
                     }
-                    None => Err(TrustDidWebError::InvalidDidDocument(format!("Assertion method (reference) key refers to non-existing verification method: {}", id)))
+                    None => Err(TrustDidWebError::InvalidDidDocument(format!("Assertion method (reference) key refers to non-existing verification method: {id}")))
                 }
             })?;
         }
@@ -272,7 +272,7 @@ impl DidDocNormalized {
                         did_doc.key_agreement.push(obj.clone());
                         Ok(())
                     }
-                    None => Err(TrustDidWebError::InvalidDidDocument(format!("Key agreement (reference) key refers to non-existing verification method: {}", id)))
+                    None => Err(TrustDidWebError::InvalidDidDocument(format!("Key agreement (reference) key refers to non-existing verification method: {id}")))
                 }
             })?;
         }
@@ -320,10 +320,9 @@ impl DidDoc {
     pub fn from_json(json_content: &str) -> Result<Self, TrustDidWebError> {
         let did_doc: DidDoc = match serde_json::from_str(json_content) {
             Ok(did_doc) => did_doc,
-            Err(e) => {
+            Err(err) => {
                 return Err(TrustDidWebError::DeserializationFailed(format!(
-                    "Error parsing DID Document. Make sure the content is correct -> {}",
-                    e
+                    "Error parsing DID Document. Make sure the content is correct -> {err}"
                 )));
             }
         };
