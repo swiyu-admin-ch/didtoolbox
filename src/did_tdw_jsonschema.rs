@@ -1,43 +1,9 @@
 // SPDX-License-Identifier: MIT
 
 use std::str::from_utf8;
-use thiserror::Error;
 
-use crate::custom_jsonschema_keywords::*;
-use jsonschema::draft202012::meta as jsch_meta;
-use jsonschema::{options as jsch_opts, Draft, Validator as ValidatorBase};
+use did_sidekicks::did_jsonschema::*;
 use rust_embed::Embed;
-use serde_json::from_str as json_from_str;
-
-/// Represents any error condition that might occur in conjunction with [`DidLogEntryValidator`].
-///
-/// Yet another UniFFI-compliant error.
-#[derive(Error, Debug, PartialEq)]
-pub enum DidLogEntryValidatorError {
-    #[error("the supplied JSON instance is not a valid DID log: {0}")]
-    ValidationError(String),
-    #[error("the supplied JSON instance cannot be deserialized: {0}")]
-    DeserializationError(String),
-}
-
-impl DidLogEntryValidatorError {
-    /// Returns the error kind.
-    pub fn kind(&self) -> DidLogEntryValidatorErrorKind {
-        match self {
-            Self::ValidationError(_) => DidLogEntryValidatorErrorKind::ValidationError,
-            Self::DeserializationError(_) => DidLogEntryValidatorErrorKind::DeserializationError,
-        }
-    }
-}
-
-/// [`DidLogEntryValidatorError`] kind.
-///
-/// Each [`DidLogEntryValidatorError`] variant has a kind provided by the [`DidLogEntryValidatorError::kind`] method.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum DidLogEntryValidatorErrorKind {
-    ValidationError,
-    DeserializationError,
-}
 
 #[derive(Embed)]
 #[folder = "src/embed/jsonschema"]
@@ -72,7 +38,7 @@ impl DidLogEntryJsonSchema {
         "did_log_jsonschema_v_0_3_eid_conform.json";
 
     /// Converts this type into a corresponding JSON schema in UTF-8 format.
-    fn as_schema(&self) -> String {
+    pub fn as_schema(&self) -> String {
         match self {
             Self::V03 => {
                 // CAUTION This (i.e. unwrap() call) will panic only if file denoted by DID_LOG_ENTRY_JSONSCHEMA_V_0_3_FILENAME does not exist
@@ -96,99 +62,6 @@ impl DidLogEntryJsonSchema {
                     .to_string()
             }
         }
-    }
-}
-
-/// A compiled JSON Schema validator.
-///
-/// This structure represents a JSON Schema that has been parsed and compiled into
-/// an efficient internal representation for validation. It contains the root node
-/// of the schema tree and the configuration options used during compilation.
-//#[derive(Debug, Default, PartialEq)]
-#[derive(Debug)]
-pub struct DidLogEntryValidator {
-    validator: ValidatorBase,
-}
-
-impl DidLogEntryValidator {
-    /// Validate `instance` against `schema` and return the first error if any.
-    ///
-    /// A UniFFI-compliant method.
-    pub fn validate(&self, instance: String) -> Result<(), DidLogEntryValidatorError> {
-        self.validate_str(&instance)
-    }
-
-    /// Validate `instance` against `schema` and return the first error if any.
-    pub fn validate_str(&self, instance: &str) -> Result<(), DidLogEntryValidatorError> {
-        match json_from_str(instance) {
-            Ok(val) => match self.validator.validate(&val) {
-                Ok(_) => Ok(()),
-                Err(e) => Err(DidLogEntryValidatorError::ValidationError(e.to_string())),
-            },
-            Err(e) => Err(DidLogEntryValidatorError::DeserializationError(
-                e.to_string(),
-            )),
-        }
-    }
-}
-
-impl From<DidLogEntryJsonSchema> for DidLogEntryValidator {
-    /// Create a new JSON Schema validator using `JSON Schema Draft 2020-12` specifications
-    /// and supplied [`DidLogEntryJsonSchema`].
-    ///
-    /// Relies heavily on custom [`jsonschema::Keyword`] trait implementation like:
-    /// - [`DidVersionIdKeyword`] and
-    /// - [`DidVersionTimeKeyword`].
-    ///
-    /// A UniFFI-compliant constructor.
-    fn from(ver: DidLogEntryJsonSchema) -> Self {
-        Self::from(ver.as_schema().as_str())
-    }
-}
-
-impl From<&str> for DidLogEntryValidator {
-    /// Create a new JSON Schema validator using `JSON Schema Draft 2020-12` specifications
-    /// and a schema supplied as `&str`.
-    ///
-    /// Relies heavily on custom [`jsonschema::Keyword`] trait implementation like:
-    /// - [`DidVersionIdKeyword`] and
-    /// - [`DidVersionTimeKeyword`].
-    fn from(s: &str) -> Self {
-        match json_from_str(s) {
-            Ok(sch) => {
-                let _ = jsch_meta::validate(&sch).is_err_and(|e| panic!("{}", e.to_string()));
-                match jsch_opts()
-                    .with_draft(Draft::Draft202012)
-                    .with_keyword(
-                        DidLogEntryKeyword::KEYWORD_NAME,
-                        DidLogEntryKeyword::factory,
-                    )
-                    .with_keyword(
-                        DidVersionTimeKeyword::KEYWORD_NAME,
-                        DidVersionTimeKeyword::factory,
-                    )
-                    .build(&sch)
-                {
-                    Ok(validator) => DidLogEntryValidator { validator },
-                    Err(e) => panic!("{}", e.to_string()),
-                }
-            }
-            Err(e) => panic!("{}", e.to_string()),
-        }
-    }
-}
-
-impl Default for DidLogEntryValidator {
-    /// Create a new JSON Schema validator using `JSON Schema Draft 2020-12` specifications
-    /// and default options. The schema used is [`DidLogEntryJsonSchema::V03`].
-    ///
-    /// Relies heavily on custom `jsonschema::Keyword` trait implementation like:
-    /// - [`DidVersionIdKeyword`] and
-    /// - [`DidVersionTimeKeyword`].
-    ///
-    /// A UniFFI-compliant constructor.
-    fn default() -> Self {
-        Self::from(DidLogEntryJsonSchema::V03)
     }
 }
 
@@ -322,7 +195,7 @@ mod test {
         //-> Result<(), Box<dyn std::error::Error>> {
 
         schemata.iter().for_each(|schema| {
-            let validator = DidLogEntryValidator::from(schema.to_owned());
+            let validator = DidLogEntryValidator::from(schema.as_schema());
 
             //let is_valid = validator.validate(instance.to_string());
             let is_valid = validator.validate_str(instance.to_string().as_str());

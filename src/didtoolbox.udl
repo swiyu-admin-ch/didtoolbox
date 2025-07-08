@@ -2,6 +2,36 @@
 namespace didtoolbox {
 };
 
+[ExternalInterface="did_sidekicks"]
+typedef extern Ed25519Signature;
+
+[ExternalInterface="did_sidekicks"]
+typedef extern Ed25519SigningKey;
+
+[ExternalInterface="did_sidekicks"]
+typedef extern Ed25519VerifyingKey;
+
+[ExternalInterface="did_sidekicks"]
+typedef extern Ed25519KeyPair;
+
+[External="did_sidekicks"]
+typedef extern Jwk;
+
+[External="did_sidekicks"]
+typedef extern VerificationType;
+
+[External="did_sidekicks"]
+typedef extern VerificationMethod;
+
+[ExternalInterface="did_sidekicks"]
+typedef extern DidDoc;
+
+[ExternalInterface="did_sidekicks"]
+typedef extern DidLogEntryValidatorError;
+
+[ExternalInterface="did_sidekicks"]
+typedef extern DidLogEntryValidator;
+
 /// The error accompanying TrustDidWebId.
 /// It might occur while calling TrustDidWebId methods.
 [Error]
@@ -60,34 +90,6 @@ interface TrustDidWeb {
     DidDoc get_did_doc_obj();
 };
 
-interface Ed25519Signature {
-    [Name=from_multibase, Throws=TrustDidWebError]
-    constructor([ByRef] string multibase);
-    string to_multibase();
-};
-
-interface Ed25519SigningKey {
-    [Name=from_multibase, Throws=TrustDidWebError]
-    constructor([ByRef] string multibase);
-    string to_multibase();
-};
-
-interface Ed25519VerifyingKey {
-    [Name=from_multibase, Throws=TrustDidWebError]
-    constructor([ByRef] string multibase);
-    string to_multibase();
-};
-
-interface Ed25519KeyPair {
-    [Name=generate]
-    constructor();
-    [Name=from, Throws=TrustDidWebError]
-    constructor([ByRef] string signing_key_multibase);
-    Ed25519Signature sign(string message);
-    Ed25519SigningKey get_signing_key();
-    Ed25519VerifyingKey get_verifying_key();
-};
-
 interface DidDocumentState {
     [Name=from, Throws=TrustDidWebError]
     constructor(string did_log);
@@ -95,43 +97,6 @@ interface DidDocumentState {
     DidDoc validate();
     [Throws=TrustDidWebError]
     DidDoc validate_with_scid(string? scid);
-};
-
-dictionary Jwk {
-  string? alg;
-  string? kid;
-  string? kty;
-  string? crv;
-  string? x;
-  string? y;
-};
-
-enum VerificationType {
-    "Multikey",
-    "JsonWebKey2020",
-    "Ed25519VerificationKey2020",
-};
-
-dictionary VerificationMethod {
-    string id;
-    string controller;
-    VerificationType verification_type;
-    string? public_key_multibase;
-    Jwk? public_key_jwk;
-};
-
-interface DidDoc {
-    [Name=from_json, Throws=TrustDidWebError]
-    constructor([ByRef] string json_content);
-    sequence<string> get_context();
-    string get_id();
-    sequence<VerificationMethod> get_verification_method();
-    sequence<VerificationMethod> get_authentication();
-    sequence<VerificationMethod> get_capability_invocation();
-    sequence<VerificationMethod> get_capability_delegation();
-    sequence<VerificationMethod> get_assertion_method();
-    sequence<string> get_controller();
-    boolean get_deactivated();
 };
 
 /// W.r.t. corresponding specification version available at https://identity.foundation/didwebvh
@@ -144,31 +109,4 @@ enum DidLogEntryJsonSchema {
     "V03EidConform",
     /// As (strictly) specified by https://identity.foundation/didwebvh/v0.3
     "V03",
-};
-
-/// Represents any error condition that might occur in conjunction with `DidLogEntryValidator`
-[Error]
-enum DidLogEntryValidatorError {
-    /// The supplied JSON instance is not a valid DID log.
-    "ValidationError",
-    /// The supplied JSON instance cannot be deserialized.
-    "DeserializationError",
-};
-
-/// A compiled JSON Schema validator.
-///
-/// This structure represents a JSON Schema that has been parsed and compiled into
-/// an efficient internal representation for validation. It contains the root node
-/// of the schema tree and the configuration options used during compilation.
-interface DidLogEntryValidator {
-    /// Create a new JSON Schema validator using `JSON Schema Draft 2020-12` specifications and default options.
-    /// The schema used is DidLogEntryJsonSchema::V03.
-    [Name=default]
-    constructor();
-    /// Create a new JSON Schema validator using `JSON Schema Draft 2020-12` specifications and supplied schema.
-    [Name=from]
-    constructor(DidLogEntryJsonSchema ver);
-    /// Validate `instance` against `schema` and return the first error if any.
-    [Throws=DidLogEntryValidatorError]
-    void validate(string instance);
 };

@@ -47,7 +47,7 @@ pub enum TrustDidWebError {
     /// Invalid method-specific identifier
     #[error("invalid method specific identifier: {0}")]
     InvalidMethodSpecificId(String),
-    /// Failed to serialize ID document (to JSON)
+    /// Failed to serialize DID document (to JSON)
     #[error("failed to serialize DID document (to JSON): {0}")]
     SerializationFailed(String),
     /// The supplied did doc is invalid or contains an argument which isn't part of the did specification/recommendation

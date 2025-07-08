@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 
-use crate::did_tdw_jsonschema::{DidLogEntryJsonSchema, DidLogEntryValidator};
+use crate::did_tdw_jsonschema::DidLogEntryJsonSchema;
+use did_sidekicks::did_jsonschema::DidLogEntryValidator;
 use crate::did_tdw_parameters::*;
-use crate::didtoolbox::*;
-use crate::ed25519::*;
+use did_sidekicks::did_doc::*;
+use did_sidekicks::ed25519::*;
 use crate::errors::*;
-use crate::jcs_sha256_hasher::JcsSha256Hasher;
-use crate::vc_data_integrity::*;
+use did_sidekicks::jcs_sha256_hasher::JcsSha256Hasher;
+use did_sidekicks::vc_data_integrity::*;
 use chrono::serde::ts_seconds;
 use chrono::{DateTime, SecondsFormat, Utc};
 use rayon::prelude::*;
@@ -14,9 +15,7 @@ use regex;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value::Object as JsonObject;
-use serde_json::{
-    from_str as json_from_str, json, to_string as json_to_string, Value as JsonValue,
-};
+use serde_json::{from_str as json_from_str, json, to_string as json_to_string, Value as JsonValue, Value};
 use std::cmp::PartialEq;
 use std::sync::{Arc, LazyLock};
 use url::Url;
@@ -111,8 +110,15 @@ impl DidLogEntry {
                     Some(e) => e,
                 };
                 for proof in v {
-                    let verifying_key =
-                        prev.is_key_authorized_for_update(proof.extract_update_key()?)?;
+
+                    let update_key = match proof.extract_update_key() {
+                        Ok(key) => key,
+                        Err(err) => return Err(TrustDidWebError::InvalidDataIntegrityProof(format!(
+                            "Failed to extract update key due to: {err}"
+                        )))
+                    };
+
+                    let verifying_key = prev.is_key_authorized_for_update(update_key)?;
 
                     if !matches!(proof.crypto_suite_type, Some(CryptoSuiteType::EddsaJcs2022)) {
                         return Err(TrustDidWebError::InvalidDataIntegrityProof(format!(
@@ -126,7 +132,12 @@ impl DidLogEntry {
                         signing_key: None,
                     };
 
-                    cryptosuite.verify_proof(proof, self.did_doc_hash.as_str())?
+                    return match cryptosuite.verify_proof(proof, self.did_doc_hash.as_str()) {
+                        Ok(_) => Ok(()),
+                        Err(err) => Err(TrustDidWebError::InvalidDataIntegrityProof(format!(
+                            "Failed to verify proof due to: {err}"
+                        )))
+                    };
                 }
             }
         };
@@ -195,7 +206,15 @@ impl DidLogEntry {
                     }
                 };
 
-                Ok(Ed25519VerifyingKey::from_multibase(update_key.as_str())?)
+                let verifying_key = match Ed25519VerifyingKey::from_multibase(update_key.as_str()) {
+                    Ok(key) => key,
+                    Err(err) => return Err(TrustDidWebError::InvalidDataIntegrityProof(format!(
+                        "Failed to convert update key (from its multibase representation): {err}"
+                    )))
+                };
+
+                //Ok(Ed25519VerifyingKey::from_multibase(update_key.as_str())?)
+                Ok(verifying_key)
             }
             None => {
                 let prev_entry = match self.prev_entry.to_owned() {
@@ -233,6 +252,13 @@ impl DidLogEntry {
                     }
                 };
 
+                let first_proof_json_val = match first_proof.json_value() {
+                    Ok(val) => val,
+                    Err(err) => return Err(TrustDidWebError::SerializationFailed(format!(
+                        "{err}"
+                    )))
+                };
+
                 Ok(json!([
                     self.version_id,
                     version_time,
@@ -240,7 +266,8 @@ impl DidLogEntry {
                     {
                         "value": did_doc_json_value
                     },
-                    vec![first_proof.json_value()?]
+
+                    vec![first_proof_json_val]
                 ]))
             }
             None => Ok(json!([
@@ -287,7 +314,7 @@ impl DidDocumentState {
         // CAUTION Despite parallelization, bear in mind that (according to benchmarks) the overall
         //         performance improvement will be considerable only in case of larger DID logs,
         //         featuring at least as many entries as `std::thread::available_parallelism()` would return.
-        let validator = DidLogEntryValidator::from(DidLogEntryJsonSchema::V03EidConform);
+        let validator = DidLogEntryValidator::from(DidLogEntryJsonSchema::V03EidConform.as_schema());
         if let Some(err) = did_log
             .par_lines() // engage a parallel iterator (thanks to 'use rayon::prelude::*;' import)
             // Once a non-None value is produced from the map operation,
@@ -411,7 +438,7 @@ impl DidDocumentState {
                                     did_doc_hash = match JcsSha256Hasher::default().encode_hex(&did_doc_value) {
                                         Ok(did_doc_hash_value) => did_doc_hash_value,
                                         Err(err) => return Err(TrustDidWebError::DeserializationFailed(
-                                            format!("Deserialization of DID document failed: {err}")
+                                            format!("Deserialization of DID document failed due to: {err}")
                                         ))
                                     };
 
@@ -420,7 +447,12 @@ impl DidDocumentState {
                                         Err(_) => {
                                             match serde_json::from_str::<DidDocNormalized>(&did_doc_json) {
                                                 Ok(did_doc_alt) => {
-                                                    did_doc_alt.to_did_doc()?
+                                                    match did_doc_alt.to_did_doc() {
+                                                        Ok(doc) => doc,
+                                                        Err(err) => return Err(TrustDidWebError::DeserializationFailed(format!(
+                                                            "Deserialization of DID document failed due to: {err}"
+                                                        ))),
+                                                    }
                                                 }
                                                 Err(err) => return Err(TrustDidWebError::DeserializationFailed(
                                                     format!("Missing DID document: {err}")
@@ -450,7 +482,12 @@ impl DidDocumentState {
                         }
                     };
 
-                    let proof = DataIntegrityProof::from(entry[4].to_string())?;
+                    let proof = match DataIntegrityProof::from(entry[4].to_string()) {
+                        Ok(p) => p,
+                        Err(err) => return Err(TrustDidWebError::DeserializationFailed(format!(
+                            "Failed to deserialize data integrity proof due to: {err}"
+                        ))),
+                    };
 
                     let parameters = match new_params {
                         Some(new_params) => new_params,
