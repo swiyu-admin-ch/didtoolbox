@@ -404,6 +404,38 @@ mod test {
     )]
     */
     #[case(
+        "test_data/generated_by_didtoolbox_java/legacy/did-1.0.0-RC1.jsonl",
+        "did:tdw:QmPEZPhDFR4nEYSFK5bMnvECqdpf1tPTPJuWs9QrMjCumw:identifier-reg.trust-infra.swiyu-int.admin.ch:api:v1:did:9a5559f0-b81c-4368-a170-e7b4ae424527"
+    )]
+    #[case(
+        "test_data/generated_by_didtoolbox_java/legacy/did-1.0.0.jsonl",
+        "did:tdw:Qmb95hd5nGZvJY3q6mGcmZrLTNYMmzJYuMx94VNFb27oi9:identifier-reg.trust-infra.swiyu-int.admin.ch:api:v1:did:18fa7c77-9dd1-4e20-a147-fb1bec146085"
+    )]
+    #[case(
+        "test_data/generated_by_didtoolbox_java/legacy/did-1.1.0.jsonl",
+        "did:tdw:QmVZsmZqj1pGqqdzDeKLwBWZXo5aDucFsYddw9fKPb7e5Z:identifier-reg.trust-infra.swiyu-int.admin.ch:api:v1:did:18fa7c77-9dd1-4e20-a147-fb1bec146085"
+    )]
+    #[case(
+        "test_data/generated_by_didtoolbox_java/legacy/did-1.2.0.jsonl",
+        "did:tdw:QmX4MSeKo17fvrZQbkHSB4BfkEtJXiGhnbnSAu6oCMYtub:identifier-reg.trust-infra.swiyu-int.admin.ch:api:v1:did:18fa7c77-9dd1-4e20-a147-fb1bec146085"
+    )]
+    #[case(
+        "test_data/generated_by_didtoolbox_java/legacy/did-1.3.0.jsonl",
+        "did:tdw:Qmdjf4BZUtYnNKWbL5Lj9MqTeqxq5UQBbgU3p5wriwTzDV:identifier-reg.trust-infra.swiyu-int.admin.ch:api:v1:did:18fa7c77-9dd1-4e20-a147-fb1bec146085"
+    )]
+    #[case(
+        "test_data/generated_by_didtoolbox_java/legacy/did-1.3.1.jsonl",
+        "did:tdw:QmWroVHz78FM6ugJ6MkaD4yu2ihkKmWFiKDcDPXu1AeS1d:identifier-reg.trust-infra.swiyu-int.admin.ch:api:v1:did:18fa7c77-9dd1-4e20-a147-fb1bec146085"
+    )]
+    #[case(
+        "test_data/generated_by_didtoolbox_java/legacy/did-1.4.0.jsonl",
+        "did:tdw:QmSTru6WjboQ24pVdK21AuX4rV6CEqQSjFQKANaXwGM6wz:identifier-reg.trust-infra.swiyu-int.admin.ch:api:v1:did:18fa7c77-9dd1-4e20-a147-fb1bec146085"
+    )]
+    #[case(
+        "test_data/generated_by_didtoolbox_java/legacy/did-1.4.1.jsonl",
+        "did:tdw:QmU8WbF9dMzTMU1snugNConzA4tHvPaXRqzyjXn77pUY8G:identifier-reg.trust-infra.swiyu-int.admin.ch:api:v1:did:18fa7c77-9dd1-4e20-a147-fb1bec146085"
+    )]
+    #[case(
         "test_data/generated_by_didtoolbox_java/v_0_3_eid_conform/did_doc_without_controller.jsonl",
         "did:tdw:QmZf4Pb1GoPdYaZBF3Sc1nVspXef4qc816C7eBzzuXMoGk:domain.com%3A8080:path1:path2"
     )]

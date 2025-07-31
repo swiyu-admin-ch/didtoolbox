@@ -41,7 +41,7 @@ impl MultibaseEncoderDecoder {
             .with_alphabet(self.alphabet)
             .into_string();
         // See https://www.ietf.org/archive/id/draft-multiformats-multibase-08.html#name-base-58-bitcoin-encoding
-        format!("{}{}", BASE58BTC_MULTIBASE_IDENTIFIER, encoded)
+        format!("{BASE58BTC_MULTIBASE_IDENTIFIER}{encoded}")
     }
 
     /// Decode into the given buffer.
@@ -73,7 +73,7 @@ impl MultibaseEncoderDecoder {
         // decode into the given buffer
         match base58_decode(raw).with_alphabet(self.alphabet).onto(result) {
             Ok(_) => Ok(()),
-            Err(err) => Err(TrustDidWebError::DeserializationFailed(format!("{}", err))),
+            Err(err) => Err(TrustDidWebError::DeserializationFailed(format!("{err}"))),
         }
     }
 }

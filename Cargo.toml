@@ -1,6 +1,6 @@
 [package]
 name = "didtoolbox"
-version = "2.1.1"
+version = "2.1.2"
 edition = "2021"
 license = "MIT"
 description = "A set of tools required to implement Trust DID Web - did:tdw - v0.3 specification"
@@ -30,7 +30,7 @@ url-escape = "0.1.1"
 bs58 = { version = "0.5.1", features = ["check", "cb58"] }
 thiserror = "2.0.12"
 url = "2.5.4"
-jsonschema = { version = "0.30.0" }
+jsonschema = { version = "0.32.0" }
 rust-embed = { version = "8.7.2" , features = ["include-exclude", "compression"]}
 rayon = "1.10.0"
 
@@ -38,7 +38,7 @@ rayon = "1.10.0"
 uniffi = { version = "0.28.3", features = ["build"] }
 
 [dev-dependencies]
-rstest = "0.25.0"
+rstest = "0.26.1"
 criterion = "0.6.0"
 
 [[bench]]

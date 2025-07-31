@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "DID log entry schema v0.3 (eID-conform)",
+  "title": "DID log entry schema v0.3 (e-ID-conform)",
   "type": "array",
   "did-log-entry": true,
-  "$comment": "As specified by https://identity.foundation/didwebvh/v0.3/#the-did-log-file w.r.t. to eID conformity",
+  "$comment": "As specified by https://identity.foundation/didwebvh/v0.3/#the-did-log-file w.r.t. to e-ID conformity",
   "allOf": [{
     "prefixItems": [
       {
@@ -79,9 +79,10 @@
               "@context": {
                 "anyOf": [
                   { "const": ["https://www.w3.org/ns/did/v1", "https://w3id.org/security/jwk/v1"] },
-                  { "const": ["https://www.w3.org/ns/did/v1", "https://w3id.org/security/multikey/v1"] }
+                  { "const": ["https://www.w3.org/ns/did/v1", "https://w3id.org/security/multikey/v1"] },
+                  { "const": ["https://www.w3.org/ns/did/v1", "https://w3id.org/security/suites/jws-2020/v1"] }
                 ],
-                "$comment": "The @context property is used to ensure that implementations are using the same semantics when terms in this specification are processed."
+                "$comment": "The @context property is used to ensure that implementations are using the same semantics when terms in this specification are processed. CAUTION (e-ID conformity): The last two array element left for the sake of backward compatibility with (deprecated) didtoolbox-java v1.0.0-RC1 and v1.0.0."
               },
               "id": {
                 "type": "string",
@@ -141,7 +142,7 @@
                     "controller": {
                       "type": "string",
                       "pattern": "^did:tdw:Q[1-9a-zA-NP-Z]{45,}(:[0-9a-z%A_.-]+)+$",
-                      "$comment": "The value of the controller property MUST be a string that conforms to the [URL] syntax. Kept for the sake of backward compatibility. CAUTION (EID conformity): Left for the sake of backward compatibility only i.e. to avoid ''controller' was unexpected' error."
+                      "$comment": "The value of the controller property MUST be a string that conforms to the [URL] syntax. Kept for the sake of backward compatibility. CAUTION (e-ID conformity): Left for the sake of backward compatibility only i.e. to avoid ''controller' was unexpected' error."
                     },
                     "type": {
                       "enum": [ "JsonWebKey2020", "Multikey" ],
@@ -181,12 +182,12 @@
                       "required": [
                         "kty",
                         "crv",
-                        "kid",
                         "x",
                         "y"
                       ],
                       "additionalProperties": false,
-                      "$comment": "The publicKeyJwk property is OPTIONAL. If present, the value MUST be a map representing a JSON Web Key that conforms to [RFC7517]."
+                      "$comment": "The publicKeyJwk property is OPTIONAL. If present, the value MUST be a map representing a JSON Web Key that conforms to [RFC7517].",
+                      "$comment": "The publicKeyJwk property is OPTIONAL. If present, the value MUST be a map representing a JSON Web Key that conforms to [RFC7517]. CAUTION (e-ID conformity): 'kid' is not among required props for the sake of backward compatibility with (deprecated) didtoolbox-java v1.0.0-RC1."
                     }
                   },
                   "required": [

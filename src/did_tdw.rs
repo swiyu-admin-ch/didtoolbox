@@ -79,8 +79,7 @@ impl DidLogEntry {
     pub fn verify_version_id_integrity(&self) -> Result<(), TrustDidWebError> {
         let version_id = self.build_version_id().map_err(|err| {
             TrustDidWebError::InvalidDataIntegrityProof(format!(
-                "Failed to build versionId: {}",
-                err
+                "Failed to build versionId: {err}"
             ))
         })?;
         if version_id != self.version_id {
@@ -168,8 +167,7 @@ impl DidLogEntry {
             .base58btc_encode_multihash(&entry_line)
             .map_err(|err| {
                 TrustDidWebError::SerializationFailed(format!(
-                    "Failed to encode multihash: {}",
-                    err
+                    "Failed to encode multihash: {err}"
                 ))
             })?;
 
@@ -192,8 +190,7 @@ impl DidLogEntry {
                     Some(_) => {}
                     _ => {
                         return Err(TrustDidWebError::InvalidDataIntegrityProof(format!(
-                            "Key extracted from proof is not authorized for update: {}",
-                            update_key
+                            "Key extracted from proof is not authorized for update: {update_key}"
                         )))
                     }
                 };
@@ -217,7 +214,7 @@ impl DidLogEntry {
     fn to_log_entry_line(&self) -> Result<JsonValue, TrustDidWebError> {
         let did_doc_json_value: JsonValue = match serde_json::from_str(&self.did_doc_json) {
             Ok(v) => v,
-            Err(err) => return Err(TrustDidWebError::DeserializationFailed(format!("{}", err))),
+            Err(err) => return Err(TrustDidWebError::DeserializationFailed(format!("{err}"))),
         };
 
         let version_time = self
@@ -347,7 +344,7 @@ impl DidDocumentState {
 
                     // CAUTION This check is not really required as it has been already implemented by the JSON schema validator
                     if version_time.ge(&now) {
-                        return Err(TrustDidWebError::DeserializationFailed(format!("`versionTime` '{}' must be before the current datetime '{}'.", version_time, now)));
+                        return Err(TrustDidWebError::DeserializationFailed(format!("`versionTime` '{version_time}' must be before the current datetime '{now}'.")));
                     }
 
                     if prev_entry.is_some() && version_time.lt(&prev_entry.to_owned().unwrap().version_time) {
@@ -414,7 +411,7 @@ impl DidDocumentState {
                                     did_doc_hash = match JcsSha256Hasher::default().encode_hex(&did_doc_value) {
                                         Ok(did_doc_hash_value) => did_doc_hash_value,
                                         Err(err) => return Err(TrustDidWebError::DeserializationFailed(
-                                            format!("Deserialization of DID document failed: {}", err)
+                                            format!("Deserialization of DID document failed: {err}")
                                         ))
                                     };
 
@@ -426,7 +423,7 @@ impl DidDocumentState {
                                                     did_doc_alt.to_did_doc()?
                                                 }
                                                 Err(err) => return Err(TrustDidWebError::DeserializationFailed(
-                                                    format!("Missing DID document: {}", err)
+                                                    format!("Missing DID document: {err}")
                                                 ))
                                             }
                                         }
@@ -531,8 +528,7 @@ impl DidDocumentState {
                     if let Some(res) = &scid_to_validate {
                         if res.ne(scid.as_str()) {
                             return Err(TrustDidWebError::InvalidDataIntegrityProof(format!(
-                                "The SCID '{}' supplied inside the DID document does not match the one supplied for validation: '{}'",
-                                scid, res
+                                "The SCID '{scid}' supplied inside the DID document does not match the one supplied for validation: '{res}'"
                             )));
                         }
                     }
@@ -540,8 +536,7 @@ impl DidDocumentState {
                     let original_scid =
                         genesis_entry.build_original_scid(&scid).map_err(|err| {
                             TrustDidWebError::InvalidDataIntegrityProof(format!(
-                                "Failed to build original SCID: {}",
-                                err
+                                "Failed to build original SCID: {err}"
                             ))
                         })?;
                     if original_scid != scid {
@@ -576,7 +571,7 @@ impl std::fmt::Display for DidDocumentState {
             log.push_str(serialized.as_str());
             log.push('\n');
         }
-        write!(f, "{}", log)
+        write!(f, "{log}")
     }
 }
 
@@ -660,13 +655,13 @@ impl TryFrom<String> for TrustDidWebId {
         let decoded_url = domain_and_optional_path.replace("%3A", ":"); // Decode percent-encoded byte '%3A' (the percent-encoded semicolon (':') char/byte)
 
         // 6. Generate an HTTPS URL to the expected location of the DIDDoc by prepending https://.
-        let url_string = format!("https://{}", decoded_url);
+        let url_string = format!("https://{decoded_url}");
 
         let mut url = match Url::parse(&url_string) {
             Ok(url) => url,
             Err(err) => {
                 return Err(TrustDidWebIdResolutionError::InvalidMethodSpecificId(
-                    format!("Not a valid URL: {}", err),
+                    format!("Not a valid URL: {err}"),
                 ))
             }
         };
@@ -732,9 +727,9 @@ impl TryFrom<(String, Option<bool>)> for TrustDidWebId {
                             || url.starts_with("127.0.0.1")
                             || allow_http.unwrap_or(false)
                         {
-                            format!("http://{}", url)
+                            format!("http://{url}")
                         } else {
-                            format!("https://{}", url)
+                            format!("https://{url}")
                         }
                     }
                     Err(_) => {
@@ -748,12 +743,12 @@ impl TryFrom<(String, Option<bool>)> for TrustDidWebId {
                 {
                     Ok(Self {
                         scid: scid.to_string(),
-                        url: format!("{}/did.jsonl", url),
+                        url: format!("{url}/did.jsonl"),
                     })
                 } else {
                     Ok(Self {
                         scid: scid.to_string(),
-                        url: format!("{}/.well-known/did.jsonl", url),
+                        url: format!("{url}/.well-known/did.jsonl"),
                     })
                 }
             }
@@ -797,7 +792,7 @@ impl TrustDidWeb {
     pub fn read(did_tdw: String, did_log: String) -> Result<Self, TrustDidWebError> {
         let did_doc_state = DidDocumentState::from(did_log)?;
         let did = TrustDidWebId::parse_did_tdw(did_tdw.to_owned())
-            .map_err(|err| TrustDidWebError::InvalidMethodSpecificId(format!("{}", err)))?;
+            .map_err(|err| TrustDidWebError::InvalidMethodSpecificId(format!("{err}")))?;
         let scid = did.get_scid();
         let did_doc_arc = did_doc_state.validate_with_scid(Some(scid.to_owned()))?;
         let did_doc = did_doc_arc.as_ref().clone();

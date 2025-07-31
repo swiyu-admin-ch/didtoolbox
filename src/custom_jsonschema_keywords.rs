@@ -166,7 +166,7 @@ impl Keyword for DidVersionTimeKeyword {
                             Location::new(),
                             location.into(),
                             instance,
-                            format! {"`versionTime` '{}' must be before the current datetime '{}'", dt, now},
+                            format! {"`versionTime` '{dt}' must be before the current datetime '{now}'"},
                         ));
                     }
                     Ok(())

@@ -252,8 +252,7 @@ impl DidMethodParameters {
             Ok(did_method_parameters) => did_method_parameters,
             Err(err) => {
                 return Err(TrustDidWebError::DeserializationFailed(format!(
-                    "Error parsing DID method parameters: {}",
-                    err
+                    "Error parsing DID method parameters: {err}"
                 )));
             }
         };
