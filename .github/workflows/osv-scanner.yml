@@ -28,4 +28,4 @@ jobs:
     with:
       scan-args: |-
         -r
-        -L $(ls *.spdx.json)
+        -L didtoolbox.spdx.json
