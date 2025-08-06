@@ -11,12 +11,17 @@ name: rust-clippy analyze
 
 on:
   push:
-    branches: [ "main" ]
+    #branches: [ "main" ]
+    # speed up the CI pipeline, since the linting process will not be performed if no source code files were changed.
+    paths:
+      - '**/*.rs'
   pull_request:
     # The branches below must be a subset of the branches above
     branches: [ "main" ]
   #schedule:
   #  - cron: '15 6 * * 1'
+  # REMOVEME
+  workflow_dispatch:
 
 jobs:
   rust-clippy-analyze:

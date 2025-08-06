@@ -7,7 +7,13 @@ on:
   merge_group:
     branches: [ "main" ]
   push:
-    branches: [ "main" ]
+    #branches: [ "main" ]
+    # speed up the CI pipeline, since the audit process will not be performed if no dependencies were changed.
+    paths:
+      - '**/Cargo.toml'
+      #- '**/Cargo.lock'
+  # REMOVEME
+  workflow_dispatch:
 
 permissions:
   # Required to upload SARIF file to CodeQL. See: https://github.com/github/codeql-action/issues/2117
