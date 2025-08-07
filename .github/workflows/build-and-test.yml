@@ -11,39 +11,6 @@ permissions:
   contents: read
 
 jobs:
-  build-and-test:
-    name: Build and test
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        BUILD_TARGET: [ release ] # refers to a cargo profile
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install the Rust toolchain
-        # https://github.com/marketplace/actions/rust-toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          #components: clippy
-          override: true
-
-      - name: Cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          #key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
-
-      - name: Build binaries in "${{ matrix.BUILD_TARGET }}" mode
-        run: cargo build --profile ${{ matrix.BUILD_TARGET }}
-        continue-on-error: false
-
-      - name: Run tests in "${{ matrix.BUILD_TARGET }}" mode
-        run: cargo test --profile ${{ matrix.BUILD_TARGET }}
-        continue-on-error: false
+  rust-build-and-test:
+    # just reuse a relevant workflow from the dedicated repo https://github.com/swiyu-admin-ch/github-actions-workflows
+    uses: swiyu-admin-ch/github-actions-workflows/.github/workflows/rust-build-and-test.yml@main
