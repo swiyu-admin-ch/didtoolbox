@@ -9,6 +9,10 @@ on:
 permissions:
   # to fetch code (actions/checkout)
   contents: read
+  # https://github.com/marketplace/actions/publish-test-results#permissions
+  # https://github.com/marketplace/actions/junit-report-action
+  checks: write
+  pull-requests: write # only required if `comment: true` was enabled
 
 jobs:
   rust-build-and-test:
