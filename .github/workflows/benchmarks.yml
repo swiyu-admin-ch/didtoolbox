@@ -1,4 +1,4 @@
-name: Execute all benchmarks of a local package
+name: Execute benchmarks
 
 on:
   workflow_dispatch:
