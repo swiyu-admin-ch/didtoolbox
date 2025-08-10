@@ -20,6 +20,6 @@ jobs:
     uses: swiyu-admin-ch/github-actions-workflows/.github/workflows/rust-build-and-test.yml@main
     with:
       # Whether to build artifacts for normal development and debugging (default: true)
-      debug: false
+      debug: true
       # Whether to also build artifacts in release mode, with optimizations
       release: true
