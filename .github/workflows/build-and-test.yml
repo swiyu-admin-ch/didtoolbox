@@ -18,8 +18,8 @@ jobs:
   rust-build-and-test:
     # just reuse a relevant workflow from the dedicated repo https://github.com/swiyu-admin-ch/github-actions-workflows
     uses: swiyu-admin-ch/github-actions-workflows/.github/workflows/rust-build-and-test.yml@main
-    with:
+    #with:
       # Whether to build artifacts for normal development and debugging (default: true)
-      debug: true
+      #debug: true
       # Whether to also build artifacts in release mode, with optimizations
-      release: true
+      #release: false
